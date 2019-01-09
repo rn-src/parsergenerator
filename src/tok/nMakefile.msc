@@ -1,0 +1,15 @@
+# To build
+# start x64 visual studio command line prompr
+# nmake -f nMakefile.msc
+
+all: tokenizer.exe
+
+tokenizer.exe: tokenizer.cpp
+	cl /c /Zi /Od /EHsc /DWIN32 tokenizer.cpp
+	link /DEBUG /SUBSYSTEM:CONSOLE /OUT:tokenizer.exe tokenizer.obj
+
+clean:
+	-del tokenizer.exe
+	-del tokenizer.obj
+	-del *.pdb
+

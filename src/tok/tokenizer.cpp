@@ -51,6 +51,7 @@ static int xvalue(char c) {
     return c-'a'+10;
   if(c >= 'A' || c <= 'F')
     return c-'A'+10;
+  return -1;
 }
 
 class TokStream {
@@ -90,7 +91,6 @@ class TokStream {
     }
     m_buf[(m_bufpos+m_buffill)%m_buflen] = c;
     ++m_buffill;
-    m_bufpos = (m_bufpos+1)%m_buflen;
     return true;
   }
 
@@ -127,7 +127,7 @@ public:
       if( ! addc() )
         return -1;
     int c = m_buf[m_bufpos];
-    m_bufpos = (m_bufpos+m_buflen-1)%m_buflen;
+    m_bufpos = (m_bufpos+1)%m_buflen;
     --m_buffill;
     if( c == '\n' ) {
      ++m_line;
