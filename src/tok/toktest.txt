@@ -1,2 +1,4 @@
-WS /[[:space:]]+/
-ID /[[:alpha:]][[:alnum:]]*/
+~ WS   /[[:space:]]+/               
+= IDRX /[[:alpha:]][[:alnum:]]*/
+  ID   /{IDRX}/
+
