@@ -60,6 +60,7 @@ protected:
   vector<CharRange> m_ranges;
 
   int find(int c, bool &found) const;
+  int splitRec(int low, int high, int i);
 public:
   typedef typename CharIterator char_iterator;
   typedef typename vector<CharRange>::const_iterator iterator;
@@ -74,8 +75,8 @@ public:
   void addChar(int i);
   void addCharRange(int low, int high);
   void addCharset(const CharSet &rhs);
-  void splinter(int low, int high);
-  void splinter(const CharSet &rhs);
+  void split(int low, int high);
+  void split(const CharSet &rhs);
   void negate();
   bool operator!() const;
 };

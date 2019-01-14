@@ -1,0 +1,10 @@
+~ WS     /[[:white:]]*/
+  START  /<start>/
+  ID     /[[:alpha:]][[:alnum:]]*/
+  COLON  /:/
+  SEMI   /;/
+  LBRACE /\{/
+  RBRACE /\}/
+  LBRKT  /\[/
+  RBRKT  /\]/
+

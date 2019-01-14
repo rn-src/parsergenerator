@@ -250,57 +250,63 @@ void CharSet::addCharset(const CharSet &rhs) {
   for( vector<CharRange>::const_iterator cur = rhs.m_ranges.begin(), end = rhs.m_ranges.end(); cur != end; ++cur )
     addCharRange(cur->m_low, cur->m_high);
 }
-void CharSet::splinter(int low, int high) {
-  bool found = false;
-  int i = find(low,found);
-  if( i == m_ranges.size() ) {
-    m_ranges.insert(m_ranges.begin()+i,CharRange(low,high));
-  } else if( ! m_ranges[i].overlaps(low,high) ) {
-    m_ranges.insert(m_ranges.begin()+i,CharRange(low,high));
-  } else {
-    CharRange range = m_ranges[i];
-    if( low < range.m_low ) {
-      if( high < range.m_high ) {
-        m_ranges.insert(m_ranges.begin()+i+1,CharRange(high+1,range.m_high));
-        m_ranges.insert(m_ranges.begin()+(i+1),CharRange(range.m_low,high));
-        m_ranges[i] = CharRange(low,range.m_low-1);
-      } else if( high == range.m_high ) {
-        m_ranges.insert(m_ranges.begin()+i+1,CharRange(range.m_low,high));
-        m_ranges[i] = CharRange(low,range.m_low-1);
-      } else if( high > range.m_high ) {
-        m_ranges.insert(m_ranges.begin()+i+1,CharRange(range.m_high+1,high));
-        m_ranges.insert(m_ranges.begin()+(i+1),CharRange(range.m_low,range.m_high));
-        m_ranges[i] = CharRange(low,range.m_low-1);
-      }
-    } else if( low == range.m_low ) {
-      if( high < range.m_high ) {
-        m_ranges.insert(m_ranges.begin()+i+1,CharRange(high+1,range.m_high));
-        m_ranges[i] = CharRange(range.m_low,high);
-      } else if( high == range.m_high ) {
-        // do nothing
-      } else if( high > range.m_high ) {
-        m_ranges.insert(m_ranges.begin()+i+1,CharRange(range.m_high+1,high));
-        m_ranges[i] = CharRange(range.m_low,range.m_high);
-      }
-    } else if( low > range.m_low ) {
-      if( high < range.m_high ) {
-        m_ranges.insert(m_ranges.begin()+i+1,CharRange(high+1,range.m_high));
-        m_ranges.insert(m_ranges.begin()+i+1,CharRange(low,high));
-        m_ranges[i] = CharRange(range.m_low,low-1);
-      } else if( high == range.m_high ) {
-        m_ranges.insert(m_ranges.begin()+i+1,CharRange(low,range.m_high));
-        m_ranges[i] = CharRange(range.m_low,low-1);
-      } else if( high > range.m_high ) {
-        m_ranges.insert(m_ranges.begin()+i+1,CharRange(range.m_high+1,high));
-        m_ranges.insert(m_ranges.begin()+i+1,CharRange(low,range.m_high));
-        m_ranges[i] = CharRange(range.m_low,low-1);
-      }
+//#define splitTEST
+void CharSet::split(int low, int high) {
+#ifdef splitTEST
+  vector<CharRange> rangesBefore = m_ranges;
+  splitReal(low,high,-1);
+  bool overlap = false;
+  CharRange last(-1,-1);
+  for( int i = 0, n = m_ranges.size(); i < n; ++i ) {
+    if( m_ranges[i].m_low <= last.m_high ) {
+      overlap = true;
+      m_ranges = rangesBefore;
+      splitReal(low,high,-1);
+      break;
     }
+    last = m_ranges[i];
   }
+#else
+  splitRec(low,high,-1);
+#endif
 }
-void CharSet::splinter(const CharSet &rhs) {
+
+int CharSet::splitRec(int low, int high, int i) {
+  if( i == -1 ) {
+    bool found = false;
+    i = find(low,found);
+  }
+  if( i == m_ranges.size() || ! m_ranges[i].overlaps(low,high) ) {
+    m_ranges.insert(m_ranges.begin()+i,CharRange(low,high));
+    return 1;
+  }
+
+  int adjust = 0;
+  CharRange range = m_ranges[i];
+
+  if( low < range.m_low ) {
+    int tmp = splitRec(low,range.m_low-1,i);
+    i += tmp;
+    adjust += tmp;
+  } else if( low > range.m_low ) {
+    m_ranges[i].m_low = low;
+    int tmp = splitRec(range.m_low,low-1,i);
+    i += tmp;
+    adjust += tmp;
+  }
+
+  if( high < range.m_high ) {
+    m_ranges[i].m_high = high;
+    splitRec(high+1,range.m_high,i+1);
+  } else if( high > range.m_high ) {
+    splitRec(range.m_high+1,high,i+1);
+  }
+
+  return adjust;
+}
+void CharSet::split(const CharSet &rhs) {
   for( vector<CharRange>::const_iterator cur = rhs.m_ranges.begin(), end = rhs.m_ranges.end(); cur != end; ++cur )
-    splinter(cur->m_low, cur->m_high);
+    split(cur->m_low, cur->m_high);
 }
 void CharSet::negate() {
   vector<CharRange> ranges;
@@ -460,7 +466,7 @@ void Nfa::stateTransitions(const set<int> &states, CharSet &transitions) const {
     set<int>::const_iterator iter = states.find(cur->first.m_from);
     if( iter == states.end() )
       continue;
-    transitions.splinter(cur->second);
+    transitions.split(cur->second);
   }
 }
 bool Nfa::hasEndState(const set<int> &states) const {
@@ -933,8 +939,10 @@ static Rx *ParseRxSimple(TokStream &s, map<string,Rx*> &subs) {
    return r;
   } else if( c == ')' ) {
    return 0;
-  } else 
+  } else  {
+    s.discard();
     return rxchar(c);
+  }
 
   error(s,"parse error");
   return 0;
@@ -1121,8 +1129,30 @@ public:
   virtual void outEndStmt(ostream &out) const  { out << ';'; }
   virtual void outNull(ostream &out) const  { out << '0'; }
   virtual void outBool(ostream &out, bool b) const  { out << (b ? "true" : "false"); }
-  virtual void outStr(ostream &out, const string &str) const  { out << '"' << str << '"'; }
-  virtual void outChar(ostream &out, int c) const  { if( isalnum(c) ) { out << '\'' << (char)c << '\''; } else out << c; }
+  virtual void outStr(ostream &out, const string &str) const  {
+    string tmp = str;
+    //tmp.replaceall("\\","\\\\");
+    //tmp.replaceall(tmp.begin(),"\"","\\\"");
+    out << '"' << tmp << '"';
+  }
+  virtual void outChar(ostream &out, int c) const  {
+    if(c == '\r' ) {
+      out << "'\\r'";
+    } else if(c == '\n' ) {
+      out << "'\\n'";
+    } else if(c == '\v' ) {
+      out << "'\\v'";
+    } else if(c == ' ' ) {
+      out << "' '";
+    } else if(c == '\t' ) {
+      out << "'\\t'";
+    } else if(c == '\\' || c == '\'' ) {
+      out << "\'\\" << (char)c << '\''; 
+    } else if( isgraph(c) ) {
+      out << '\'' << (char)c << '\''; 
+    } else
+      out << c;
+  }
 };
 
 class JsLanguageOutputter : public LanguageOutputter {
@@ -1146,27 +1176,32 @@ LanguageOutputter *getLanguageOutputter(OutputLanguage language) {
   return 0;
 }
 
-static void OutputTokenDefSource(ostream &out, const Nfa &dfa, const LanguageOutputter &lang) {
+static void OutputDfaSource(ostream &out, const Nfa &dfa, const LanguageOutputter &lang) {
   // Going to assume there are no gaps in toking numbering
   vector<Token> tokens = dfa.getTokenDefs();
 
-  lang.outDecl(out,"int","tokenCount");
+  lang.outDecl(out,"const int","tokenCount");
   out << " = " << tokens.size();
   lang.outEndStmt(out);
   out << endl;
+
+  for( vector<Token>::iterator cur = tokens.begin(), end = tokens.end(); cur != end; ++cur ) {
+    lang.outDecl(out,"const int",cur->m_name.c_str());
+    out << " = " << cur->m_token;
+    lang.outEndStmt(out);
+    out << endl;
+  }
 
   lang.outArrayDecl(out, "const char*", "tokenstr");
   out << " = ";
   lang.outStartArray(out);
   bool first = true;
-  int lasttok = 0;
   for( vector<Token>::iterator cur = tokens.begin(), end = tokens.end(); cur != end; ++cur ) {
     if( first )
       first = false;
     else
       out << ',';
     lang.outStr(out,cur->m_name);
-    ++lasttok;
   }
   lang.outEndArray(out);
   lang.outEndStmt(out);
@@ -1176,20 +1211,17 @@ static void OutputTokenDefSource(ostream &out, const Nfa &dfa, const LanguageOut
   out << " = ";
   lang.outStartArray(out);
   first = true;
-  lasttok = 0;
   for( vector<Token>::iterator cur = tokens.begin(), end = tokens.end(); cur != end; ++cur ) {
     if( first )
       first = false;
     else
       out << ',';
     lang.outBool(out,cur->m_isws);
-    ++lasttok;
   }
   lang.outEndArray(out);
   lang.outEndStmt(out);
-}
+  out << endl;
 
-static void OutputDfaSource(ostream &out, const Nfa &dfa, const LanguageOutputter &lang) {
   CharSet ranges;
   set<int> allstates;
   for( int i = 0, n = dfa.stateCount(); i < n; ++i )
@@ -1198,7 +1230,7 @@ static void OutputDfaSource(ostream &out, const Nfa &dfa, const LanguageOutputte
   lang.outArrayDecl(out,"int","ranges");
   out << " = ";
   lang.outStartArray(out);
-  bool first = true;
+  first = true;
   for( CharSet::iterator cur = ranges.begin(), end = ranges.end(); cur != end; ++cur ) {
     if( first )
       first = false;
@@ -1212,7 +1244,7 @@ static void OutputDfaSource(ostream &out, const Nfa &dfa, const LanguageOutputte
   lang.outEndStmt(out);
   out << endl;
 
-  lang.outDecl(out,"int","stateCount");
+  lang.outDecl(out,"const int","stateCount");
   out << " = " << dfa.stateCount();
   lang.outEndStmt(out);
   out << endl;
@@ -1286,8 +1318,6 @@ static void OutputDfaSource(ostream &out, const Nfa &dfa, const LanguageOutputte
 
 void OutputTokenizerSource(ostream &out, const Nfa &dfa, OutputLanguage language) {
   LanguageOutputter *outputer = getLanguageOutputter(language);
-  OutputTokenDefSource(cout,dfa,*outputer);
-  out << endl;
   OutputDfaSource(cout,dfa,*outputer);
   out << endl;
   delete outputer;

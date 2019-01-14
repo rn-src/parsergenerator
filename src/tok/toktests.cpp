@@ -55,14 +55,14 @@ void test() {
   cout << charset << endl;
   charset.clear();
   charset.addCharRange('A','Z');
-  charset.splinter('M','Z');
-  charset.splinter('A','E');
-  charset.splinter('F','L');
-  charset.splinter('a','g');
-  charset.splinter('a','g');
-  charset.splinter('a','k');
-  charset.splinter('p','t');
-  charset.splinter('m','q');
+  charset.split('M','Z');
+  charset.split('A','E');
+  charset.split('F','L');
+  charset.split('a','g');
+  charset.split('a','g');
+  charset.split('a','k');
+  charset.split('p','t');
+  charset.split('m','q');
   cout << charset << endl;
 
   fstream in;

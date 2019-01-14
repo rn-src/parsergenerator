@@ -1,0 +1,21 @@
+# To build
+# start visual studio command line prompt
+# nmake -f nMakefile.msc
+
+all: parser.exe
+
+parser.exe: parser.obj main.obj
+	@echo linking...
+	@link /nologo /DEBUG /SUBSYSTEM:CONSOLE /OUT:parser.exe parser.obj main.obj
+
+parser.obj: parser.cpp parser.h
+	@cl /nologo /c /Zi /Od /EHsc /DWIN32 parser.cpp
+
+main.obj: main.cpp parser.h
+	@cl /nologo /c /Zi /Od /EHsc /DWIN32 main.cpp
+
+clean:
+	@-del parser.exe > NUL 2>&1
+	@-del *.obj > NUL 2>&1
+	@-del *.pdb > NUL 2>&1
+
