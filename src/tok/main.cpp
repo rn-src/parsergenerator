@@ -1,17 +1,14 @@
 #include "tokenizer.h"
 #include <iostream>
 #include <fstream>
+#include <string.h>
 
 int main(int argc, char *argv[])
 {
   OutputLanguage language = LanguageJs;
   for( int i = 1; i < argc; ++i ) {
     if( argv[i][0] == '-' ) {
-      if( strcmp(argv[i],"--test") == 0 ) {
-        extern void test();
-        test();
-        return 0;
-      } else if( strcmp(argv[i],"--js") == 0 ) {
+      if( strcmp(argv[i],"--js") == 0 ) {
         language = LanguageJs;
       } else if( strcmp(argv[i],"--c") == 0 ) {
         language = LanguageC;

@@ -1188,7 +1188,7 @@ public:
   virtual void outStartArray(ostream &out) const { out << '['; }
   virtual void outEndArray(ostream &out) const { out << ']'; }
   virtual void outEndStmt(ostream &out)  const { out << ';'; }
-  virtual void outNull(ostream &out) const  { out << 'null'; }
+  virtual void outNull(ostream &out) const  { out << "null"; }
   virtual void outBool(ostream &out, bool b) const  { out << (b ? "true" : "false"); }
   virtual void outStr(ostream &out, const string &str) const  { out << '"' << str << '"'; }
   virtual void outChar(ostream &out, int c) const  { out << c; }
@@ -1233,7 +1233,7 @@ static void OutputDfaSource(ostream &out, const Nfa &dfa, const LanguageOutputte
   lang.outEndStmt(out);
   out << endl;
 
-  lang.outArrayDecl(out, "int","isws");
+  lang.outArrayDecl(out, "const bool","isws");
   out << " = ";
   lang.outStartArray(out);
   first = true;
@@ -1253,7 +1253,7 @@ static void OutputDfaSource(ostream &out, const Nfa &dfa, const LanguageOutputte
   for( int i = 0, n = dfa.stateCount(); i < n; ++i )
     allstates.insert(i);
   dfa.stateTransitions(allstates,ranges);
-  lang.outArrayDecl(out,"int","ranges");
+  lang.outArrayDecl(out,"const int","ranges");
   out << " = ";
   lang.outStartArray(out);
   first = true;
@@ -1275,7 +1275,7 @@ static void OutputDfaSource(ostream &out, const Nfa &dfa, const LanguageOutputte
   lang.outEndStmt(out);
   out << endl;
 
-  lang.outArrayDecl(out,"int","transitions");
+  lang.outArrayDecl(out,"const int","transitions");
   out << " = ";
   lang.outStartArray(out);
   first = true;
@@ -1304,7 +1304,7 @@ static void OutputDfaSource(ostream &out, const Nfa &dfa, const LanguageOutputte
   out << endl;
 
   int offset = 0;
-  lang.outArrayDecl(out,"int","transitionOffset");
+  lang.outArrayDecl(out,"const int","transitionOffset");
   out << " = ";
   lang.outStartArray(out);
   first = true;
@@ -1326,7 +1326,7 @@ static void OutputDfaSource(ostream &out, const Nfa &dfa, const LanguageOutputte
   out << endl;
 
   first = true;
-  lang.outArrayDecl(out,"int","tokens");
+  lang.outArrayDecl(out,"const int","tokens");
   out << " = ";
   lang.outStartArray(out);
   for( int i = 0, n = dfa.stateCount(); i < n; ++i ) {
