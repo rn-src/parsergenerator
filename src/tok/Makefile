@@ -9,3 +9,7 @@ tokenizer.o: tokenizer.cpp tokenizer.h
 main.o: main.cpp tokenizer.h
 	g++ -g -c main.cpp -omain.o
 
+clean:
+	rm *.o
+	rm tokenizer
+

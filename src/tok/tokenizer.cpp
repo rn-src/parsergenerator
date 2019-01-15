@@ -352,7 +352,7 @@ void Nfa::addNfa(const Nfa &nfa) {
   for( map<int,int>::const_iterator cur = nfa.m_token2state.begin(), end = nfa.m_token2state.end(); cur != end; ++cur )
     m_token2state[cur->first+states] = cur->second;
   for( map<int,Token>::const_iterator cur = nfa.m_tokendefs.begin(), end = nfa.m_tokendefs.end(); cur != end; ++cur )
-    setTokenDef(cur->second.m_token,cur->second.m_isws,cur->second.m_name);
+    setTokenDef(cur->second.m_token,cur->second.m_isws,cur->second.m_name,cur->second.m_action,cur->second.m_actionarg);
 }
 int Nfa::stateCount() const { return m_nextState; }
 int Nfa::addState() { return m_nextState++; }
@@ -387,12 +387,14 @@ void Nfa::addEmptyTransition(int from, int to) { m_emptytransitions.insert(Trans
 bool Nfa::hasTokenDef(int token)  const {
   return (m_tokendefs.find(token) != m_tokendefs.end());
 }
-void Nfa::setTokenDef(int token, bool isws, const string name) {
+void Nfa::setTokenDef(int token, bool isws, const string name, TokenAction action, int actionarg) {
   if( m_tokendefs.find(token) == m_tokendefs.end() ) {
-    m_tokendefs[token] = Token(token,isws,name);
+    m_tokendefs[token] = Token(token,isws,name,action,actionarg);
   } else {
     m_tokendefs[token].m_isws = isws;
     m_tokendefs[token].m_name = name;
+    m_tokendefs[token].m_action = action;
+    m_tokendefs[token].m_actionarg = actionarg;
   }
 }
 Token Nfa::getTokenDef(int token) const {
@@ -521,7 +523,7 @@ void Nfa::toDfa(Nfa &dfa) const {
         if( token != -1 ) {
           if( ! dfa.hasTokenDef(token) ) {
             Token tokendef = getTokenDef(token);
-            dfa.setTokenDef(token, tokendef.m_isws, tokendef.m_name);
+            dfa.setTokenDef(token, tokendef.m_isws, tokendef.m_name, tokendef.m_action, tokendef.m_actionarg);
           }
           dfa.setStateToken(nextstateno,token);
         }
@@ -1075,6 +1077,8 @@ Nfa *ParseTokenizerFile(TokStream &s) {
   while( c != -1 ) {
     bool isws = false;
     bool issub = false;
+    TokenAction action = ActionNone;
+    int actionarg = -1;
     if( c == '~' ) {
       isws = true;
       s.discard();
@@ -1083,6 +1087,10 @@ Nfa *ParseTokenizerFile(TokStream &s) {
       s.discard();
     } else if( c == '-' ) {
       s.discard();
+      ParseWs(s);
+      if( ! s.peekstr("section") )
+        error(s,"No 'section'");
+      s.discard(7);
       ParseWs(s);
       string label = ParseSymbol(s);
       if( ! label.length() )
@@ -1100,6 +1108,32 @@ Nfa *ParseTokenizerFile(TokStream &s) {
       nfa.addStartState(startTokState);
       startState = nfa.addState();
       nfa.addTransition(startTokState,startState,curSection);
+      ParseWs(s);
+      c = s.peekc();
+      continue;
+    } else if( s.peekstr("push") ) {
+      action = ActionPush;
+      s.discard(4);
+      ParseWs(s);
+      string label = ParseSymbol(s);
+      if( ! label.length() )
+        error(s,"no 'push' label");
+      if( sectionNumbers.find(label) == sectionNumbers.end() )
+        sectionNumbers[label] = nextSectionNumber++;
+      actionarg = sectionNumbers[label];
+    } else if( s.peekstr("pop") ) {
+      action = ActionPop;
+      s.discard(3);
+    } else if( s.peekstr("goto") ) {
+      action = ActionGoto;
+      s.discard(4);
+      ParseWs(s);
+      string label = ParseSymbol(s);
+      if( ! label.length() )
+        error(s,"no 'goto' label");
+      if( sectionNumbers.find(label) == sectionNumbers.end() )
+        sectionNumbers[label] = nextSectionNumber++;
+      actionarg = sectionNumbers[label];
     }
     ParseWs(s);
     c = s.peekc();
@@ -1121,7 +1155,7 @@ Nfa *ParseTokenizerFile(TokStream &s) {
       subs[symbol] = rx;
     } else {
       int endState = rx->addToNfa(nfa, startState);
-      nfa.setTokenDef(tokid,isws,symbol);
+      nfa.setTokenDef(tokid,isws,symbol,action,actionarg);
       nfa.addEndState(endState);
       nfa.setStateToken(endState,tokid);
       ++tokid;
@@ -1173,9 +1207,9 @@ public:
     } else if(c == '\t' ) {
       out << "'\\t'";
     } else if(c == '\\' || c == '\'' ) {
-      out << "\'\\" << (char)c << '\''; 
-    } else if( isgraph(c) ) {
-      out << '\'' << (char)c << '\''; 
+      out << "'\\" << (char)c << "'";
+    } else if( c <= 126 && isgraph(c) ) {
+      out << "'" << (char)c << "'"; 
     } else
       out << c;
   }
@@ -1203,6 +1237,7 @@ LanguageOutputter *getLanguageOutputter(OutputLanguage language) {
 }
 
 static void OutputDfaSource(ostream &out, const Nfa &dfa, const LanguageOutputter &lang) {
+  bool first = true;
   // Going to assume there are no gaps in toking numbering
   vector<Token> tokens = dfa.getTokenDefs();
 
@@ -1218,10 +1253,25 @@ static void OutputDfaSource(ostream &out, const Nfa &dfa, const LanguageOutputte
     out << endl;
   }
 
+  lang.outArrayDecl(out, "const int", "tokenaction");
+  out << " = ";
+  lang.outStartArray(out);
+  first = true;
+  for( vector<Token>::iterator cur = tokens.begin(), end = tokens.end(); cur != end; ++cur ) {
+    if( first )
+      first = false;
+    else
+      out << ',';
+    out << cur->m_action << "," << cur->m_actionarg;
+  }
+  lang.outEndArray(out);
+  lang.outEndStmt(out);
+  out << endl;
+
   lang.outArrayDecl(out, "const char*", "tokenstr");
   out << " = ";
   lang.outStartArray(out);
-  bool first = true;
+  first = true;
   for( vector<Token>::iterator cur = tokens.begin(), end = tokens.end(); cur != end; ++cur ) {
     if( first )
       first = false;

@@ -88,13 +88,22 @@ public:
   bool operator<(const Transition &rhs) const;
 };
 
+enum TokenAction {
+  ActionNone,
+  ActionPush,
+  ActionPop,
+  ActionGoto
+};
+
 class Token {
 public:
   int m_token;
   bool m_isws;
   string m_name;
-  Token() : m_token(-1), m_isws(false) {}
-  Token(int token, bool isws, const string name) : m_token(token), m_isws(isws), m_name(name) {}
+  TokenAction m_action;
+  int m_actionarg;
+  Token() : m_token(-1), m_isws(false), m_action(ActionNone), m_actionarg(-1) {}
+  Token(int token, bool isws, const string name, TokenAction action, int actionarg) : m_token(token), m_isws(isws), m_name(name), m_action(action), m_actionarg(actionarg) {}
   bool operator<(const Token &rhs) const { return m_token < rhs.m_token; }
 };
 
@@ -125,7 +134,7 @@ public:
   bool hasTokenDef(int token) const;
   Token getTokenDef(int token) const;
   vector<Token> getTokenDefs() const;
-  void setTokenDef(int token, bool isws, const string name);
+  void setTokenDef(int token, bool isws, const string name, TokenAction action, int actionarg);
   void clear();
   void closure(const map<int,set<int> > &emptytransitions, set<int> &states) const;
   void follow( const CharRange &range, const set<int> &states, set<int> &nextstates ) const;
