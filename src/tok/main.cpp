@@ -22,7 +22,6 @@ int main(int argc, char *argv[])
     TokStream s(&cin);
     Nfa *dfa = ParseTokenizerFile(s);
     OutputTokenizerSource(cout,*dfa,language);
-    delete dfa;
   } catch(ParseException pe) {
     cout << "Parse Error <stdin>(" << pe.m_line << ':' << pe.m_col << ") : " << pe.m_err << endl;
   }

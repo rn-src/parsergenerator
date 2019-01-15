@@ -62,8 +62,8 @@ protected:
   int find(int c, bool &found) const;
   int splitRec(int low, int high, int i);
 public:
-  typedef typename CharIterator char_iterator;
-  typedef typename vector<CharRange>::const_iterator iterator;
+  typedef CharIterator char_iterator;
+  typedef vector<CharRange>::const_iterator iterator;
 
   bool contains(const CharRange &range) const;
   iterator begin() const;

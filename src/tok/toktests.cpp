@@ -69,4 +69,5 @@ void test() {
   in.open("toktest.txt", ios_base::in);
   TokStream s(&in);
   Nfa *dfa = ParseTokenizerFile(s);
+  delete dfa;
 }

@@ -1,10 +1,14 @@
-~ WS     /[[:white:]]*/
-  START  /<start>/
-  ID     /[[:alpha:]][[:alnum:]]*/
-  COLON  /:/
-  SEMI   /;/
-  LBRACE /\{/
-  RBRACE /\}/
-  LBRKT  /\[/
-  RBRKT  /\]/
+      ~ WS      /[[:white:]]*/
+        START   /<start>/
+        ID      /[[:alpha:]][[:alnum:]]*/
+        COLON   /:/
+        SEMI    /;/
+push b  LBRACE  /\{/
+        LBRKT   /\[/
+        RBRKT   /\]/
+
+- section b
+        SRC     /[^\{\}]+/
+push b  LBRACE2 /\{/
+pop     RBRACE  /\}/
 

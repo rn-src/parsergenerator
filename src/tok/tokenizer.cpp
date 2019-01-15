@@ -1057,9 +1057,16 @@ static Rx *ParseRegex(TokStream &s, map<string,Rx*> &subs) {
 }
 
 Nfa *ParseTokenizerFile(TokStream &s) {
+  set<string> sections;
+  map<string,int> sectionNumbers;
+  sectionNumbers["default"] = 0;
+  int curSection = 0;
+  int nextSectionNumber = 1;
   Nfa nfa;
+  int startTokState = nfa.addState();
+  nfa.addStartState(startTokState);
   int startState = nfa.addState();
-  nfa.addStartState(startState);
+  nfa.addTransition(startTokState,startState,curSection);
   map<string,Rx*> subs;
   set<int> wstoks;
   ParseWs(s);
@@ -1074,6 +1081,25 @@ Nfa *ParseTokenizerFile(TokStream &s) {
     } else if( c == '=' ) {
       issub = true;
       s.discard();
+    } else if( c == '-' ) {
+      s.discard();
+      ParseWs(s);
+      string label = ParseSymbol(s);
+      if( ! label.length() )
+        error(s,"No section label");
+      if( sectionNumbers.find(label) == sectionNumbers.end() )
+        sectionNumbers[label] = nextSectionNumber++;
+      if( sections.find(label) == sections.end() )
+        sections.insert(label);
+      else
+        error(s,"the section name is already used");
+      if( nfa.stateCount() == 0 )
+        error(s,"sections may not be empty");
+      curSection = sectionNumbers[label];
+      startTokState = nfa.addState();
+      nfa.addStartState(startTokState);
+      startState = nfa.addState();
+      nfa.addTransition(startTokState,startState,curSection);
     }
     ParseWs(s);
     c = s.peekc();
