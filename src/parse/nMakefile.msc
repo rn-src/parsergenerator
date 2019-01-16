@@ -8,7 +8,7 @@ parser.exe: parser.obj main.obj
 	@echo linking...
 	@link /nologo /DEBUG /SUBSYSTEM:CONSOLE /OUT:parser.exe parser.obj main.obj
 
-parser.obj: parser.cpp parser.h
+parser.obj: parser.cpp parser.h ../tok/tok.h
 	@cl /nologo /c /Zi /Od /EHsc /DWIN32 parser.cpp
 
 main.obj: main.cpp parser.h

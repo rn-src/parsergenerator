@@ -4,11 +4,12 @@
         COLON   /:/
         SEMI    /;/
 push b  LBRACE  /\{/
+        RBRACE  /\}/
         LBRKT   /\[/
         RBRKT   /\]/
 
 - section b
         SRC     /[^\{\}]+/
-push b  LBRACE2 /\{/
+push b  LBRACE  /\{/
 pop     RBRACE  /\}/
 

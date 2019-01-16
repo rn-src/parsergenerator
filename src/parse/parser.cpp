@@ -1,6 +1,24 @@
 #include "parser.h"
-#include "parsertok.h"
 #include <vector>
+#include <strstream>
+using namespace std;
+namespace pptok {
+#include "parsertok.h"
+}
+
+TokenInfo pptokinfo = {
+  pptok::tokenCount,
+  pptok::sectionCount,
+  pptok::tokenaction,
+  pptok::tokenstr,
+  pptok::isws,
+  pptok::ranges,
+  pptok::stateCount,
+  pptok::transitions,
+  pptok::transitionOffset,
+  pptok::tokens
+};
+
 using namespace std;
 // parser : parerpart +
 // parserpart : production | precedence | disallowrule
@@ -14,24 +32,6 @@ using namespace std;
 // associativity : LEFTASSOC | RIGHTASSOC | NONASSOC
 // disallowrule : DISALLOW productiondescriptor '@' productiondescriptor ["...@" productiondescriptor]
 
-ParseStream::ParseStream() {
-  // TODO
-}
-
-int ParseStream::peek() {
-  // TODO
-  return 0;
-}
-
-void ParseStream::discard() {
-  // TODO
-}
-
-const char *ParseStream::tokstr() {
-  // TODO
-  return 0;
-}
-
 Production::Production(int nt, const vector<int> &symbols, const char *action) : m_nt(nt), m_symbols(symbols), m_action(action) {}
 
 int ParserDef::findOrAddSymbol(const char *s) {
@@ -43,54 +43,59 @@ int ParserDef::findOrAddSymbol(const char *s) {
   return id;
 }
 
-void error(ParseStream &ps, const char *err) {
+void error(Tokenizer &toks, const char *err) {
   // TODO
 }
 
-static int ParseNonterminal(ParseStream &ps, ParserDef &parser) {
-  if( ps.peek() == START || ps.peek() == ID )
-    return parser.findOrAddSymbol(ps.tokstr());
+static int ParseNonterminal(Tokenizer &toks, ParserDef &parser) {
+  if( toks.peek() == pptok::START || toks.peek() == pptok::ID )
+    return parser.findOrAddSymbol(toks.tokstr());
   return -1;
 }
 
-static int ParseSymbol(ParseStream &ps, ParserDef &parser) {
-  if( ps.peek() == ID )
-    return parser.findOrAddSymbol(ps.tokstr());
+static int ParseSymbol(Tokenizer &toks, ParserDef &parser) {
+  if( toks.peek() == pptok::ID )
+    return parser.findOrAddSymbol(toks.tokstr());
   return -1;
 }
 
-static vector<int> ParseSymbols(ParseStream &ps, ParserDef &parser) {
+static vector<int> ParseSymbols(Tokenizer &toks, ParserDef &parser) {
   vector<int> symbols;
-  int s = ParseSymbol(ps,parser);
+  int s = ParseSymbol(toks,parser);
   if( s == -1 )
-    error(ps,"expected symbol");
+    error(toks,"expected symbol");
   symbols.push_back(s);
-  while( (s = ParseSymbol(ps,parser)) != -1 )
+  while( (s = ParseSymbol(toks,parser)) != -1 )
     symbols.push_back(s);
   return symbols;
 }
 
-static Production *ParseProduction(ParseStream &ps, ParserDef &parser) {
-  int nt = ParseNonterminal(ps,parser);
+static Production *ParseProduction(Tokenizer &toks, ParserDef &parser) {
+  int nt = ParseNonterminal(toks,parser);
   if( nt == -1 )
-    error(ps,"Expected nonterminal");
-  if( ps.peek() != COLON )
-    error(ps,"Exptected ':'");
-  vector<int> symbols = ParseSymbols(ps,parser);
+    error(toks,"Expected nonterminal");
+  if( toks.peek() != pptok::COLON )
+    error(toks,"Exptected ':'");
+  vector<int> symbols = ParseSymbols(toks,parser);
   const char *action = 0;
-  if( ps.peek() == LBRACE ) {
-    action = ps.tokstr();
-    if( action )
-      action = strdup(action);
+  if( toks.peek() == pptok::LBRACE ) {
+    toks.discard();
+    strstream ss;
+    while( toks.peek() != -1 && toks.peek() != pptok::RBRACE ) {
+      ss.write(toks.tokstr(),toks.length());
+      toks.discard();
+    }
+    action = strdup(ss.str());
   }
-  if( ps.peek() != SEMI )
-    error(ps,"Expected ';'");
+  if( toks.peek() != pptok::SEMI )
+    error(toks,"Expected ';'");
   return new Production(nt,symbols,action);
 }
 
-void ParseParser(ParseStream &ps, ParserDef &parser) {
-  Production *p = ParseProduction(ps,parser);
+void ParseParser(TokBuf *tokbuf, ParserDef &parser) {
+  Tokenizer toks(tokbuf,&pptokinfo);
+  Production *p = ParseProduction(toks,parser);
   parser.m_productions.push_back(p);
-  while( p = ParseProduction(ps,parser) )
+  while( p = ParseProduction(toks,parser) )
     parser.m_productions.push_back(p);
 }

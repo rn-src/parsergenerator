@@ -95,15 +95,19 @@ enum TokenAction {
   ActionGoto
 };
 
+class Action {
+public:
+  TokenAction m_action;
+  int m_actionarg;
+};
+
 class Token {
 public:
   int m_token;
   bool m_isws;
   string m_name;
-  TokenAction m_action;
-  int m_actionarg;
-  Token() : m_token(-1), m_isws(false), m_action(ActionNone), m_actionarg(-1) {}
-  Token(int token, bool isws, const string name, TokenAction action, int actionarg) : m_token(token), m_isws(isws), m_name(name), m_action(action), m_actionarg(actionarg) {}
+  map<int,Action> m_actions;  
+  Token() : m_token(-1), m_isws(false) {}
   bool operator<(const Token &rhs) const { return m_token < rhs.m_token; }
 };
 
@@ -116,6 +120,7 @@ protected:
   set<Transition> m_emptytransitions;
   map<int,int> m_token2state;
   map<int,Token> m_tokendefs;
+  int m_sections;
 
 public:
   Nfa();
@@ -134,7 +139,10 @@ public:
   bool hasTokenDef(int token) const;
   Token getTokenDef(int token) const;
   vector<Token> getTokenDefs() const;
-  void setTokenDef(int token, bool isws, const string name, TokenAction action, int actionarg);
+  void setTokenDef(const Token &tok);
+  bool setTokenAction(int token, int section, TokenAction action, int actionarg);
+  int getSections() const;
+  void setSections(int sections);
   void clear();
   void closure(const map<int,set<int> > &emptytransitions, set<int> &states) const;
   void follow( const CharRange &range, const set<int> &states, set<int> &nextstates ) const;

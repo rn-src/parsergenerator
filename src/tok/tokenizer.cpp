@@ -13,7 +13,7 @@ using namespace std;
 
 // rx : simplerx | rx rx | rx '+' | rx '*' | rx '?' | rx '|' rx | '(' rx ')' | rx '{' number '}' | rx '{' number ',' '}' | rx '{' number ',' number '}' | rx '{' ',' number '}'
 // simplerx : /[0-9A-Za-z \t]/ | '\\[trnv]' | /\\[.]/ | /(\\x|\\u)[[:xdigit:]]+/ | /./ | charset
-// charset : '[' charsetelements ']' | '[~' charsetelements ']'
+// charset : '[' charsetelements ']' | '[^' charsetelements ']'
 // charsetelements : charsetelements charsetelement
 // charsetelement : char '-' char | char | namedcharset
 // namedcharset : '[:' charsetname ':]'
@@ -336,7 +336,7 @@ bool Transition::operator<(const Transition &rhs) const {
   return false;
 }
 
-Nfa::Nfa() : m_nextState(0) {
+Nfa::Nfa() : m_nextState(0), m_sections(0) {
 }
 void Nfa::addNfa(const Nfa &nfa) {
   int states = m_nextState;
@@ -352,7 +352,7 @@ void Nfa::addNfa(const Nfa &nfa) {
   for( map<int,int>::const_iterator cur = nfa.m_token2state.begin(), end = nfa.m_token2state.end(); cur != end; ++cur )
     m_token2state[cur->first+states] = cur->second;
   for( map<int,Token>::const_iterator cur = nfa.m_tokendefs.begin(), end = nfa.m_tokendefs.end(); cur != end; ++cur )
-    setTokenDef(cur->second.m_token,cur->second.m_isws,cur->second.m_name,cur->second.m_action,cur->second.m_actionarg);
+    setTokenDef(cur->second);
 }
 int Nfa::stateCount() const { return m_nextState; }
 int Nfa::addState() { return m_nextState++; }
@@ -387,15 +387,25 @@ void Nfa::addEmptyTransition(int from, int to) { m_emptytransitions.insert(Trans
 bool Nfa::hasTokenDef(int token)  const {
   return (m_tokendefs.find(token) != m_tokendefs.end());
 }
-void Nfa::setTokenDef(int token, bool isws, const string name, TokenAction action, int actionarg) {
-  if( m_tokendefs.find(token) == m_tokendefs.end() ) {
-    m_tokendefs[token] = Token(token,isws,name,action,actionarg);
-  } else {
-    m_tokendefs[token].m_isws = isws;
-    m_tokendefs[token].m_name = name;
-    m_tokendefs[token].m_action = action;
-    m_tokendefs[token].m_actionarg = actionarg;
-  }
+void Nfa::setTokenDef(const Token &tok) {
+  m_tokendefs[tok.m_token] = tok;
+}
+bool Nfa::setTokenAction(int token, int section, TokenAction action, int actionarg) {
+  if( m_tokendefs.find(token) == m_tokendefs.end() )
+    return false;
+  Token &tok = m_tokendefs.find(token)->second;
+  Action tokaction;
+  tokaction.m_action = action;
+  tokaction.m_actionarg = actionarg;
+  tok.m_actions[section] = tokaction;
+  return true;
+}
+int Nfa::getSections() const {
+  return m_sections;
+}
+
+void Nfa::setSections(int sections) {
+  m_sections = sections;
 }
 Token Nfa::getTokenDef(int token) const {
   if( m_tokendefs.find(token) == m_tokendefs.end() )
@@ -434,6 +444,7 @@ void Nfa::clear() {
   m_emptytransitions.clear();
   m_token2state.clear();
   m_tokendefs.clear();
+  m_sections = 1;
 }
 void Nfa::closure(const map<int,set<int> > &emptytransitions, set<int> &states) const {
   set<int> nextstates = states;
@@ -491,6 +502,7 @@ int Nfa::lowToken(const set<int> &states) const {
 }
 void Nfa::toDfa(Nfa &dfa) const {
   dfa.clear();
+  dfa.setSections(m_sections);
   vector< set<int> > newstates;
   set<int> nextstate;
   map<int,set<int> > emptytransitions;
@@ -523,7 +535,7 @@ void Nfa::toDfa(Nfa &dfa) const {
         if( token != -1 ) {
           if( ! dfa.hasTokenDef(token) ) {
             Token tokendef = getTokenDef(token);
-            dfa.setTokenDef(token, tokendef.m_isws, tokendef.m_name, tokendef.m_action, tokendef.m_actionarg);
+            dfa.setTokenDef(tokendef);
           }
           dfa.setStateToken(nextstateno,token);
         }
@@ -807,7 +819,7 @@ static Rx *ParseCharSet(TokStream &s) {
     return 0;
   s.discard();
   c = s.peekc();
-  bool negate = (c == '~');
+  bool negate = (c == '^');
   if( negate ) {
     s.discard();
     c = s.peekc();
@@ -1061,6 +1073,8 @@ static Rx *ParseRegex(TokStream &s, map<string,Rx*> &subs) {
 Nfa *ParseTokenizerFile(TokStream &s) {
   set<string> sections;
   map<string,int> sectionNumbers;
+  map<string,int> tokens;
+  sections.insert("default");
   sectionNumbers["default"] = 0;
   int curSection = 0;
   int nextSectionNumber = 1;
@@ -1073,7 +1087,7 @@ Nfa *ParseTokenizerFile(TokStream &s) {
   set<int> wstoks;
   ParseWs(s);
   int c = s.peekc();
-  int tokid = 0;
+  int nexttokid = 0;
   while( c != -1 ) {
     bool isws = false;
     bool issub = false;
@@ -1154,13 +1168,25 @@ Nfa *ParseTokenizerFile(TokStream &s) {
       }
       subs[symbol] = rx;
     } else {
+      int tokid = -1;
+      if( tokens.find(symbol) == tokens.end() ) {
+        tokid = nexttokid++;
+        tokens[symbol] = tokid;
+        Token token;
+        token.m_token = tokid;
+        token.m_isws = isws;
+        token.m_name = symbol;
+        nfa.setTokenDef(token);
+      } else {
+        tokid = tokens[symbol];
+      }
+      nfa.setTokenAction(tokid,curSection,action,actionarg);
       int endState = rx->addToNfa(nfa, startState);
-      nfa.setTokenDef(tokid,isws,symbol,action,actionarg);
       nfa.addEndState(endState);
       nfa.setStateToken(endState,tokid);
-      ++tokid;
     }
   }
+  nfa.setSections(sections.size());
   Nfa *dfa = new Nfa();
   nfa.toDfa(*dfa);
   return dfa;
@@ -1246,6 +1272,11 @@ static void OutputDfaSource(ostream &out, const Nfa &dfa, const LanguageOutputte
   lang.outEndStmt(out);
   out << endl;
 
+  lang.outDecl(out,"const int","sectionCount");
+  out << " = " << dfa.getSections();
+  lang.outEndStmt(out);
+  out << endl;
+
   for( vector<Token>::iterator cur = tokens.begin(), end = tokens.end(); cur != end; ++cur ) {
     lang.outDecl(out,"const int",cur->m_name.c_str());
     out << " = " << cur->m_token;
@@ -1257,12 +1288,21 @@ static void OutputDfaSource(ostream &out, const Nfa &dfa, const LanguageOutputte
   out << " = ";
   lang.outStartArray(out);
   first = true;
-  for( vector<Token>::iterator cur = tokens.begin(), end = tokens.end(); cur != end; ++cur ) {
-    if( first )
-      first = false;
-    else
-      out << ',';
-    out << cur->m_action << "," << cur->m_actionarg;
+  for( vector<Token>::const_iterator cur = tokens.begin(), end = tokens.end(); cur != end; ++cur ) {
+    const Token &token = *cur;
+    for( int i = 0, n = dfa.getSections(); i < n; ++i ) {
+      if( first )
+        first = false;
+      else
+        out << ',';
+      map<int,Action>::const_iterator actioniter = token.m_actions.find(i);
+      if( actioniter == token.m_actions.end() ) {
+        out << 0 << "," << -1;
+      } else {
+        const Action &action = actioniter->second;
+        out << action.m_action << "," << action.m_actionarg;
+      }
+    }
   }
   lang.outEndArray(out);
   lang.outEndStmt(out);

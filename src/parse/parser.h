@@ -4,15 +4,9 @@
 #include <string>
 #include <vector>
 #include <map>
-using namespace std;
+#include "../tok/tok.h"
 
-class ParseStream {
-public:
-  ParseStream();
-  int peek();
-  void discard();
-  const char *tokstr();
-};
+using namespace std;
 
 class Production {
 public:
@@ -30,5 +24,6 @@ public:
   int findOrAddSymbol(const char *s);
 };
 
-#endif /* __parser_h */
+void ParseParser(TokBuf *tokbuf, ParserDef &parser);
 
+#endif /* __parser_h */
