@@ -21,16 +21,17 @@ TokenInfo pptokinfo = {
 
 using namespace std;
 // parser : parerpart +
-// parserpart : production | precedence | disallowrule
-// production : [modifier +] nonterminal COLON symbol + [ACTION] SEMICOLON
-// modifier : REJECTABLE | LABEL '=' ID
+// parserpart : (production|precedencerule|disallowrule) SEMICOLON
+// productiondecl : REJECTABLE? production action?
+// production: nonterminal COLON symbol+
 // nonterminal : START | ID
-// symbol : ID
-// precedence : PRECEDENCE precedenceparts
-// precedenceparts : precedenceparts '>' precedencepart
-// precedencepart : productiondescriptor [associativity]
-// associativity : LEFTASSOC | RIGHTASSOC | NONASSOC
-// disallowrule : DISALLOW productiondescriptor '@' productiondescriptor ["...@" productiondescriptor]
+// symbol : ID | ERROR
+// precedencerule : PRECEDENCE precedenceparts
+// precedenceparts : precedenceparts [['='|'>'] precedencepart]+
+// precedencepart : productiondescriptor associativity?
+// associativity LEFTASSOC | RIGHTASSOC | NONASSOC | DISALLOW '@' productiondescriptor
+// productiondescriptor : '[' [nonterminal|'*']? COLON [symbol|'*'|'...'|'.' symbol]+ ']'
+// disallowrule : DISALLOW productiondescriptor '@' productiondescriptor ['...' '@' productiondescriptor]
 
 Production::Production(int nt, const vector<int> &symbols, String action) : m_nt(nt), m_symbols(symbols), m_action(action) {}
 
