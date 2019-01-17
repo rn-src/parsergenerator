@@ -1,6 +1,4 @@
 #include "tokenizer.h"
-#include <iostream>
-#include <fstream>
 #include <string.h>
 
 int main(int argc, char *argv[])
@@ -16,11 +14,11 @@ int main(int argc, char *argv[])
     }
   }
   try {
-    TokStream s(&cin);
+    TokStream s(stdin);
     Nfa *dfa = ParseTokenizerFile(s);
-    OutputTokenizerSource(cout,*dfa,language);
+    OutputTokenizerSource(stdout,*dfa,language);
   } catch(ParseException pe) {
-    cout << "Parse Error <stdin>(" << pe.m_line << ':' << pe.m_col << ") : " << pe.m_err << endl;
+    fprintf(stdout, "Parse Error <stdin>(%d:%d( : %s\n", pe.m_line, pe.m_col, pe.m_err);
   }
   return 0;
 }

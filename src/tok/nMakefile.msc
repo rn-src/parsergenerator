@@ -4,17 +4,15 @@
 
 all: tokenizer.exe
 
-tokenizer.exe: tokenizer.obj toktests.obj main.obj
+tokenizer.exe: tokenizer.obj main.obj
 	@echo linking...
-	@link /nologo /DEBUG /SUBSYSTEM:CONSOLE /OUT:tokenizer.exe tokenizer.obj toktests.obj main.obj
+	@link /nologo /SUBSYSTEM:CONSOLE /OUT:tokenizer.exe tokenizer.obj main.obj
+#	@link /nologo /DEBUG /SUBSYSTEM:CONSOLE /OUT:tokenizer.exe tokenizer.obj main.obj
 
-tokenizer.obj: tokenizer.cpp tokenizer.h
+tokenizer.obj: tokenizer.cpp tokenizer.h tinytemplates.h
 	@cl /nologo /c /Zi /Od /EHsc /DWIN32 tokenizer.cpp
 
-toktests.obj: toktests.cpp tokenizer.h
-	@cl /nologo /c /Zi /Od /EHsc /DWIN32 toktests.cpp
-
-main.obj: main.cpp tokenizer.h
+main.obj: main.cpp tokenizer.h tinytemplates.h
 	@cl /nologo /c /Zi /Od /EHsc /DWIN32 main.cpp
 
 clean:

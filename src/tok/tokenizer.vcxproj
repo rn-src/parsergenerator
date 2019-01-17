@@ -21,7 +21,6 @@
   <ItemGroup>
     <ClCompile Include="main.cpp" />
     <ClCompile Include="tokenizer.cpp" />
-    <ClCompile Include="toktests.cpp" />
   </ItemGroup>
   <ItemGroup>
     <None Include="nMakefile.msc" />

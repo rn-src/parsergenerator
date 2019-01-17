@@ -1,21 +1,18 @@
 #ifndef __tokenizer_h
 #define __tokenizer_h
 
-#include <istream>
-#include <vector>
-#include <set>
-#include <map>
-using namespace std;
+#include <stdio.h>
+#include "tinytemplates.h"
 
 class TokStream {
   char *m_buf;
   int m_buflen, m_buffill, m_bufpos, m_pos, m_line, m_col;
-  istream *m_in;
+  FILE *m_in;
 
   bool addc();
 
 public:
-  TokStream(istream *in);
+  TokStream(FILE *in);
   ~TokStream();
   int peekc(int n = 0);
   bool peekstr(const char *s);
@@ -37,39 +34,25 @@ public:
 class CharRange {
 public:
   int m_low, m_high;
+  CharRange();
   CharRange(int low, int high);
   bool contains(int i) const;
   bool contains(const CharRange &rhs) const;
   bool overlaps(int low, int high) const;
 };
 
-class CharIterator {
-  vector<CharRange>::const_iterator m_cur, m_end;
-  int m_curchar;
-public:
-  CharIterator(vector<CharRange>::const_iterator cur, vector<CharRange>::const_iterator end, int curchar);
-  int operator*() const;
-  CharIterator operator++();
-  CharIterator operator++(int);
-  bool operator==(const CharIterator &rhs) const;
-  bool operator!=(const CharIterator &rhs) const;
-};
-
 class CharSet {
 protected:
-  vector<CharRange> m_ranges;
+  Vector<CharRange> m_ranges;
 
   int find(int c, bool &found) const;
   int splitRec(int low, int high, int i);
 public:
-  typedef CharIterator char_iterator;
-  typedef vector<CharRange>::const_iterator iterator;
+  typedef Vector<CharRange>::const_iterator iterator;
 
   bool contains(const CharRange &range) const;
   iterator begin() const;
   iterator end() const;
-  char_iterator begin_char() const;
-  char_iterator end_char() const;
   void clear();
   bool empty() const;
   void addChar(int i);
@@ -105,21 +88,42 @@ class Token {
 public:
   int m_token;
   bool m_isws;
-  string m_name;
-  map<int,Action> m_actions;  
+  String m_name;
+  Map<int,Action> m_actions;  
   Token() : m_token(-1), m_isws(false) {}
   bool operator<(const Token &rhs) const { return m_token < rhs.m_token; }
+};
+
+class VectorToken {
+  Token *m_p;
+  int m_size;
+  int m_capacity;
+public:
+  typedef const Token* const_iterator;
+  typedef Token* iterator;
+  iterator begin() { return m_p; }
+  iterator end() { return m_p+m_size; }
+  const_iterator begin() const { return m_p; }
+  const_iterator end() const { return m_p+m_size; }
+  bool empty() const { return m_size == 0; }
+  Token &operator[](size_t i) { return m_p[i]; }
+  const Token &operator[](size_t i) const { return m_p[i]; }
+  void clear() { m_size = 0; }
+  void push_back(const Token &value) {
+    m_p[m_size++] = value;
+  }
+  int size() const { return m_size; }
 };
 
 class Nfa {
 protected:
   int m_nextState;
-  set<int> m_startStates;
-  set<int> m_endStates;
-  map<Transition,CharSet> m_transitions;
-  set<Transition> m_emptytransitions;
-  map<int,int> m_token2state;
-  map<int,Token> m_tokendefs;
+  Set<int> m_startStates;
+  Set<int> m_endStates;
+  Map<Transition,CharSet> m_transitions;
+  Set<Transition> m_emptytransitions;
+  Map<int,int> m_token2state;
+  Map<int,Token> m_tokendefs;
   int m_sections;
 
 public:
@@ -138,17 +142,17 @@ public:
   void setStateToken(int state, int token);
   bool hasTokenDef(int token) const;
   Token getTokenDef(int token) const;
-  vector<Token> getTokenDefs() const;
+  Vector<Token> getTokenDefs() const;
   void setTokenDef(const Token &tok);
   bool setTokenAction(int token, int section, TokenAction action, int actionarg);
   int getSections() const;
   void setSections(int sections);
   void clear();
-  void closure(const map<int,set<int> > &emptytransitions, set<int> &states) const;
-  void follow( const CharRange &range, const set<int> &states, set<int> &nextstates ) const;
-  void stateTransitions(const set<int> &states, CharSet &transitions) const;
-  bool hasEndState(const set<int> &states) const;
-  int lowToken(const set<int> &states) const;
+  void closure(const Map<int,Set<int>> &emptytransitions, Set<int> &states) const;
+  void follow( const CharRange &range, const Set<int> &states, Set<int> &nextstates ) const;
+  void stateTransitions(const Set<int> &states, CharSet &transitions) const;
+  bool hasEndState(const Set<int> &states) const;
+  int lowToken(const Set<int> &states) const;
   void toDfa(Nfa &dfa) const;
 };
 
@@ -192,6 +196,6 @@ enum OutputLanguage {
 };
 
 Nfa *ParseTokenizerFile(TokStream &s);
-void OutputTokenizerSource(ostream &out, const Nfa &dfa, OutputLanguage language);
+void OutputTokenizerSource(FILE *out, const Nfa &dfa, OutputLanguage language);
 
 #endif /* __tokenizer_h */

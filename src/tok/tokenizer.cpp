@@ -1,15 +1,9 @@
 #include <string.h>
-#include <set>
-#include <map>
-#include <vector>
-#include <string>
 #include <limits.h>
 #include <ctype.h>
-#include <iostream>
 #include <stdlib.h>
-#include <algorithm>
-using namespace std;
 #include "tokenizer.h"
+using namespace std;
 
 // rx : simplerx | rx rx | rx '+' | rx '*' | rx '?' | rx '|' rx | '(' rx ')' | rx '{' number '}' | rx '{' number ',' '}' | rx '{' number ',' number '}' | rx '{' ',' number '}'
 // simplerx : /[0-9A-Za-z \t]/ | '\\[trnv]' | /\\[.]/ | /(\\x|\\u)[[:xdigit:]]+/ | /./ | charset
@@ -30,11 +24,19 @@ static int xvalue(char c) {
   return -1;
 }
 
+static int compareTokens(const void *lhs, const void *rhs) {
+  if( *((const Token*)lhs) < *((const Token*)rhs) )
+    return -1;
+  if( *((const Token*)rhs) < *((const Token*)lhs) )
+    return 1;
+  return 0;
+}
+
 bool TokStream::addc() {
-  if( m_in->eof() )
+  if( feof(m_in) )
     return false;
   char c;
-  if( m_in->read(&c,1).eof() )
+  if( fread(&c,1,1,m_in) != 1 )
     return false;
   if( m_buffill == m_buflen ) {
     int newlen = 0;
@@ -61,7 +63,7 @@ bool TokStream::addc() {
   return true;
 }
 
-TokStream::TokStream(istream *in) {
+TokStream::TokStream(FILE *in) {
   m_buf = 0;
   m_buffill = 0;
   m_buflen = 0;
@@ -82,7 +84,7 @@ int TokStream::peekc(int n) {
   return m_buf[(m_bufpos+n)%m_buflen];
 }
 bool TokStream::peekstr(const char *s) {
-  int slen = strlen(s);
+  int slen = (int)strlen(s);
   peekc(slen-1);
   char *ss = m_buf+m_bufpos;
   for( int i = 0; i < slen; ++i )
@@ -115,6 +117,7 @@ static void error(TokStream &s, const char *err) {
   throw ParseException(s.line(),s.col(),err);
 }
 
+CharRange::CharRange() : m_low(0), m_high(0) {}
 CharRange::CharRange(int low, int high) : m_low(low), m_high(high) {}
 bool CharRange::contains(int i) const {
   if( i >= m_low && i <= m_high )
@@ -130,44 +133,6 @@ bool CharRange::overlaps(int low, int high) const {
   if( low > m_high || high < m_low )
     return false;
   return true;
-}
-
-CharIterator::CharIterator(vector<CharRange>::const_iterator cur, vector<CharRange>::const_iterator end, int curchar) {
-  m_cur = cur;
-  m_end = end;
-  m_curchar = curchar;
-}
-int CharIterator::operator*() const {
-  return m_curchar;
-}
-CharIterator CharIterator::operator++() {
-  if( m_cur != m_end ) {
-    if( m_curchar == m_cur->m_high ) {
-      ++m_cur;
-      if( m_cur != m_end )
-        m_curchar = m_cur->m_low;
-      else
-        m_curchar = -1;
-    }
-    else
-      ++m_curchar;
-  }
-  return *this;
-}
-CharIterator CharIterator::operator++(int) {
-  CharIterator ret = *this;
-  operator++();
-  return ret;
-}
-bool CharIterator::operator==(const CharIterator &rhs) const {
-  if( m_cur == rhs.m_cur && m_end == rhs.m_end && m_curchar == rhs.m_curchar )
-    return true;
-  return false;
-}
-bool CharIterator::operator!=(const CharIterator &rhs) const {
-  if( m_cur != rhs.m_cur || m_end != rhs.m_end || m_curchar != rhs.m_curchar )
-    return true;
-  return false;
 }
 
 int CharSet::find(int c, bool &found) const {
@@ -206,15 +171,6 @@ CharSet::iterator CharSet::begin() const {
 CharSet::iterator CharSet::end() const {
   return m_ranges.end();
 }
-CharSet::char_iterator CharSet::begin_char() const {
-  if( m_ranges.empty() )
-    return char_iterator(m_ranges.end(), m_ranges.end(), -1);
-  return char_iterator(m_ranges.begin(), m_ranges.end(), m_ranges.begin()->m_low);
-}
-
-CharSet::char_iterator CharSet::end_char() const {
-  return char_iterator(m_ranges.end(), m_ranges.end(), -1);
-}
 void CharSet::clear() {
   m_ranges.clear();
 }
@@ -247,13 +203,13 @@ void CharSet::addCharRange(int low, int high) {
   }
 }
 void CharSet::addCharset(const CharSet &rhs) {
-  for( vector<CharRange>::const_iterator cur = rhs.m_ranges.begin(), end = rhs.m_ranges.end(); cur != end; ++cur )
+  for( Vector<CharRange>::const_iterator cur = rhs.m_ranges.begin(), end = rhs.m_ranges.end(); cur != end; ++cur )
     addCharRange(cur->m_low, cur->m_high);
 }
 //#define splitTEST
 void CharSet::split(int low, int high) {
 #ifdef splitTEST
-  vector<CharRange> rangesBefore = m_ranges;
+  Vector<CharRange> rangesBefore = m_ranges;
   splitReal(low,high,-1);
   bool overlap = false;
   CharRange last(-1,-1);
@@ -305,13 +261,13 @@ int CharSet::splitRec(int low, int high, int i) {
   return adjust;
 }
 void CharSet::split(const CharSet &rhs) {
-  for( vector<CharRange>::const_iterator cur = rhs.m_ranges.begin(), end = rhs.m_ranges.end(); cur != end; ++cur )
+  for( Vector<CharRange>::const_iterator cur = rhs.m_ranges.begin(), end = rhs.m_ranges.end(); cur != end; ++cur )
     split(cur->m_low, cur->m_high);
 }
 void CharSet::negate() {
-  vector<CharRange> ranges;
+  Vector<CharRange> ranges;
   int prev = 0;
-  for( vector<CharRange>::iterator cur = m_ranges.begin(), end = m_ranges.end(); cur != end; ++cur ) {
+  for( Vector<CharRange>::iterator cur = m_ranges.begin(), end = m_ranges.end(); cur != end; ++cur ) {
     if( prev < cur->m_low )
       ranges.push_back(CharRange(prev,cur->m_low-1));
     prev = cur->m_high+1;
@@ -341,17 +297,17 @@ Nfa::Nfa() : m_nextState(0), m_sections(0) {
 void Nfa::addNfa(const Nfa &nfa) {
   int states = m_nextState;
   m_nextState += nfa.stateCount();
-  for( set<int>::const_iterator cur = nfa.m_startStates.begin(), end = nfa.m_startStates.end(); cur != end; ++cur )
+  for( Set<int>::const_iterator cur = nfa.m_startStates.begin(), end = nfa.m_startStates.end(); cur != end; ++cur )
     m_startStates.insert(*cur+states);
-  for( set<int>::const_iterator cur = nfa.m_endStates.begin(), end = nfa.m_endStates.end(); cur != end; ++cur )
+  for( Set<int>::const_iterator cur = nfa.m_endStates.begin(), end = nfa.m_endStates.end(); cur != end; ++cur )
     m_endStates.insert(*cur+states);
-  for( map<Transition,CharSet>::const_iterator cur = nfa.m_transitions.begin(), end = nfa.m_transitions.end(); cur != end; ++cur )
+  for( Map<Transition,CharSet>::const_iterator cur = nfa.m_transitions.begin(), end = nfa.m_transitions.end(); cur != end; ++cur )
     m_transitions[Transition(cur->first.m_from+states,cur->first.m_to+states)] = cur->second;
-  for( set<Transition>::const_iterator cur = nfa.m_emptytransitions.begin(), end = nfa.m_emptytransitions.end(); cur != end; ++cur )
+  for( Set<Transition>::const_iterator cur = nfa.m_emptytransitions.begin(), end = nfa.m_emptytransitions.end(); cur != end; ++cur )
     m_emptytransitions.insert(Transition(cur->m_from+states,cur->m_to+states));
-  for( map<int,int>::const_iterator cur = nfa.m_token2state.begin(), end = nfa.m_token2state.end(); cur != end; ++cur )
+  for( Map<int,int>::const_iterator cur = nfa.m_token2state.begin(), end = nfa.m_token2state.end(); cur != end; ++cur )
     m_token2state[cur->first+states] = cur->second;
-  for( map<int,Token>::const_iterator cur = nfa.m_tokendefs.begin(), end = nfa.m_tokendefs.end(); cur != end; ++cur )
+  for( Map<int,Token>::const_iterator cur = nfa.m_tokendefs.begin(), end = nfa.m_tokendefs.end(); cur != end; ++cur )
     setTokenDef(cur->second);
 }
 int Nfa::stateCount() const { return m_nextState; }
@@ -359,7 +315,7 @@ int Nfa::addState() { return m_nextState++; }
 void Nfa::addStartState(int startstate) { m_startStates.insert(startstate); }
 void Nfa::addEndState(int endstate) { m_endStates.insert(endstate); }
 void Nfa::addTransition(int from, int to, int symbol) {
-  map<Transition,CharSet>::iterator iter = m_transitions.find(Transition(from,to));
+  Map<Transition,CharSet>::iterator iter = m_transitions.find(Transition(from,to));
   if( iter == m_transitions.end() ) {
     CharSet charset;
     charset.addChar(symbol);
@@ -368,7 +324,7 @@ void Nfa::addTransition(int from, int to, int symbol) {
     iter->second.addChar(symbol);
 }
 void Nfa::addTransition(int from, int to, const CharRange &range) {
-  map<Transition,CharSet>::iterator iter = m_transitions.find(Transition(from,to));
+  Map<Transition,CharSet>::iterator iter = m_transitions.find(Transition(from,to));
   if( iter == m_transitions.end() ) {
     CharSet charset;
     charset.addCharRange(range.m_low,range.m_high);
@@ -377,7 +333,7 @@ void Nfa::addTransition(int from, int to, const CharRange &range) {
     iter->second.addCharRange(range.m_low,range.m_high);
 }
 void Nfa::addTransition(int from, int to, const CharSet &charset) {
-  map<Transition,CharSet>::iterator iter = m_transitions.find(Transition(from,to));
+  Map<Transition,CharSet>::iterator iter = m_transitions.find(Transition(from,to));
   if( iter == m_transitions.end() )
     m_transitions[Transition(from,to)] = charset;
   else
@@ -393,6 +349,8 @@ void Nfa::setTokenDef(const Token &tok) {
 bool Nfa::setTokenAction(int token, int section, TokenAction action, int actionarg) {
   if( m_tokendefs.find(token) == m_tokendefs.end() )
     return false;
+  if( action == ActionNone )
+    return true;
   Token &tok = m_tokendefs.find(token)->second;
   Action tokaction;
   tokaction.m_action = action;
@@ -412,25 +370,25 @@ Token Nfa::getTokenDef(int token) const {
     return Token();
   return m_tokendefs.find(token)->second;
 }
-vector<Token> Nfa::getTokenDefs() const {
-  vector<Token> tokendefs;
-  for( map<int,Token>::const_iterator cur = m_tokendefs.begin(), end = m_tokendefs.end(); cur != end; ++cur ) {
+Vector<Token> Nfa::getTokenDefs() const {
+  Vector<Token> tokendefs;
+  for( Map<int,Token>::const_iterator cur = m_tokendefs.begin(), end = m_tokendefs.end(); cur != end; ++cur ) {
     tokendefs.push_back(cur->second);
   }
-  sort(tokendefs.begin(), tokendefs.end());
+  qsort(tokendefs.begin(), tokendefs.size(), sizeof(Token), compareTokens);
   return tokendefs;
 }
 bool Nfa::stateHasToken(int state) const {
   return (m_token2state.find(state) != m_token2state.end());
 }
 int Nfa::getStateToken(int state) const {
-  map<int,int>::const_iterator iter = m_token2state.find(state);
+  Map<int,int>::const_iterator iter = m_token2state.find(state);
   if( iter != m_token2state.end() )
     return iter->second;
   return -1;
 }
 void Nfa::setStateToken(int state, int token) {
-  map<int,int>::iterator iter = m_token2state.find(state);
+  Map<int,int>::iterator iter = m_token2state.find(state);
   if( iter == m_token2state.end() )
     m_token2state[state] = token;
   else
@@ -446,17 +404,17 @@ void Nfa::clear() {
   m_tokendefs.clear();
   m_sections = 1;
 }
-void Nfa::closure(const map<int,set<int> > &emptytransitions, set<int> &states) const {
-  set<int> nextstates = states;
-  vector<int> vecstates;
+void Nfa::closure(const Map<int,Set<int> > &emptytransitions, Set<int> &states) const {
+  Set<int> nextstates = states;
+  Vector<int> vecstates;
   vecstates.insert(vecstates.end(),nextstates.begin(),nextstates.end());
   for( int i = 0; i < vecstates.size(); ++i )
   {
-    map<int,set<int> >::const_iterator e = emptytransitions.find(vecstates[i]);
+    Map<int,Set<int>>::const_iterator e = emptytransitions.find(vecstates[i]);
     if( e == emptytransitions.end() )
       continue;
-    const set<int> &intset = e->second;
-    for( set<int>::const_iterator cur = intset.begin(), end = intset.end(); cur != end; ++cur ) {
+    const Set<int> &intset = e->second;
+    for( Set<int>::const_iterator cur = intset.begin(), end = intset.end(); cur != end; ++cur ) {
       if( nextstates.find(*cur) != nextstates.end() )
         continue;
       nextstates.insert(*cur);
@@ -465,33 +423,33 @@ void Nfa::closure(const map<int,set<int> > &emptytransitions, set<int> &states) 
   }
   states = nextstates;
 }
-void Nfa::follow( const CharRange &range, const set<int> &states, set<int> &nextstates ) const {
+void Nfa::follow( const CharRange &range, const Set<int> &states, Set<int> &nextstates ) const {
   nextstates.clear();
-  for( map<Transition,CharSet>::const_iterator cur = m_transitions.begin(), end = m_transitions.end(); cur != end; ++cur ) {
+  for( Map<Transition,CharSet>::const_iterator cur = m_transitions.begin(), end = m_transitions.end(); cur != end; ++cur ) {
     if( states.find(cur->first.m_from) == states.end() || ! cur->second.contains(range) )
       continue;
     nextstates.insert(cur->first.m_to);
   }
 }
-void Nfa::stateTransitions(const set<int> &states, CharSet &transitions) const {
+void Nfa::stateTransitions(const Set<int> &states, CharSet &transitions) const {
   transitions.clear();
-  for( map<Transition,CharSet>::const_iterator cur = m_transitions.begin(), end = m_transitions.end(); cur != end; ++cur ) {
-    set<int>::const_iterator iter = states.find(cur->first.m_from);
+  for( Map<Transition,CharSet>::const_iterator cur = m_transitions.begin(), end = m_transitions.end(); cur != end; ++cur ) {
+    Set<int>::const_iterator iter = states.find(cur->first.m_from);
     if( iter == states.end() )
       continue;
     transitions.split(cur->second);
   }
 }
-bool Nfa::hasEndState(const set<int> &states) const {
-  for( set<int>::const_iterator cur = states.begin(), end = states.end(); cur != end; ++cur ) {
+bool Nfa::hasEndState(const Set<int> &states) const {
+  for( Set<int>::const_iterator cur = states.begin(), end = states.end(); cur != end; ++cur ) {
     if( m_endStates.find(*cur) != m_endStates.end() )
       return true;
   }
   return false;
 }
-int Nfa::lowToken(const set<int> &states) const {
+int Nfa::lowToken(const Set<int> &states) const {
   int finaltok = -1;
-  for( set<int>::const_iterator cur = states.begin(), end = states.end(); cur != end; ++cur ) {
+  for( Set<int>::const_iterator cur = states.begin(), end = states.end(); cur != end; ++cur ) {
     int tok = getStateToken(*cur);
     if( tok == -1 )
       continue;
@@ -503,12 +461,12 @@ int Nfa::lowToken(const set<int> &states) const {
 void Nfa::toDfa(Nfa &dfa) const {
   dfa.clear();
   dfa.setSections(m_sections);
-  vector< set<int> > newstates;
-  set<int> nextstate;
-  map<int,set<int> > emptytransitions;
-  for( set<Transition>::const_iterator cur = m_emptytransitions.begin(), end = m_emptytransitions.end(); cur != end; ++cur ) {
+  Vector< Set<int> > newstates;
+  Set<int> nextstate;
+  Map<int,Set<int> > emptytransitions;
+  for( Set<Transition>::const_iterator cur = m_emptytransitions.begin(), end = m_emptytransitions.end(); cur != end; ++cur ) {
     if( emptytransitions.find(cur->m_from) == emptytransitions.end() )
-      emptytransitions[cur->m_from] = set<int>();
+      emptytransitions[cur->m_from] = Set<int>();
     emptytransitions[cur->m_from].insert(cur->m_to);
   }
   nextstate = m_startStates;
@@ -516,7 +474,7 @@ void Nfa::toDfa(Nfa &dfa) const {
   newstates.push_back(nextstate);
   dfa.addStartState(dfa.addState());
   for( int stateno = 0; stateno < newstates.size(); ++stateno ) {
-    const set<int> state = newstates[stateno];
+    const Set<int> state = newstates[stateno];
     CharSet transitions;
     stateTransitions(state, transitions);
     for( CharSet::iterator cur = transitions.begin(), end = transitions.end(); cur != end; ++cur ) {
@@ -524,7 +482,13 @@ void Nfa::toDfa(Nfa &dfa) const {
       closure(emptytransitions, nextstate);
       if(nextstate.size() == 0 )
         continue;
-      vector< set<int> >::iterator iter = find(newstates.begin(), newstates.end(), nextstate);
+      Vector< Set<int> >::iterator iter = newstates.end();
+      for( Vector< Set<int> >::iterator cur = newstates.begin(), end = newstates.end(); cur != end; ++cur ) {
+        if( *cur == nextstate ) {
+          iter = cur;
+          break;
+        }
+      }
       int nextstateno = -1;
       if( iter == newstates.end() ) {
         newstates.push_back(nextstate);
@@ -710,24 +674,23 @@ static int ParseNumber(TokStream &s, int start, int end) {
   return i;
 }
 
-static Rx *ParseRx(TokStream &s, map<string,Rx*> &subs);
+static Rx *ParseRx(TokStream &s, Map<String,Rx*> &subs);
 
-static bool ParseSub(TokStream &s, string &sub) {
+static bool ParseSub(TokStream &s, String &sub) {
   if( s.peekc() != '{' )
     return false;
   if( ! isalpha(s.peekc(1)) )
     return false;
-  int i = 1;
-  while( isalnum(s.peekc(i+1)) )
-    ++i;
-  if( s.peekc(i+1) != '}' )
+  int n = 1;
+  while( isalnum(s.peekc(n+1)) )
+    ++n;
+  if( s.peekc(n+1) != '}' )
     return false;
   s.discard();
-  sub.clear();
-  while( i > 0 ) {
-    sub += s.readc();
-    --i;
-  }
+  char *sout = (char*)calloc(n+1,1);
+  for( int i = 0; i < n; ++i )
+    sout[i] = s.readc();
+  sub = sout;
   s.discard();
   return true;
 }
@@ -885,14 +848,14 @@ static Rx *ParseCharSet(TokStream &s) {
   return rxcharset(charset);
 }
 
-static Rx *ParseRxSimple(TokStream &s, map<string,Rx*> &subs) {
+static Rx *ParseRxSimple(TokStream &s, Map<String,Rx*> &subs) {
   int c = s.peekc();
 
   if( c == -1 || strchr("/+*?",c) )
     return 0;
 
   if( c == '{' ) {
-    string sub;
+    String sub;
     if( ! ParseSub(s,sub)  )
       return 0;
     if( subs.find(sub) == subs.end() )
@@ -962,7 +925,7 @@ static Rx *ParseRxSimple(TokStream &s, map<string,Rx*> &subs) {
   return 0;
 }
 
-static Rx *ParseRxMany(TokStream &s, map<string,Rx*> &subs) {
+static Rx *ParseRxMany(TokStream &s, Map<String,Rx*> &subs) {
   Rx* r = 0;
   int low, high;
   r = ParseRxSimple(s,subs);
@@ -993,7 +956,7 @@ static Rx *ParseRxMany(TokStream &s, map<string,Rx*> &subs) {
   return r;
 }
 
-static Rx *ParseRxConcat(TokStream &s, map<string,Rx*> &subs) {
+static Rx *ParseRxConcat(TokStream &s, Map<String,Rx*> &subs) {
   Rx *lhs = ParseRxMany(s,subs);
   if( ! lhs )
     return 0;
@@ -1008,7 +971,7 @@ static Rx *ParseRxConcat(TokStream &s, map<string,Rx*> &subs) {
   return lhs;
 }
 
-static Rx *ParseRxOr(TokStream &s, map<string,Rx*> &subs) {
+static Rx *ParseRxOr(TokStream &s, Map<String,Rx*> &subs) {
   Rx *lhs = ParseRxConcat(s,subs);
   if( ! lhs )
     return 0;
@@ -1022,23 +985,26 @@ static Rx *ParseRxOr(TokStream &s, map<string,Rx*> &subs) {
   return lhs;
 }
 
-static Rx *ParseRx(TokStream &s, map<string,Rx*> &subs) {
+static Rx *ParseRx(TokStream &s, Map<String,Rx*> &subs) {
  return ParseRxOr(s, subs);
 }
 
-static string ParseSymbol(TokStream &s) {
-  string symbol;
-  int c = s.peekc();
+static String ParseSymbol(TokStream &s) {
+  String symbol;
+  int n = 0;
+  int c = s.peekc(n);
   if( ! isalpha(c) )
     return symbol;
-  symbol += c;
-  s.discard();
-  c = s.peekc();
-  while( isalnum(c) ) {
-    symbol += c;
-    s.discard();
-    c = s.peekc();
-  }
+  c = s.peekc(++n);
+  while( isalnum(c) )
+    c = s.peekc(++n);
+  char *str = (char*)malloc(n+1);
+  for( int i = 0; i < n; ++i )
+    str[i] = s.peekc(i);
+  str[n] = 0;
+  symbol = str;
+  free(str);
+  s.discard(n);
   return symbol;
 }
 
@@ -1050,7 +1016,7 @@ static void ParseWs(TokStream &s) {
   }
 }
 
-static Rx *ParseRegex(TokStream &s, map<string,Rx*> &subs) {
+static Rx *ParseRegex(TokStream &s, Map<String,Rx*> &subs) {
   int c = s.peekc();
   if( c != '/' )
     error(s,"No regex");
@@ -1071,20 +1037,20 @@ static Rx *ParseRegex(TokStream &s, map<string,Rx*> &subs) {
 }
 
 Nfa *ParseTokenizerFile(TokStream &s) {
-  set<string> sections;
-  map<string,int> sectionNumbers;
-  map<string,int> tokens;
+  Set<String> sections;
+  Map<String,int> sectionNumbers;
+  Map<String,int> tokens;
   sections.insert("default");
   sectionNumbers["default"] = 0;
   int curSection = 0;
   int nextSectionNumber = 1;
   Nfa nfa;
-  int startTokState = nfa.addState();
-  nfa.addStartState(startTokState);
   int startState = nfa.addState();
-  nfa.addTransition(startTokState,startState,curSection);
-  map<string,Rx*> subs;
-  set<int> wstoks;
+  nfa.addStartState(startState);
+  int startTokState = nfa.addState();
+  nfa.addTransition(startState,startTokState,curSection);
+  Map<String,Rx*> subs;
+  Set<int> wstoks;
   ParseWs(s);
   int c = s.peekc();
   int nexttokid = 0;
@@ -1106,8 +1072,8 @@ Nfa *ParseTokenizerFile(TokStream &s) {
         error(s,"No 'section'");
       s.discard(7);
       ParseWs(s);
-      string label = ParseSymbol(s);
-      if( ! label.length() )
+      String label = ParseSymbol(s);
+      if( label.length() == 0 )
         error(s,"No section label");
       if( sectionNumbers.find(label) == sectionNumbers.end() )
         sectionNumbers[label] = nextSectionNumber++;
@@ -1119,9 +1085,7 @@ Nfa *ParseTokenizerFile(TokStream &s) {
         error(s,"sections may not be empty");
       curSection = sectionNumbers[label];
       startTokState = nfa.addState();
-      nfa.addStartState(startTokState);
-      startState = nfa.addState();
-      nfa.addTransition(startTokState,startState,curSection);
+      nfa.addTransition(startState,startTokState,curSection);
       ParseWs(s);
       c = s.peekc();
       continue;
@@ -1129,8 +1093,8 @@ Nfa *ParseTokenizerFile(TokStream &s) {
       action = ActionPush;
       s.discard(4);
       ParseWs(s);
-      string label = ParseSymbol(s);
-      if( ! label.length() )
+      String label = ParseSymbol(s);
+      if( label.length() == 0 )
         error(s,"no 'push' label");
       if( sectionNumbers.find(label) == sectionNumbers.end() )
         sectionNumbers[label] = nextSectionNumber++;
@@ -1142,8 +1106,8 @@ Nfa *ParseTokenizerFile(TokStream &s) {
       action = ActionGoto;
       s.discard(4);
       ParseWs(s);
-      string label = ParseSymbol(s);
-      if( ! label.length() )
+      String label = ParseSymbol(s);
+      if( label.length() == 0 )
         error(s,"no 'goto' label");
       if( sectionNumbers.find(label) == sectionNumbers.end() )
         sectionNumbers[label] = nextSectionNumber++;
@@ -1151,8 +1115,8 @@ Nfa *ParseTokenizerFile(TokStream &s) {
     }
     ParseWs(s);
     c = s.peekc();
-    string symbol = ParseSymbol(s);
-    if( ! symbol.length() )
+    String symbol = ParseSymbol(s);
+    if( symbol.length() == 0 )
       error(s,"No symbol");
     ParseWs(s);
     c = s.peekc();
@@ -1181,7 +1145,7 @@ Nfa *ParseTokenizerFile(TokStream &s) {
         tokid = tokens[symbol];
       }
       nfa.setTokenAction(tokid,curSection,action,actionarg);
-      int endState = rx->addToNfa(nfa, startState);
+      int endState = rx->addToNfa(nfa, startTokState);
       nfa.addEndState(endState);
       nfa.setStateToken(endState,tokid);
     }
@@ -1195,63 +1159,60 @@ Nfa *ParseTokenizerFile(TokStream &s) {
 class LanguageOutputter {
 public:
   virtual ~LanguageOutputter() {}
-  virtual void outDecl(ostream &out, const char *type, const char *name) const = 0;
-  virtual void outArrayDecl(ostream &out, const char *type, const char *name) const = 0;
-  virtual void outStartArray(ostream &out) const = 0;
-  virtual void outEndArray(ostream &out) const = 0;
-  virtual void outEndStmt(ostream &out) const = 0;
-  virtual void outNull(ostream &out) const = 0;
-  virtual void outBool(ostream &out, bool b) const = 0;
-  virtual void outStr(ostream &out, const string &str) const = 0;
-  virtual void outChar(ostream &out, int c) const = 0;
+  virtual void outDecl(FILE *out, const char *type, const char *name) const = 0;
+  virtual void outArrayDecl(FILE *out, const char *type, const char *name) const = 0;
+  virtual void outStartArray(FILE *out) const = 0;
+  virtual void outEndArray(FILE *out) const = 0;
+  virtual void outEndStmt(FILE *out) const = 0;
+  virtual void outNull(FILE *out) const = 0;
+  virtual void outBool(FILE *out, bool b) const = 0;
+  virtual void outStr(FILE *out, const char *str) const = 0;
+  virtual void outChar(FILE *out, int c) const = 0;
 };
 
 class CLanguageOutputter : public LanguageOutputter {
 public:
-  virtual void outDecl(ostream &out, const char *type, const char *name) const { out << type << ' ' << name; }
-  virtual void outArrayDecl(ostream &out, const char *type, const char *name) const { out << type << ' ' << name << "[]"; }
-  virtual void outStartArray(ostream &out) const { out << '{'; }
-  virtual void outEndArray(ostream &out) const  { out << '}'; }
-  virtual void outEndStmt(ostream &out) const  { out << ';'; }
-  virtual void outNull(ostream &out) const  { out << '0'; }
-  virtual void outBool(ostream &out, bool b) const  { out << (b ? "true" : "false"); }
-  virtual void outStr(ostream &out, const string &str) const  {
-    string tmp = str;
-    //tmp.replaceall("\\","\\\\");
-    //tmp.replaceall(tmp.begin(),"\"","\\\"");
-    out << '"' << tmp << '"';
+  virtual void outDecl(FILE *out, const char *type, const char *name) const { fputs(type,out); fputc(' ',out); fputs(name,out); }
+  virtual void outArrayDecl(FILE *out, const char *type, const char *name) const { fputs(type,out); fputc(' ',out); fputs(name,out); fputs("[]",out); }
+  virtual void outStartArray(FILE *out) const { fputc('{',out); }
+  virtual void outEndArray(FILE *out) const  { fputc('}',out); }
+  virtual void outEndStmt(FILE *out) const  { fputc(';',out); }
+  virtual void outNull(FILE *out) const  { fputc('0',out); }
+  virtual void outBool(FILE *out, bool b) const  { fputs((b ? "true" : "false"),out); }
+  virtual void outStr(FILE *out, const char *str) const  {
+    fputc('"',out); fputs(str,out); fputc('"',out);
   }
-  virtual void outChar(ostream &out, int c) const  {
+  virtual void outChar(FILE *out, int c) const  {
     if(c == '\r' ) {
-      out << "'\\r'";
+      fputs("'\\r'",out);
     } else if(c == '\n' ) {
-      out << "'\\n'";
+      fputs("'\\n'",out);
     } else if(c == '\v' ) {
-      out << "'\\v'";
+      fputs("'\\v'",out);
     } else if(c == ' ' ) {
-      out << "' '";
+      fputs("' '",out);
     } else if(c == '\t' ) {
-      out << "'\\t'";
+      fputs("'\\t'",out);
     } else if(c == '\\' || c == '\'' ) {
-      out << "'\\" << (char)c << "'";
+      fprintf(out,"'\\%c'",c);
     } else if( c <= 126 && isgraph(c) ) {
-      out << "'" << (char)c << "'"; 
+      fprintf(out,"'%c'",c);
     } else
-      out << c;
+      fprintf(out,"%d",c);
   }
 };
 
 class JsLanguageOutputter : public LanguageOutputter {
 public:
-  virtual void outDecl(ostream &out, const char *type, const char *name) const { out << "var " << name; }
-  virtual void outArrayDecl(ostream &out, const char *type, const char *name) const { out << "var " << name; }
-  virtual void outStartArray(ostream &out) const { out << '['; }
-  virtual void outEndArray(ostream &out) const { out << ']'; }
-  virtual void outEndStmt(ostream &out)  const { out << ';'; }
-  virtual void outNull(ostream &out) const  { out << "null"; }
-  virtual void outBool(ostream &out, bool b) const  { out << (b ? "true" : "false"); }
-  virtual void outStr(ostream &out, const string &str) const  { out << '"' << str << '"'; }
-  virtual void outChar(ostream &out, int c) const  { out << c; }
+  virtual void outDecl(FILE *out, const char *type, const char *name) const { fputs("var ",out); fputs(name,out); }
+  virtual void outArrayDecl(FILE *out, const char *type, const char *name) const { fputs("var ",out); fputs(name,out); }
+  virtual void outStartArray(FILE *out) const { fputc('[',out); }
+  virtual void outEndArray(FILE *out) const { fputc(']',out); }
+  virtual void outEndStmt(FILE *out)  const { fputc(';',out); }
+  virtual void outNull(FILE *out) const  { fputs("null",out); }
+  virtual void outBool(FILE *out, bool b) const  { fputs((b ? "true" : "false"),out); }
+  virtual void outStr(FILE *out, const char *str) const  { fputc('"',out); fputs(str,out); fputc('"',out); }
+  virtual void outChar(FILE *out, int c) const  { fprintf(out,"%d",c); }
 };
 
 LanguageOutputter *getLanguageOutputter(OutputLanguage language) {
@@ -1262,117 +1223,117 @@ LanguageOutputter *getLanguageOutputter(OutputLanguage language) {
   return 0;
 }
 
-static void OutputDfaSource(ostream &out, const Nfa &dfa, const LanguageOutputter &lang) {
+static void OutputDfaSource(FILE *out, const Nfa &dfa, const LanguageOutputter &lang) {
   bool first = true;
   // Going to assume there are no gaps in toking numbering
-  vector<Token> tokens = dfa.getTokenDefs();
+  Vector<Token> tokens = dfa.getTokenDefs();
 
   lang.outDecl(out,"const int","tokenCount");
-  out << " = " << tokens.size();
+  fprintf(out," = %d",tokens.size());
   lang.outEndStmt(out);
-  out << endl;
+  fputc('\n',out);
 
   lang.outDecl(out,"const int","sectionCount");
-  out << " = " << dfa.getSections();
+  fprintf(out," = %d", dfa.getSections());
   lang.outEndStmt(out);
-  out << endl;
+  fputc('\n',out);
 
-  for( vector<Token>::iterator cur = tokens.begin(), end = tokens.end(); cur != end; ++cur ) {
+  for( Vector<Token>::iterator cur = tokens.begin(), end = tokens.end(); cur != end; ++cur ) {
     lang.outDecl(out,"const int",cur->m_name.c_str());
-    out << " = " << cur->m_token;
+    fprintf(out," = %d",cur->m_token);
     lang.outEndStmt(out);
-    out << endl;
+    fputc('\n',out);
   }
 
   lang.outArrayDecl(out, "const int", "tokenaction");
-  out << " = ";
+  fputs(" = ",out);
   lang.outStartArray(out);
   first = true;
-  for( vector<Token>::const_iterator cur = tokens.begin(), end = tokens.end(); cur != end; ++cur ) {
+  for( Vector<Token>::const_iterator cur = tokens.begin(), end = tokens.end(); cur != end; ++cur ) {
     const Token &token = *cur;
     for( int i = 0, n = dfa.getSections(); i < n; ++i ) {
       if( first )
         first = false;
       else
-        out << ',';
-      map<int,Action>::const_iterator actioniter = token.m_actions.find(i);
+        fputc(',',out);
+      Map<int,Action>::const_iterator actioniter = token.m_actions.find(i);
       if( actioniter == token.m_actions.end() ) {
-        out << 0 << "," << -1;
+        fputs("0,-1",out);
       } else {
         const Action &action = actioniter->second;
-        out << action.m_action << "," << action.m_actionarg;
+        fprintf(out,"%d,%d",action.m_action,action.m_actionarg);
       }
     }
   }
   lang.outEndArray(out);
   lang.outEndStmt(out);
-  out << endl;
+  fputc('\n',out);
 
   lang.outArrayDecl(out, "const char*", "tokenstr");
-  out << " = ";
+  fputs(" = ",out);
   lang.outStartArray(out);
   first = true;
-  for( vector<Token>::iterator cur = tokens.begin(), end = tokens.end(); cur != end; ++cur ) {
+  for( Vector<Token>::iterator cur = tokens.begin(), end = tokens.end(); cur != end; ++cur ) {
     if( first )
       first = false;
     else
-      out << ',';
-    lang.outStr(out,cur->m_name);
+      fputc(',',out);
+    lang.outStr(out,cur->m_name.c_str());
   }
   lang.outEndArray(out);
   lang.outEndStmt(out);
-  out << endl;
+  fputc('\n',out);
 
   lang.outArrayDecl(out, "const bool","isws");
-  out << " = ";
+  fputs(" = ",out);
   lang.outStartArray(out);
   first = true;
-  for( vector<Token>::iterator cur = tokens.begin(), end = tokens.end(); cur != end; ++cur ) {
+  for( Vector<Token>::iterator cur = tokens.begin(), end = tokens.end(); cur != end; ++cur ) {
     if( first )
       first = false;
     else
-      out << ',';
+      fputc(',',out);
     lang.outBool(out,cur->m_isws);
   }
   lang.outEndArray(out);
   lang.outEndStmt(out);
-  out << endl;
+  fputc('\n',out);
 
   CharSet ranges;
-  set<int> allstates;
+  Set<int> allstates;
   for( int i = 0, n = dfa.stateCount(); i < n; ++i )
     allstates.insert(i);
   dfa.stateTransitions(allstates,ranges);
   lang.outArrayDecl(out,"const int","ranges");
-  out << " = ";
+  fputs(" = ",out);
   lang.outStartArray(out);
   first = true;
   for( CharSet::iterator cur = ranges.begin(), end = ranges.end(); cur != end; ++cur ) {
     if( first )
       first = false;
     else
-      out << ',';
+      fputc(',',out);
     lang.outChar(out,cur->m_low);
-    out << ',';
+    fputc(',',out);
     lang.outChar(out,cur->m_high);
   }
   lang.outEndArray(out);
   lang.outEndStmt(out);
-  out << endl;
+  fputc('\n',out);
 
   lang.outDecl(out,"const int","stateCount");
-  out << " = " << dfa.stateCount();
+  fprintf(out," = %d",dfa.stateCount());
   lang.outEndStmt(out);
-  out << endl;
+  fputc('\n',out);
 
   lang.outArrayDecl(out,"const int","transitions");
-  out << " = ";
+  fputs(" = ",out);
   lang.outStartArray(out);
   first = true;
-  vector<int> transitioncounts;
+  Vector<int> transitioncounts;
   for( int i = 0, n = dfa.stateCount(); i < n; ++i ) {
-    vector<Transition> transitions;
-    set<int> state, nextstate;
+    Vector<Transition> transitions;
+    Set<int> state, nextstate;
     state.insert(i);
     for( CharSet::iterator cur = ranges.begin(), end = ranges.end(); cur != end; ++cur ) {
       dfa.follow(*cur,state,nextstate);
@@ -1385,56 +1346,56 @@ static void OutputDfaSource(ostream &out, const Nfa &dfa, const LanguageOutputte
       if( first )
         first = false;
       else
-        out << ',';
-      out << transitions[i].m_from << ',' << transitions[i].m_to;
+        fputc(',',out);
+      fprintf(out,"%d,%d",transitions[i].m_from,transitions[i].m_to);
     }
   }
   lang.outEndArray(out);
   lang.outEndStmt(out);
-  out << endl;
+  fputc('\n',out);
 
   int offset = 0;
   lang.outArrayDecl(out,"const int","transitionOffset");
-  out << " = ";
+  fputs(" = ",out);
   lang.outStartArray(out);
   first = true;
   for( int i = 0, n = transitioncounts.size(); i < n; ++i ) {
     if( first )
       first = false;
     else
-      out << ',';
-    out << offset;
+      fputc(',',out);
+    fprintf(out,"%d",offset);
     offset += transitioncounts[i];
   }
   if( first )
     first = false;
   else
-    out << ',';
-  out << offset;
+    fputc(',',out);
+  fprintf(out,"%d",offset);
   lang.outEndArray(out);
   lang.outEndStmt(out);
-  out << endl;
+  fputc('\n',out);
 
   first = true;
   lang.outArrayDecl(out,"const int","tokens");
-  out << " = ";
+  fputs(" = ",out);
   lang.outStartArray(out);
   for( int i = 0, n = dfa.stateCount(); i < n; ++i ) {
     if( first )
       first = false;
     else
-      out << ',';
+      fputc(',',out);
     int tok = dfa.getStateToken(i);
-    out << tok;
+    fprintf(out,"%d",tok);
   }
   lang.outEndArray(out);
   lang.outEndStmt(out);
-  out << endl;
+  fputc('\n',out);
 }
 
-void OutputTokenizerSource(ostream &out, const Nfa &dfa, OutputLanguage language) {
+void OutputTokenizerSource(FILE *out, const Nfa &dfa, OutputLanguage language) {
   LanguageOutputter *outputer = getLanguageOutputter(language);
-  OutputDfaSource(cout,dfa,*outputer);
-  out << endl;
+  OutputDfaSource(out,dfa,*outputer);
+  fputc('\n',out);
   delete outputer;
 }
