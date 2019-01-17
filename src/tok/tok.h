@@ -1,19 +1,19 @@
 #ifndef __tok_h
 #define __tok_h
 
-#include <istream>
-using namespace std;
+#include <stdio.h>
+#include "..\tok\tinytemplates.h"
 
 class TokBuf {
   char *m_buf;
   int m_buflen, m_buffill, m_bufpos, m_pos, m_line, m_col;
-  istream *m_in;
+  FILE *m_in;
 
   bool addc() {
-    if( m_in->eof() )
+    if( feof(m_in) )
       return false;
     char c;
-    if( m_in->read(&c,1).eof() )
+    if( fread(&c,1,1,m_in) != 1 )
       return false;
     if( m_buffill == m_buflen ) {
       int newlen = 0;
@@ -41,7 +41,7 @@ class TokBuf {
   }
 
 public:
-  TokBuf(istream *in) {
+  TokBuf(FILE *in) {
     m_buf = 0;
     m_buffill = 0;
     m_buflen = 0;
@@ -100,7 +100,7 @@ class Tokenizer {
   int m_tokLen;
   char *m_s;
   int m_slen;
-  vector<int> m_stack;
+  Vector<int> m_stack;
 
   int getTok(int state) {
     return m_tokinfo->m_tokens[state];

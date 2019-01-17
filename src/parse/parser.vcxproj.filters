@@ -29,6 +29,9 @@
     <ClInclude Include="parsertok.h">
       <Filter>Header Files</Filter>
     </ClInclude>
+    <ClInclude Include="..\tok\tinytemplates.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <None Include="nMakefile.msc" />

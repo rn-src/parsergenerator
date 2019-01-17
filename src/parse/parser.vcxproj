@@ -23,6 +23,7 @@
     <ClCompile Include="parser.cpp" />
   </ItemGroup>
   <ItemGroup>
+    <ClInclude Include="..\tok\tinytemplates.h" />
     <ClInclude Include="parser.h" />
     <ClInclude Include="parsertok.h" />
   </ItemGroup>

@@ -55,18 +55,23 @@ public:
     return 0;
   }
   bool operator<(const String &rhs) const {
-    if( ! m_p || ! rhs.m_p )
+    if( ! m_p || ! rhs.m_p ) {
+      if( ! m_p && rhs.m_p != 0 )
+        return true;
       return false;
+    }
     const char *s1 = m_p->m_s, *s2 = rhs.m_p->m_s;
-    if( ! s1 || ! s2 )
-      return false;
-    while( *s1 || *s2 ) {
+    while( *s1 && *s2 ) {
       if( *s1 < *s2 )
         return true;
+      else if( *s1 > *s2 )
+        return false;
       ++s1;
       ++s2;
     }
-    if( ! s1 )
+    if( ! *s1 && ! *s2 )
+      return false;
+    else if( ! *s1 )
       return true;
     return false;
   }
@@ -122,6 +127,11 @@ public:
     ++m_size;
     return dst;
   }
+  void pop_back() {
+    if( m_size == 0 )
+      return;
+    erase(m_p+(m_size-1));
+  }
   iterator erase(iterator at) {
     at->~T();
     int following = end()-at;
@@ -156,6 +166,7 @@ public:
     return m_p+idx;
   }
   int size() const { return m_size; }
+  T &back() { return m_p[m_size-1]; }
 };
 
 template<class T, class T2>

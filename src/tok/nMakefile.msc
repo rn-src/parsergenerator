@@ -6,8 +6,8 @@ all: tokenizer.exe
 
 tokenizer.exe: tokenizer.obj main.obj
 	@echo linking...
-	@link /nologo /SUBSYSTEM:CONSOLE /OUT:tokenizer.exe tokenizer.obj main.obj
-#	@link /nologo /DEBUG /SUBSYSTEM:CONSOLE /OUT:tokenizer.exe tokenizer.obj main.obj
+#	@link /nologo /SUBSYSTEM:CONSOLE /OUT:tokenizer.exe tokenizer.obj main.obj
+	@link /nologo /DEBUG /SUBSYSTEM:CONSOLE /OUT:tokenizer.exe tokenizer.obj main.obj
 
 tokenizer.obj: tokenizer.cpp tokenizer.h tinytemplates.h
 	@cl /nologo /c /Zi /Od /EHsc /DWIN32 tokenizer.cpp
