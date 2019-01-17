@@ -32,7 +32,7 @@ using namespace std;
 // associativity : LEFTASSOC | RIGHTASSOC | NONASSOC
 // disallowrule : DISALLOW productiondescriptor '@' productiondescriptor ["...@" productiondescriptor]
 
-Production::Production(int nt, const vector<int> &symbols, const char *action) : m_nt(nt), m_symbols(symbols), m_action(action) {}
+Production::Production(int nt, const vector<int> &symbols, String action) : m_nt(nt), m_symbols(symbols), m_action(action) {}
 
 int ParserDef::findOrAddSymbol(const char *s) {
   map<string,int>::iterator iter = m_tokens.find(string(s));
@@ -70,6 +70,23 @@ static vector<int> ParseSymbols(Tokenizer &toks, ParserDef &parser) {
   return symbols;
 }
 
+static String ParseSrc(Tokenizer &toks, ParserDef &parser) {
+  String s;
+  if( toks.peek() != pptok::LBRACE )
+    return s;
+  toks.discard();
+  while( toks.peek() != -1 && toks.peek() != pptok::RBRACE ) {
+    if( toks.peek() == pptok::LBRACE )
+      s += ParseSrc(toks,parser);
+    s += toks.tokstr();
+    toks.discard();
+  }
+  if( toks.peek() != pptok::RBRACE )
+    error(toks,"Missing '}'");
+  toks.discard();
+  return s;
+}
+
 static Production *ParseProduction(Tokenizer &toks, ParserDef &parser) {
   int nt = ParseNonterminal(toks,parser);
   if( nt == -1 )
@@ -77,16 +94,9 @@ static Production *ParseProduction(Tokenizer &toks, ParserDef &parser) {
   if( toks.peek() != pptok::COLON )
     error(toks,"Exptected ':'");
   vector<int> symbols = ParseSymbols(toks,parser);
-  const char *action = 0;
-  if( toks.peek() == pptok::LBRACE ) {
-    toks.discard();
-    strstream ss;
-    while( toks.peek() != -1 && toks.peek() != pptok::RBRACE ) {
-      ss.write(toks.tokstr(),toks.length());
-      toks.discard();
-    }
-    action = strdup(ss.str());
-  }
+  String action;
+  if( toks.peek() == pptok::LBRACE )
+    action = ParseSrc(toks,parser);
   if( toks.peek() != pptok::SEMI )
     error(toks,"Expected ';'");
   return new Production(nt,symbols,action);

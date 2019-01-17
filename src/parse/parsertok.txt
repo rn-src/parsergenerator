@@ -9,7 +9,9 @@ push b  LBRACE  /\{/
         RBRKT   /\]/
 
 - section b
-        SRC     /[^\{\}]+/
+      = SQSTR   /'([^']|\\.|\\x[[:xdigit:]]+)*'/
+      = DQSTR   /"([^"]|\\.|\\x[[:xdigit:]]+)*"/
+        SRC     /[^\{\}\"\']+|{SQSTR}|{DQSTR}/
 push b  LBRACE  /\{/
 pop     RBRACE  /\}/
 

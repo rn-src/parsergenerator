@@ -5,6 +5,7 @@
 #include <vector>
 #include <map>
 #include "../tok/tok.h"
+#include "../tok/tinytemplates.h"
 
 using namespace std;
 
@@ -12,9 +13,9 @@ class Production {
 public:
   int m_nt;
   vector<int> m_symbols;
-  const char *m_action;
+  String m_action;
 
-  Production(int nt, const vector<int> &symbols, const char *action);
+  Production(int nt, const vector<int> &symbols, String action);
 };
 
 class ParserDef {

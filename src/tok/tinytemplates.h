@@ -43,7 +43,22 @@ public:
   ~String() {
     decref();
   }
-  int length() {
+  String &operator+=(const String &rhs) {
+    if( rhs.m_p ) {
+      size_t len = length()+rhs.length();
+      char *s = (char*)malloc(len+1);
+      *s = 0;
+      if( m_p )
+        strcat(s,m_p->m_s);
+      strcat(s,m_p->m_s);
+      decref();
+      m_p = new strkernel();
+      m_p->m_s = s;
+      m_p->m_refs = 1;
+    }
+    return *this;
+  }
+  int length() const {
     extern size_t strlen(const char*);
     if( m_p )
       return strlen(m_p->m_s);

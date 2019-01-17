@@ -1,9 +1,8 @@
 #include "parser.h"
-#include <iostream>
-using namespace std;
+#include <stdio.h>
 
 int main(int argc, char *argv[]) {
-  TokBuf tokbuf(&cin);
+  TokBuf tokbuf(stdin);
   ParserDef parser;
   ParseParser(&tokbuf,parser);
   return 0;
