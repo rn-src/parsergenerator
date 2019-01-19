@@ -38,8 +38,6 @@
   </ItemGroup>
   <ItemGroup>
     <None Include="nMakefile.msc" />
-  </ItemGroup>
-  <ItemGroup>
-    <Text Include="parsertok.txt" />
+    <None Include="parsertok.L" />
   </ItemGroup>
 </Project>

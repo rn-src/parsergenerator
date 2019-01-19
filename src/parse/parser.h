@@ -1,9 +1,6 @@
 #ifndef __parser_h
 #define __parser_h
 
-#include <string>
-#include <vector>
-#include <map>
 #include "../tok/tok.h"
 #include "../tok/tinytemplates.h"
 
@@ -13,10 +10,10 @@ class Production {
 public:
   bool m_rejectable;
   int m_nt;
-  vector<int> m_symbols;
+  Vector<int> m_symbols;
   String m_action;
 
-  Production(bool rejectable, int nt, const vector<int> &symbols, String action);
+  Production(bool rejectable, int nt, const Vector<int> &symbols, String action);
 };
 
 enum Associativity {
@@ -56,12 +53,13 @@ public:
 
 class ParserDef {
   int m_nextsymbolid;
-  map<string,int> m_tokens;
 public:
+  Map<String,int> m_tokens;
+  Map<int,String> m_toktypes;
+  Vector<Production*> m_productions;
+  Vector<PrecedenceRule*> m_precedencerules;
+  Vector<DisallowRule*> m_disallowrules;
   void setNextSymbolId(int nextsymbolid);
-  vector<Production*> m_productions;
-  vector<PrecedenceRule*> m_precedencerules;
-  vector<DisallowRule*> m_disallowrules;
   int findOrAddSymbol(const char *s);
 };
 

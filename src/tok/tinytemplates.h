@@ -3,6 +3,7 @@
 // Some templates so the executable size can shrink
 
 #include <new>
+#include <string.h>
 
 class String {
 protected:
@@ -11,7 +12,6 @@ protected:
     int m_refs;
   } *m_p;
   void decref() {
-    extern void free(void*);
     if( m_p && --(m_p->m_refs) == 0 ) {
       free(m_p->m_s);
       delete m_p;
@@ -20,7 +20,6 @@ protected:
 public:
   String() : m_p(0) {}
   String(const char *s) : m_p(0) {
-    extern char *strdup(const char*);
     if( s ) {
       m_p = new strkernel();
       m_p->m_s = strdup(s);
@@ -44,7 +43,6 @@ public:
     decref();
   }
   String &operator+=(const String &rhs) {
-    extern char *strcat(char*,const char*);
     if( rhs.m_p ) {
       size_t len = length()+rhs.length();
       char *s = (char*)malloc(len+1);
@@ -60,7 +58,6 @@ public:
     return *this;
   }
   int length() const {
-    extern size_t strlen(const char*);
     if( m_p )
       return strlen(m_p->m_s);
     return 0;

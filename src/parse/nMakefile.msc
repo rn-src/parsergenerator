@@ -15,8 +15,8 @@ parser.obj: parser.cpp parser.h ../tok/tok.h parsertok.h
 parseroutput.obj: parseroutput.cpp parser.h ../tok/tok.h parsertok.h
 	@cl /nologo /c /Zi /Od /EHsc /DWIN32 parseroutput.cpp
 
-parsertok.h: parsertok.txt
-	..\tok\tokenizer.exe --c < parsertok.txt > parsertok.h
+parsertok.h: parsertok.L
+	..\tok\tokenizer.exe --c < parsertok.L > parsertok.h
 
 main.obj: main.cpp parser.h
 	@cl /nologo /c /Zi /Od /EHsc /DWIN32 main.cpp

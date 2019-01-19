@@ -2,6 +2,7 @@
 #define __tok_h
 
 #include <stdio.h>
+#include <string.h>
 #include "..\tok\tinytemplates.h"
 
 class TokBuf {

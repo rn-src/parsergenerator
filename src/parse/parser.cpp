@@ -17,9 +17,10 @@ TokenInfo pptokinfo = {
 }
 
 // parser : parsepart +
-// parsepart : (production|precedencerule|disallowrule) SEMI
+// parsepart : (typedefrule|production|precedencerule|disallowrule) SEMI
+// typedefrule : TYPEDEF ID nonterminal+
 // productiondecl : REJECTABLE? production action?
-// production: nonterminal COLON symbol+
+// production: nonterminal COLON symbol+ (VERTICAL symbol+)+
 // nonterminal : START | ID
 // symbol : ID | ERROR
 // precedencerule : PRECEDENCE precedenceparts
@@ -31,20 +32,21 @@ TokenInfo pptokinfo = {
 
 ProductionDescriptor::ProductionDescriptor(int nt, Vector<int> symbols) : m_nt(nt), m_symbols(symbols) {}
 
-Production::Production(bool rejectable, int nt, const vector<int> &symbols, String action) : m_rejectable(rejectable), m_nt(nt), m_symbols(symbols), m_action(action) {}
+Production::Production(bool rejectable, int nt, const Vector<int> &symbols, String action) : m_rejectable(rejectable), m_nt(nt), m_symbols(symbols), m_action(action) {}
 
 void ParserDef::setNextSymbolId(int nextsymbolid) {
   m_nextsymbolid = nextsymbolid;
 }
 
 int ParserDef::findOrAddSymbol(const char *s) {
-  map<string,int>::iterator iter = m_tokens.find(string(s));
+  Map<String,int>::iterator iter = m_tokens.find(s);
   if( iter != m_tokens.end() )
     return iter->second;
   int id = m_nextsymbolid++;
-  m_tokens[string(s)] = id;
+  m_tokens[s] = id;
   return id;
 }
+
 
 void error(Tokenizer &toks, const char *err) {
   throw ParserError(toks.line(),toks.col(),err);
@@ -62,8 +64,8 @@ static int ParseSymbol(Tokenizer &toks, ParserDef &parser) {
   return -1;
 }
 
-static vector<int> ParseSymbols(Tokenizer &toks, ParserDef &parser) {
-  vector<int> symbols;
+static Vector<int> ParseSymbols(Tokenizer &toks, ParserDef &parser) {
+  Vector<int> symbols;
   int s = ParseSymbol(toks,parser);
   if( s == -1 )
     error(toks,"expected symbol");
@@ -90,7 +92,7 @@ static String ParseAction(Tokenizer &toks, ParserDef &parser) {
   return s;
 }
 
-static Production *ParseProduction(Tokenizer &toks, ParserDef &parser) {
+static Vector<Production*> ParseProductions(Tokenizer &toks, ParserDef &parser) {
   bool rejectable = false;
   if( toks.peek() == pptok::REJECTABLE ) {
     rejectable = true;
@@ -101,11 +103,18 @@ static Production *ParseProduction(Tokenizer &toks, ParserDef &parser) {
     error(toks,"Expected nonterminal");
   if( toks.peek() != pptok::COLON )
     error(toks,"Exptected ':'");
-  vector<int> symbols = ParseSymbols(toks,parser);
-  String action;
-  if( toks.peek() == pptok::LBRACE )
-    action = ParseAction(toks,parser);
-  return new Production(rejectable,nt,symbols,action);
+  Vector<Production*> productions;
+  while(true) {
+    Vector<int> symbols = ParseSymbols(toks,parser);
+    String action;
+    if( toks.peek() == pptok::LBRACE )
+      action = ParseAction(toks,parser);
+    productions.push_back(new Production(rejectable,nt,symbols,action));
+    if( toks.peek() != pptok::VSEP )
+      break;
+    toks.discard();
+  }
+  return productions;
 }
 
 static int ParseNtOrStar(Tokenizer &toks, ParserDef &parser) {
@@ -155,6 +164,21 @@ static ProductionDescriptor *ParseProductionDescriptor(Tokenizer &toks, ParserDe
   if( toks.peek() != pptok::LBRKT )
     error(toks,"Expected ']' to end production descriptor");
   return new ProductionDescriptor(nt, symbols);
+}
+
+static void ParseTypedefRule(Tokenizer &toks, ParserDef &parser) {
+  if( toks.peek() != pptok::TYPEDEF )
+    return;
+  toks.discard();
+  if( toks.peek() != pptok::ID )
+    error(toks,"expected typedef");
+  String toktype = toks.tokstr();
+  toks.discard();
+  int nt = ParseNonterminal(toks,parser);
+  while( nt != -1 ) {
+    parser.m_toktypes[nt] = toktype;
+    nt = ParseNonterminal(toks,parser);
+  }
 }
 
 static PrecedencePart *ParsePrecedencePart(Tokenizer &toks, ParserDef &parser) {
@@ -222,15 +246,17 @@ static DisallowRule *ParseDisallowRule(Tokenizer &toks, ParserDef &parser) {
 }
 
 static bool ParseParsePart(Tokenizer &toks, ParserDef &parser) {
-  if( toks.peek() == pptok::PRECEDENCE ) {
+  if( toks.peek() == pptok::TYPEDEF ) {
+    ParseTypedefRule(toks,parser);
+  } else if( toks.peek() == pptok::PRECEDENCE ) {
     PrecedenceRule *p = ParsePrecedenceRule(toks,parser);
     parser.m_precedencerules.push_back(p);
   } else if( toks.peek() == pptok::DISALLOW ) {
     DisallowRule *d = ParseDisallowRule(toks,parser);
     parser.m_disallowrules.push_back(d);
   } else if( toks.peek() == pptok::REJECTABLE  || toks.peek() == pptok::START || toks.peek() == pptok::ID ) {
-    Production *p = ParseProduction(toks,parser);
-    parser.m_productions.push_back(p);
+    Vector<Production*> productions = ParseProductions(toks,parser);
+    parser.m_productions.insert(parser.m_productions.end(), productions.begin(), productions.end());
   } else
     return false;
   if( toks.peek() != pptok::SEMI )

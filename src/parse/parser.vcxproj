@@ -30,9 +30,7 @@
   </ItemGroup>
   <ItemGroup>
     <None Include="nMakefile.msc" />
-  </ItemGroup>
-  <ItemGroup>
-    <Text Include="parsertok.txt" />
+    <None Include="parsertok.L" />
   </ItemGroup>
   <PropertyGroup Label="Globals">
     <ProjectGuid>{6F6194FC-462C-4359-A818-157F41DFEC4D}</ProjectGuid>

@@ -6,6 +6,7 @@
 		DISALLOW   /DISALLOW/
 		PRECEDENCE /PRECEDENCE/
 		REJECTABLE /REJECTABLE/
+		TYPEDEF    /TYPEDEF/
 		LEFTASSOC  /(l|left)-(assoc|associative)/
 		RIGHTASSOC /(r|right)-(assoc|associative)/
 		NONASSOC   /(n|non)-(assoc|associative)/
@@ -22,6 +23,7 @@ push b  LBRACE     /\{/
 		DOT        /\./
 		STAR       /\*/
 		ELIPSIS    /\.\.\./
+		VSEP       /|/
 
 - section b
       = SQSTR   /'([^']|\\.|\\x[[:xdigit:]]+)*'/
