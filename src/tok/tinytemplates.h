@@ -44,6 +44,7 @@ public:
     decref();
   }
   String &operator+=(const String &rhs) {
+    extern char *strcat(char*,const char*);
     if( rhs.m_p ) {
       size_t len = length()+rhs.length();
       char *s = (char*)malloc(len+1);

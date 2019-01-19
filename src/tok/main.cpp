@@ -3,7 +3,7 @@
 
 int main(int argc, char *argv[])
 {
-  OutputLanguage language = LanguageJs;
+  OutputLanguage language = LanguageC;
   for( int i = 1; i < argc; ++i ) {
     if( argv[i][0] == '-' ) {
       if( strcmp(argv[i],"--js") == 0 ) {

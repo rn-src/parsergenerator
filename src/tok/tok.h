@@ -210,6 +210,12 @@ public:
     }
     return m_s;
   }
+  int line() {
+    return m_tokbuf->line();
+  }
+  int col() {
+    return m_tokbuf->col();
+  }
 };
 
 

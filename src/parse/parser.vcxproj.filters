@@ -21,6 +21,9 @@
     <ClCompile Include="main.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
+    <ClCompile Include="parseroutput.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="parser.h">
@@ -35,5 +38,8 @@
   </ItemGroup>
   <ItemGroup>
     <None Include="nMakefile.msc" />
+  </ItemGroup>
+  <ItemGroup>
+    <Text Include="parsertok.txt" />
   </ItemGroup>
 </Project>

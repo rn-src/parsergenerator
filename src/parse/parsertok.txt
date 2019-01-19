@@ -1,12 +1,27 @@
-      ~ WS      /[[:white:]]*/
-        START   /<start>/
-        ID      /[[:alpha:]][[:alnum:]]*/
-        COLON   /:/
-        SEMI    /;/
-push b  LBRACE  /\{/
-        RBRACE  /\}/
-        LBRKT   /\[/
-        RBRKT   /\]/
+      = WS1        /[[:white:]]+/
+      = WS2        /#[^\n]*\n/
+      ~ WS         /({WS1}|{WS2})+/
+        START      /<start>/
+        ERROR      /<error>/
+		DISALLOW   /DISALLOW/
+		PRECEDENCE /PRECEDENCE/
+		REJECTABLE /REJECTABLE/
+		LEFTASSOC  /(l|left)-(assoc|associative)/
+		RIGHTASSOC /(r|right)-(assoc|associative)/
+		NONASSOC   /(n|non)-(assoc|associative)/
+        ID         /[[:alpha:]_][[:alnum:]_]*/
+        COLON      /:/
+        SEMI       /;/
+push b  LBRACE     /\{/
+        RBRACE     /\}/
+        LBRKT      /\[/
+        RBRKT      /\]/
+		AT         /@/
+		GT         />/
+		EQ         /=/
+		DOT        /\./
+		STAR       /\*/
+		ELIPSIS    /\.\.\./
 
 - section b
       = SQSTR   /'([^']|\\.|\\x[[:xdigit:]]+)*'/

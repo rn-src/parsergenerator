@@ -4,13 +4,19 @@
 
 all: parser.exe
 
-parser.exe: parser.obj main.obj
+parser.exe: parser.obj parseroutput.obj main.obj
 	@echo linking...
-#	@link /nologo /DEBUG /SUBSYSTEM:CONSOLE /OUT:parser.exe parser.obj main.obj
-	@link /nologo /SUBSYSTEM:CONSOLE /OUT:parser.exe parser.obj main.obj
+#	@link /nologo /SUBSYSTEM:CONSOLE /OUT:parser.exe parser.obj parseroutput.obj main.obj
+	@link /nologo /DEBUG /SUBSYSTEM:CONSOLE /OUT:parser.exe parser.obj parseroutput.obj main.obj
 
-parser.obj: parser.cpp parser.h ../tok/tok.h
+parser.obj: parser.cpp parser.h ../tok/tok.h parsertok.h
 	@cl /nologo /c /Zi /Od /EHsc /DWIN32 parser.cpp
+
+parseroutput.obj: parseroutput.cpp parser.h ../tok/tok.h parsertok.h
+	@cl /nologo /c /Zi /Od /EHsc /DWIN32 parseroutput.cpp
+
+parsertok.h: parsertok.txt
+	..\tok\tokenizer.exe --c < parsertok.txt > parsertok.h
 
 main.obj: main.cpp parser.h
 	@cl /nologo /c /Zi /Od /EHsc /DWIN32 main.cpp

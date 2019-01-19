@@ -1228,6 +1228,13 @@ static void OutputDfaSource(FILE *out, const Nfa &dfa, const LanguageOutputter &
   // Going to assume there are no gaps in toking numbering
   Vector<Token> tokens = dfa.getTokenDefs();
 
+  for( Vector<Token>::iterator cur = tokens.begin(), end = tokens.end(); cur != end; ++cur ) {
+    lang.outDecl(out,"const int",cur->m_name.c_str());
+    fprintf(out," = %d",cur->m_token);
+    lang.outEndStmt(out);
+    fputc('\n',out);
+  }
+
   lang.outDecl(out,"const int","tokenCount");
   fprintf(out," = %d",tokens.size());
   lang.outEndStmt(out);
@@ -1238,14 +1245,7 @@ static void OutputDfaSource(FILE *out, const Nfa &dfa, const LanguageOutputter &
   lang.outEndStmt(out);
   fputc('\n',out);
 
-  for( Vector<Token>::iterator cur = tokens.begin(), end = tokens.end(); cur != end; ++cur ) {
-    lang.outDecl(out,"const int",cur->m_name.c_str());
-    fprintf(out," = %d",cur->m_token);
-    lang.outEndStmt(out);
-    fputc('\n',out);
-  }
-
-  lang.outArrayDecl(out, "const int", "tokenaction");
+  lang.outArrayDecl(out, "static const int", "tokenaction");
   fputs(" = ",out);
   lang.outStartArray(out);
   first = true;
@@ -1269,7 +1269,7 @@ static void OutputDfaSource(FILE *out, const Nfa &dfa, const LanguageOutputter &
   lang.outEndStmt(out);
   fputc('\n',out);
 
-  lang.outArrayDecl(out, "const char*", "tokenstr");
+  lang.outArrayDecl(out, "static const char*", "tokenstr");
   fputs(" = ",out);
   lang.outStartArray(out);
   first = true;
@@ -1284,7 +1284,7 @@ static void OutputDfaSource(FILE *out, const Nfa &dfa, const LanguageOutputter &
   lang.outEndStmt(out);
   fputc('\n',out);
 
-  lang.outArrayDecl(out, "const bool","isws");
+  lang.outArrayDecl(out, "static const bool","isws");
   fputs(" = ",out);
   lang.outStartArray(out);
   first = true;
@@ -1304,7 +1304,7 @@ static void OutputDfaSource(FILE *out, const Nfa &dfa, const LanguageOutputter &
   for( int i = 0, n = dfa.stateCount(); i < n; ++i )
     allstates.insert(i);
   dfa.stateTransitions(allstates,ranges);
-  lang.outArrayDecl(out,"const int","ranges");
+  lang.outArrayDecl(out,"static const int","ranges");
   fputs(" = ",out);
   lang.outStartArray(out);
   first = true;
@@ -1326,7 +1326,7 @@ static void OutputDfaSource(FILE *out, const Nfa &dfa, const LanguageOutputter &
   lang.outEndStmt(out);
   fputc('\n',out);
 
-  lang.outArrayDecl(out,"const int","transitions");
+  lang.outArrayDecl(out,"static const int","transitions");
   fputs(" = ",out);
   lang.outStartArray(out);
   first = true;
@@ -1355,7 +1355,7 @@ static void OutputDfaSource(FILE *out, const Nfa &dfa, const LanguageOutputter &
   fputc('\n',out);
 
   int offset = 0;
-  lang.outArrayDecl(out,"const int","transitionOffset");
+  lang.outArrayDecl(out,"static const int","transitionOffset");
   fputs(" = ",out);
   lang.outStartArray(out);
   first = true;
@@ -1377,7 +1377,7 @@ static void OutputDfaSource(FILE *out, const Nfa &dfa, const LanguageOutputter &
   fputc('\n',out);
 
   first = true;
-  lang.outArrayDecl(out,"const int","tokens");
+  lang.outArrayDecl(out,"static const int","tokens");
   fputs(" = ",out);
   lang.outStartArray(out);
   for( int i = 0, n = dfa.stateCount(); i < n; ++i ) {
