@@ -305,8 +305,8 @@ void Nfa::addNfa(const Nfa &nfa) {
     m_transitions[Transition(cur->first.m_from+states,cur->first.m_to+states)] = cur->second;
   for( Set<Transition>::const_iterator cur = nfa.m_emptytransitions.begin(), end = nfa.m_emptytransitions.end(); cur != end; ++cur )
     m_emptytransitions.insert(Transition(cur->m_from+states,cur->m_to+states));
-  for( Map<int,int>::const_iterator cur = nfa.m_token2state.begin(), end = nfa.m_token2state.end(); cur != end; ++cur )
-    m_token2state[cur->first+states] = cur->second;
+  for( Map<int,int>::const_iterator cur = nfa.m_state2token.begin(), end = nfa.m_state2token.end(); cur != end; ++cur )
+    m_state2token[cur->first+states] = cur->second;
   for( Map<int,Token>::const_iterator cur = nfa.m_tokendefs.begin(), end = nfa.m_tokendefs.end(); cur != end; ++cur )
     setTokenDef(cur->second);
 }
@@ -379,18 +379,18 @@ Vector<Token> Nfa::getTokenDefs() const {
   return tokendefs;
 }
 bool Nfa::stateHasToken(int state) const {
-  return (m_token2state.find(state) != m_token2state.end());
+  return (m_state2token.find(state) != m_state2token.end());
 }
 int Nfa::getStateToken(int state) const {
-  Map<int,int>::const_iterator iter = m_token2state.find(state);
-  if( iter != m_token2state.end() )
+  Map<int,int>::const_iterator iter = m_state2token.find(state);
+  if( iter != m_state2token.end() )
     return iter->second;
   return -1;
 }
 void Nfa::setStateToken(int state, int token) {
-  Map<int,int>::iterator iter = m_token2state.find(state);
-  if( iter == m_token2state.end() )
-    m_token2state[state] = token;
+  Map<int,int>::iterator iter = m_state2token.find(state);
+  if( iter == m_state2token.end() )
+    m_state2token[state] = token;
   else
     iter->second = token;
 }
@@ -400,7 +400,7 @@ void Nfa::clear() {
   m_endStates.clear();
   m_transitions.clear();
   m_emptytransitions.clear();
-  m_token2state.clear();
+  m_state2token.clear();
   m_tokendefs.clear();
   m_sections = 1;
 }
@@ -961,7 +961,7 @@ static Rx *ParseRxConcat(TokStream &s, Map<String,Rx*> &subs) {
   if( ! lhs )
     return 0;
   int c = s.peekc();
-  while( c != -1 && c != '/' ) {
+  while( c != -1 && c != '/' && c != '|' ) {
     Rx *rhs = ParseRxMany(s,subs);
     if( ! rhs )
       break;
@@ -1299,28 +1299,6 @@ static void OutputDfaSource(FILE *out, const Nfa &dfa, const LanguageOutputter &
   lang.outEndStmt(out);
   fputc('\n',out);
 
-  CharSet ranges;
-  Set<int> allstates;
-  for( int i = 0, n = dfa.stateCount(); i < n; ++i )
-    allstates.insert(i);
-  dfa.stateTransitions(allstates,ranges);
-  lang.outArrayDecl(out,"static const int","ranges");
-  fputs(" = ",out);
-  lang.outStartArray(out);
-  first = true;
-  for( CharSet::iterator cur = ranges.begin(), end = ranges.end(); cur != end; ++cur ) {
-    if( first )
-      first = false;
-    else
-      fputc(',',out);
-    lang.outChar(out,cur->m_low);
-    fputc(',',out);
-    lang.outChar(out,cur->m_high);
-  }
-  lang.outEndArray(out);
-  lang.outEndStmt(out);
-  fputc('\n',out);
-
   lang.outDecl(out,"const int","stateCount");
   fprintf(out," = %d",dfa.stateCount());
   lang.outEndStmt(out);
@@ -1330,24 +1308,24 @@ static void OutputDfaSource(FILE *out, const Nfa &dfa, const LanguageOutputter &
   fputs(" = ",out);
   lang.outStartArray(out);
   first = true;
-  Vector<int> transitioncounts;
-  for( int i = 0, n = dfa.stateCount(); i < n; ++i ) {
-    Vector<Transition> transitions;
-    Set<int> state, nextstate;
-    state.insert(i);
+  Map<int,int> transitioncounts;
+  for( Nfa::const_iterator cur = dfa.begin(), end = dfa.end(); cur != end; ++cur ) {
+    const Transition &transition = cur->first;
+    const CharSet &ranges = cur->second;
+    if( transitioncounts.find(transition.m_from) == transitioncounts.end() )
+      transitioncounts[transition.m_from] = 0;
+    transitioncounts[transition.m_from] += 2;
+    transitioncounts[transition.m_from] += 2*ranges.size();
+    if( first )
+      first = false;
+    else
+      fputc(',',out);
+    fprintf(out,"%d,%d",transition.m_to,ranges.size());
     for( CharSet::iterator cur = ranges.begin(), end = ranges.end(); cur != end; ++cur ) {
-      dfa.follow(*cur,state,nextstate);
-      if( ! nextstate.size() )
-        continue;
-      transitions.push_back(Transition(cur-ranges.begin(),*nextstate.begin()));
-    }
-    transitioncounts.push_back(transitions.size());
-    for( int i = 0; i < transitions.size(); ++i ) {
-      if( first )
-        first = false;
-      else
-        fputc(',',out);
-      fprintf(out,"%d,%d",transitions[i].m_from,transitions[i].m_to);
+      fputc(',',out);
+      lang.outChar(out,cur->m_low);
+      fputc(',',out);
+      lang.outChar(out,cur->m_high);
     }
   }
   lang.outEndArray(out);
@@ -1359,13 +1337,14 @@ static void OutputDfaSource(FILE *out, const Nfa &dfa, const LanguageOutputter &
   fputs(" = ",out);
   lang.outStartArray(out);
   first = true;
-  for( int i = 0, n = transitioncounts.size(); i < n; ++i ) {
+  for( int i = 0, n = dfa.stateCount(); i < n; ++i ) {
     if( first )
       first = false;
     else
       fputc(',',out);
     fprintf(out,"%d",offset);
-    offset += transitioncounts[i];
+    if( transitioncounts.find(i) != transitioncounts.end() )
+      offset += transitioncounts[i];
   }
   if( first )
     first = false;

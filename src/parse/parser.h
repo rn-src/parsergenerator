@@ -51,23 +51,39 @@ public:
   ProductionDescriptor *m_finalat;
 };
 
+enum SymbolType {
+  SymbolTypeUnknown,
+  SymbolTypeTerminal,
+  SymbolTypeNonterminal,
+};
+
+class SymbolDef {
+public:
+  int m_tokid;
+  String m_name;
+  SymbolType m_symboltype;
+  String m_semantictype;
+  SymbolDef() : m_tokid(-1), m_symboltype(SymbolTypeUnknown) {}
+  SymbolDef(int tokid, const String &name, SymbolType symboltype) : m_tokid(tokid), m_name(name), m_symboltype(symboltype) {}
+};
+
 class ParserDef {
   int m_nextsymbolid;
 public:
+  ParserDef() : m_nextsymbolid(0) {}
   Map<String,int> m_tokens;
-  Map<int,String> m_toktypes;
+  Map<int,SymbolDef> m_tokdefs;
   Vector<Production*> m_productions;
   Vector<PrecedenceRule*> m_precedencerules;
   Vector<DisallowRule*> m_disallowrules;
-  void setNextSymbolId(int nextsymbolid);
-  int findOrAddSymbol(const char *s);
+  int findOrAddSymbolId(Tokenizer &toks, const String &s, SymbolType stype);
 };
 
 class ParserError {
 public:
   int m_line, m_col;
   String m_err;
-  ParserError(int line, int col, const char *err) : m_line(line), m_col(col), m_err(err) {}
+  ParserError(int line, int col, const String &err) : m_line(line), m_col(col), m_err(err) {}
 };
 
 void ParseParser(TokBuf *tokbuf, ParserDef &parser);

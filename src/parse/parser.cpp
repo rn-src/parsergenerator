@@ -8,7 +8,6 @@ TokenInfo pptokinfo = {
   tokenaction,
   tokenstr,
   isws,
-  ranges,
   stateCount,
   transitions,
   transitionOffset,
@@ -34,33 +33,51 @@ ProductionDescriptor::ProductionDescriptor(int nt, Vector<int> symbols) : m_nt(n
 
 Production::Production(bool rejectable, int nt, const Vector<int> &symbols, String action) : m_rejectable(rejectable), m_nt(nt), m_symbols(symbols), m_action(action) {}
 
-void ParserDef::setNextSymbolId(int nextsymbolid) {
-  m_nextsymbolid = nextsymbolid;
-}
-
-int ParserDef::findOrAddSymbol(const char *s) {
-  Map<String,int>::iterator iter = m_tokens.find(s);
-  if( iter != m_tokens.end() )
-    return iter->second;
-  int id = m_nextsymbolid++;
-  m_tokens[s] = id;
-  return id;
-}
-
-
-void error(Tokenizer &toks, const char *err) {
+void error(Tokenizer &toks, const String &err) {
   throw ParserError(toks.line(),toks.col(),err);
 }
 
+int ParserDef::findOrAddSymbolId(Tokenizer &toks, const String &s, SymbolType stype) {
+  Map<String,int>::iterator iter = m_tokens.find(s);
+  if( iter != m_tokens.end() ) {
+    int tokid = iter->second;
+    SymbolDef &symboldef = m_tokdefs[tokid];
+    if( stype == SymbolTypeUnknown ) {
+      // is ok
+    } else if( symboldef.m_symboltype == SymbolTypeUnknown && stype != SymbolTypeUnknown ) {
+      // now we know
+      symboldef.m_symboltype = stype;
+    } else if( symboldef.m_symboltype != stype ) {
+      if( symboldef.m_symboltype == SymbolTypeNonterminal )
+        error(toks,String("Attempted to turn Nonterminal ")+symboldef.m_name+"into a Terminal");
+      else if( symboldef.m_symboltype == SymbolTypeTerminal )
+        error(toks,String("Attempted to turn Terminal ")+symboldef.m_name+"into a NonTerminal");
+      symboldef.m_symboltype = stype;
+    }
+    return tokid;
+  }
+  String name(s);
+  int tokid = m_nextsymbolid++;
+  m_tokens[s] = tokid;
+  m_tokdefs[tokid] = SymbolDef(tokid, name, stype);
+  return tokid;
+}
+
 static int ParseNonterminal(Tokenizer &toks, ParserDef &parser) {
-  if( toks.peek() == pptok::START || toks.peek() == pptok::ID )
-    return parser.findOrAddSymbol(toks.tokstr());
+  if( toks.peek() == pptok::START || toks.peek() == pptok::ID ) {
+    String s = toks.tokstr();
+    toks.discard();
+    return parser.findOrAddSymbolId(toks, s, SymbolTypeNonterminal);
+  }
   return -1;
 }
 
 static int ParseSymbol(Tokenizer &toks, ParserDef &parser) {
-  if( toks.peek() == pptok::ID )
-    return parser.findOrAddSymbol(toks.tokstr());
+  if( toks.peek() == pptok::ID ) {
+    String s= toks.tokstr();
+    toks.discard();
+    return parser.findOrAddSymbolId(toks, s, SymbolTypeUnknown);
+  }
   return -1;
 }
 
@@ -103,6 +120,7 @@ static Vector<Production*> ParseProductions(Tokenizer &toks, ParserDef &parser) 
     error(toks,"Expected nonterminal");
   if( toks.peek() != pptok::COLON )
     error(toks,"Exptected ':'");
+  toks.discard();
   Vector<Production*> productions;
   while(true) {
     Vector<int> symbols = ParseSymbols(toks,parser);
@@ -145,11 +163,13 @@ static int ParseSymbolOrDottedSymbolOrWildcard(Tokenizer &toks, ParserDef &parse
 static ProductionDescriptor *ParseProductionDescriptor(Tokenizer &toks, ParserDef &parser) {
   if( toks.peek() != pptok::LBRKT )
     error(toks,"Expected '[' to start production descriptor");
+  toks.discard();
   int nt = ParseNtOrStar(toks,parser);
   if( nt == -1 )
     error(toks,"expected nonterminal or '*'");
   if( toks.peek() != pptok::COLON )
     error(toks,"Expected ':' in production descriptor");
+  toks.discard();
   bool dotted = false;
   int symbol = ParseSymbolOrDottedSymbolOrWildcard(toks,parser,dotted);
   if( symbol == -1 )
@@ -161,8 +181,9 @@ static ProductionDescriptor *ParseProductionDescriptor(Tokenizer &toks, ParserDe
     symbols.push_back(symbol);
     symbol = ParseSymbolOrDottedSymbolOrWildcard(toks,parser,dotted);
   }
-  if( toks.peek() != pptok::LBRKT )
+  if( toks.peek() != pptok::RBRKT )
     error(toks,"Expected ']' to end production descriptor");
+  toks.discard();
   return new ProductionDescriptor(nt, symbols);
 }
 
@@ -176,7 +197,12 @@ static void ParseTypedefRule(Tokenizer &toks, ParserDef &parser) {
   toks.discard();
   int nt = ParseNonterminal(toks,parser);
   while( nt != -1 ) {
-    parser.m_toktypes[nt] = toktype;
+    SymbolDef &symboldef = parser.m_tokdefs[nt];
+    if( symboldef.m_symboltype != SymbolTypeNonterminal )
+      error(toks, String("TYPEDEF may only be applied to nonterminals, attempted to TYPEDEF ")+symboldef.m_name);
+    if( symboldef.m_semantictype.length() != 0 )
+      error(toks, String("TYPEDEF can only be assigned once per type.  Attempated to reassign TYPEDEF of ")+symboldef.m_name);
+    parser.m_tokdefs[nt].m_semantictype = toktype;
     nt = ParseNonterminal(toks,parser);
   }
 }
@@ -261,6 +287,7 @@ static bool ParseParsePart(Tokenizer &toks, ParserDef &parser) {
     return false;
   if( toks.peek() != pptok::SEMI )
     error(toks,"Expected ';'");
+  toks.discard();
   return true;
 }
 
@@ -274,7 +301,10 @@ static void ParseStart(Tokenizer &toks, ParserDef &parser) {
 }
 
 void ParseParser(TokBuf *tokbuf, ParserDef &parser) {
-  parser.setNextSymbolId(pptok::pptokinfo.m_tokenCount);
   Tokenizer toks(tokbuf,&pptok::pptokinfo);
+  for( int i = 0, n = pptok::pptokinfo.m_tokenCount; i < n; ++i )
+    parser.findOrAddSymbolId(toks, pptok::pptokinfo.m_tokenstr[i], SymbolTypeTerminal);
   ParseStart(toks,parser);
+  if( toks.peek() != -1 )
+    error(toks,"Expected EOF");
 }

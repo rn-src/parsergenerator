@@ -49,13 +49,18 @@ public:
       *s = 0;
       if( m_p )
         strcat(s,m_p->m_s);
-      strcat(s,m_p->m_s);
+      strcat(s,rhs.m_p->m_s);
       decref();
       m_p = new strkernel();
       m_p->m_s = s;
       m_p->m_refs = 1;
     }
     return *this;
+  }
+  String operator+(const String &rhs) {
+    String ret =*this;
+    ret += rhs;
+    return ret;
   }
   int length() const {
     if( m_p )

@@ -62,6 +62,7 @@ public:
   void split(const CharSet &rhs);
   void negate();
   bool operator!() const;
+  int size() const { return m_ranges.size(); }
 };
 
 class Transition {
@@ -122,7 +123,7 @@ protected:
   Set<int> m_endStates;
   Map<Transition,CharSet> m_transitions;
   Set<Transition> m_emptytransitions;
-  Map<int,int> m_token2state;
+  Map<int,int> m_state2token;
   Map<int,Token> m_tokendefs;
   int m_sections;
 
@@ -154,6 +155,10 @@ public:
   bool hasEndState(const Set<int> &states) const;
   int lowToken(const Set<int> &states) const;
   void toDfa(Nfa &dfa) const;
+
+  typedef Map<Transition,CharSet>::const_iterator const_iterator;
+  const_iterator begin() const { return m_transitions.begin(); }
+  const_iterator end() const { return m_transitions.end(); }
 };
 
 enum RxType {

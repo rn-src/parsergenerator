@@ -87,7 +87,6 @@ struct TokenInfo {
   const int *m_tokenaction;
   const char **m_tokenstr;
   const bool *m_isws;
-  const int *m_ranges;
   const int m_stateCount;
   const int *m_transitions;
   const int *m_transitionOffset;
@@ -110,19 +109,17 @@ class Tokenizer {
     return m_tokinfo->m_isws[tok];
   }
   int nextState(int state, int c) {
-    int offset = m_tokinfo->m_transitionOffset[state];
-    int count = m_tokinfo->m_transitionOffset[state+1]-offset;
-    const int *firstTransition = m_tokinfo->m_transitions+(offset*2);
-    for( int i = 0; i < count; ++i ) {
-      int transition = firstTransition[i*2];
-      int low = m_tokinfo->m_transitions[transition*2];
-      int high = m_tokinfo->m_transitions[transition*2+1];
-      if( c < low )
-        continue;
-      if( c > high )
-        break;
-      if( c >= low && c <= high )
-        return firstTransition[i*2+1];
+    const int *curTransition = m_tokinfo->m_transitions+m_tokinfo->m_transitionOffset[state];
+    const int *endTransition = m_tokinfo->m_transitions+m_tokinfo->m_transitionOffset[state+1];
+    while( curTransition != endTransition ) {
+      int to = *curTransition++;
+      int pairCount = *curTransition++;
+      for( int i = 0; i < pairCount; ++i ) {
+        int low = *curTransition++;
+        int high = *curTransition++;
+        if( c >= low && c <= high )
+          return to;
+      }
     }
     return -1;
   }
@@ -171,9 +168,9 @@ public:
       m_tok = tok;
       m_tokLen = tokLen;
       if( m_tok != -1 ) {
-        const int *tokActions = m_tokinfo->m_tokenaction + (m_tok*m_tokinfo->m_sectionCount*2);
-        int tokenaction = tokActions[curSection*2];
-        int actionarg = m_tokinfo->m_tokenaction[curSection*2+1];
+        const int *tokActions = m_tokinfo->m_tokenaction + (m_tok*m_tokinfo->m_sectionCount*2) + curSection*2;
+        int tokenaction = tokActions[0];
+        int actionarg = tokActions[1];
         if( tokenaction == 1 )
           push(actionarg);
         else if( tokenaction == 2 )
