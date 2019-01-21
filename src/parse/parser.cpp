@@ -37,6 +37,15 @@ void error(Tokenizer &toks, const String &err) {
   throw ParserError(toks.line(),toks.col(),err);
 }
 
+void ParserDef::addProduction(Tokenizer &toks, Production *p) {
+  if( p->m_nt == m_startnt ) {
+    if( m_startProduction )
+      error(toks,"<start> production can be defined only once");
+    m_startProduction = p;
+  }
+  m_productions.push_back(p);
+}
+
 int ParserDef::findOrAddSymbolId(Tokenizer &toks, const String &s, SymbolType stype) {
   Map<String,int>::iterator iter = m_tokens.find(s);
   if( iter != m_tokens.end() ) {
@@ -60,6 +69,8 @@ int ParserDef::findOrAddSymbolId(Tokenizer &toks, const String &s, SymbolType st
   int tokid = m_nextsymbolid++;
   m_tokens[s] = tokid;
   m_tokdefs[tokid] = SymbolDef(tokid, name, stype);
+  if( strcmp(name.c_str(),"<start>") == 0 )
+    m_startnt = tokid;
   return tokid;
 }
 
@@ -282,7 +293,8 @@ static bool ParseParsePart(Tokenizer &toks, ParserDef &parser) {
     parser.m_disallowrules.push_back(d);
   } else if( toks.peek() == pptok::REJECTABLE  || toks.peek() == pptok::START || toks.peek() == pptok::ID ) {
     Vector<Production*> productions = ParseProductions(toks,parser);
-    parser.m_productions.insert(parser.m_productions.end(), productions.begin(), productions.end());
+    for( Vector<Production*>::iterator cur = productions.begin(), end = productions.end(); cur != end; ++cur )
+      parser.addProduction(toks,*cur);
   } else
     return false;
   if( toks.peek() != pptok::SEMI )

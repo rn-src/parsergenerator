@@ -67,7 +67,7 @@ public:
       return strlen(m_p->m_s);
     return 0;
   }
-  const char *c_str() {
+  const char *c_str() const {
     if( m_p )
       return m_p->m_s;
     return 0;

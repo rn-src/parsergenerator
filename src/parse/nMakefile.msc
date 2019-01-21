@@ -1,25 +1,15 @@
 # To build
 # start visual studio command line prompt
 # nmake -f nMakefile.msc
+OBJS=parser.obj parsersolve.obj parseroutput.obj main.obj
+CPPFLAGS=/nologo /Zi /Od /EHsc /DWIN32 
 
 all: parser.exe
 
-parser.exe: parser.obj parseroutput.obj main.obj
+parser.exe: $(OBJS)
 	@echo linking...
-#	@link /nologo /SUBSYSTEM:CONSOLE /OUT:parser.exe parser.obj parseroutput.obj main.obj
-	@link /nologo /DEBUG /SUBSYSTEM:CONSOLE /OUT:parser.exe parser.obj parseroutput.obj main.obj
-
-parser.obj: parser.cpp parser.h ../tok/tok.h parsertok.h
-	@cl /nologo /c /Zi /Od /EHsc /DWIN32 parser.cpp
-
-parseroutput.obj: parseroutput.cpp parser.h ../tok/tok.h parsertok.h
-	@cl /nologo /c /Zi /Od /EHsc /DWIN32 parseroutput.cpp
-
-parsertok.h: parsertok.L
-	..\tok\tokenizer.exe --c < parsertok.L > parsertok.h
-
-main.obj: main.cpp parser.h
-	@cl /nologo /c /Zi /Od /EHsc /DWIN32 main.cpp
+#	@link /nologo /SUBSYSTEM:CONSOLE /OUT:parser.exe $(OBJS)
+	@link /nologo /DEBUG /SUBSYSTEM:CONSOLE /OUT:parser.exe $(OBJS)
 
 clean:
 	@-del parser.exe > NUL 2>&1

@@ -24,6 +24,9 @@
     <ClCompile Include="parseroutput.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
+    <ClCompile Include="parsersolve.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="parser.h">

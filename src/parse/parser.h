@@ -69,14 +69,19 @@ public:
 
 class ParserDef {
   int m_nextsymbolid;
+  int m_startnt;
+  Production *m_startProduction;
 public:
-  ParserDef() : m_nextsymbolid(0) {}
+  ParserDef() : m_nextsymbolid(0), m_startnt(-1), m_startProduction(0) {}
   Map<String,int> m_tokens;
   Map<int,SymbolDef> m_tokdefs;
   Vector<Production*> m_productions;
   Vector<PrecedenceRule*> m_precedencerules;
   Vector<DisallowRule*> m_disallowrules;
+  void addProduction(Tokenizer &toks, Production *p);
   int findOrAddSymbolId(Tokenizer &toks, const String &s, SymbolType stype);
+  int getStartNt() { return m_startnt; }
+  Production *getStartProduction() { return m_startProduction; }
 };
 
 class ParserError {
@@ -87,6 +92,7 @@ public:
 };
 
 void ParseParser(TokBuf *tokbuf, ParserDef &parser);
+bool SolveParser(ParserDef &parser);
 void OutputParser(ParserDef &parser);
 
 #endif /* __parser_h */
