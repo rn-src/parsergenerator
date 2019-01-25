@@ -12,8 +12,9 @@ public:
   int m_nt;
   Vector<int> m_symbols;
   String m_action;
+  int m_symbolid;
 
-  Production(bool rejectable, int nt, const Vector<int> &symbols, String action);
+  Production(int symbolid, bool rejectable, int nt, const Vector<int> &symbols, String action);
 };
 
 enum Associativity {
@@ -24,12 +25,7 @@ enum Associativity {
   AssocByDisallow
 };
 
-class ProductionDescriptor {
-public:
-  int m_nt;
-  Vector<int> m_symbols;
-  ProductionDescriptor(int nt, Vector<int> symbols);
-};
+class ProductionDescriptor;
 
 class PrecedencePart {
 public:
@@ -39,9 +35,49 @@ public:
   ProductionDescriptor *m_disallowed;
 };
 
+class ProductionStateItem {
+public:
+  Production *m_p;
+  int m_idx;
+  ProductionStateItem(Production *p, int idx) : m_p(p), m_idx(idx) {}
+  ProductionStateItem(const ProductionStateItem &rhs) : m_p(rhs.m_p), m_idx(rhs.m_idx) {}
+  bool operator<(const ProductionStateItem &rhs) const {
+    if( m_p->m_nt < rhs.m_p->m_nt )
+      return true;
+    else if( rhs.m_p->m_nt < m_p->m_nt )
+      return false;
+    if( m_idx < rhs.m_idx )
+      return true;
+    return false;
+  }
+};
+
+class ProductionState {
+public:
+  Vector<ProductionStateItem> m_items;
+  bool operator<(const ProductionState &rhs) const {
+    return m_items < rhs.m_items;
+  }
+  ProductionState() {}
+  ProductionState(const ProductionState &rhs) : m_items(rhs.m_items) {}
+  ProductionState(Production *p, int idx) {
+    m_items.push_back(ProductionStateItem(p,idx));
+  }
+};
+
+class ProductionDescriptor {
+public:
+  int m_nt;
+  Vector<int> m_symbols;
+  ProductionDescriptor(int nt, Vector<int> symbols);
+  bool matchesProduction(Production *p) const;
+  bool matchesProductionStateItem(const ProductionStateItem &rhs) const;
+};
+
 class PrecedenceRule {
 public:
   Vector<PrecedencePart*> m_parts;
+  bool isRejectedPlacement(const ProductionState &ps, Production *p) const;
 };
 
 class DisallowRule {
@@ -49,12 +85,15 @@ public:
   ProductionDescriptor *m_disallowed;
   Vector<ProductionDescriptor*> m_ats;
   ProductionDescriptor *m_finalat;
+
+  bool isRejectedPlacement(const ProductionState &ps, Production *p) const;
 };
 
 enum SymbolType {
   SymbolTypeUnknown,
   SymbolTypeTerminal,
   SymbolTypeNonterminal,
+  SymbolTypeProduction
 };
 
 class SymbolDef {
@@ -63,8 +102,9 @@ public:
   String m_name;
   SymbolType m_symboltype;
   String m_semantictype;
-  SymbolDef() : m_tokid(-1), m_symboltype(SymbolTypeUnknown) {}
-  SymbolDef(int tokid, const String &name, SymbolType symboltype) : m_tokid(tokid), m_name(name), m_symboltype(symboltype) {}
+  Production *m_p;
+  SymbolDef() : m_tokid(-1), m_symboltype(SymbolTypeUnknown), m_p(0) {}
+  SymbolDef(int tokid, const String &name, SymbolType symboltype) : m_tokid(tokid), m_name(name), m_symboltype(symboltype), m_p(0) {}
 };
 
 class ParserDef {
@@ -81,7 +121,9 @@ public:
   void addProduction(Tokenizer &toks, Production *p);
   int findOrAddSymbolId(Tokenizer &toks, const String &s, SymbolType stype);
   int getStartNt() { return m_startnt; }
-  Production *getStartProduction() { return m_startProduction; }
+  Production *getStartProduction() const { return m_startProduction; }
+  Vector<Production*> productionsAt(const ProductionState &ps) const;
+  bool isRejectedPlacement(const ProductionState &ps, Production *p) const;
 };
 
 class ParserError {

@@ -31,7 +31,7 @@ TokenInfo pptokinfo = {
 
 ProductionDescriptor::ProductionDescriptor(int nt, Vector<int> symbols) : m_nt(nt), m_symbols(symbols) {}
 
-Production::Production(bool rejectable, int nt, const Vector<int> &symbols, String action) : m_rejectable(rejectable), m_nt(nt), m_symbols(symbols), m_action(action) {}
+Production::Production(int symbolid, bool rejectable, int nt, const Vector<int> &symbols, String action) : m_symbolid(symbolid), m_rejectable(rejectable), m_nt(nt), m_symbols(symbols), m_action(action) {}
 
 void error(Tokenizer &toks, const String &err) {
   throw ParserError(toks.line(),toks.col(),err);
@@ -61,6 +61,8 @@ int ParserDef::findOrAddSymbolId(Tokenizer &toks, const String &s, SymbolType st
         error(toks,String("Attempted to turn Nonterminal ")+symboldef.m_name+"into a Terminal");
       else if( symboldef.m_symboltype == SymbolTypeTerminal )
         error(toks,String("Attempted to turn Terminal ")+symboldef.m_name+"into a NonTerminal");
+      else if( symboldef.m_symboltype == SymbolTypeProduction )
+        error(toks,String("Attempted to turn Production ")+symboldef.m_name+"into something else");
       symboldef.m_symboltype = stype;
     }
     return tokid;
@@ -72,6 +74,93 @@ int ParserDef::findOrAddSymbolId(Tokenizer &toks, const String &s, SymbolType st
   if( strcmp(name.c_str(),"<start>") == 0 )
     m_startnt = tokid;
   return tokid;
+}
+
+Vector<Production*> ParserDef::productionsAt(const ProductionState &ps) const {
+  Vector<Production*> productions;
+  if( ps.m_items.size() == 0 )
+    return productions;
+  const ProductionStateItem &psi = ps.m_items[0];
+  if( psi.m_idx < psi.m_p->m_symbols.size() ) {
+    int symbol = psi.m_p->m_symbols[psi.m_idx];
+    if( m_tokdefs.find(symbol)->second.m_symboltype == SymbolTypeNonterminal ) {
+      for( Vector<Production*>::const_iterator cur = m_productions.begin(), end = m_productions.end(); cur != end; ++cur ) {
+        Production *p = *cur;
+        if( p->m_nt != symbol )
+          continue;
+        if( ! isRejectedPlacement(ps,p) )
+          productions.push_back(p);
+      }
+    }
+  } else if( psi.m_idx == psi.m_p->m_symbols.size() ) {
+    // TODO get the follow productions?
+  }
+  return productions;
+}
+
+bool ParserDef::isRejectedPlacement(const ProductionState &ps, Production *p) const {
+  // Might be rejected due to a precedence rule of a disallow rule.
+  if( ps.m_items.size() == 0 )
+    return false;
+  const ProductionStateItem &psi = ps.m_items[0];
+  for( Vector<PrecedenceRule*>::const_iterator cur = m_precedencerules.begin(), end = m_precedencerules.end(); cur != end; ++cur ) {
+    if( (*cur)->isRejectedPlacement(ps,p) )
+      return true;
+  }
+  for( Vector<DisallowRule*>::const_iterator cur = m_disallowrules.begin(), end = m_disallowrules.end(); cur != end; ++cur ) {
+    if( (*cur)->isRejectedPlacement(ps,p) )
+      return true;
+  }
+  return false;
+}
+
+bool PrecedenceRule::isRejectedPlacement(const ProductionState &ps, Production *p) const {
+  return false;
+}
+
+bool DisallowRule::isRejectedPlacement(const ProductionState &ps, Production *p) const {
+  if( ! m_disallowed->matchesProduction(p) )
+    return false;
+  if( m_ats.size() > ps.m_items.size() || (m_ats.size() == ps.m_items.size() && m_finalat))
+    return false;
+  for( int i = 0, n = m_ats.size(); i < n; ++i )
+    if( ! m_ats[i]->matchesProductionStateItem(ps.m_items[i]) )
+      return false;
+  if( m_finalat && ! m_finalat->matchesProductionStateItem(ps.m_items[ps.m_items.size()-1]) )
+    return false;
+  return true;
+}
+
+bool ProductionDescriptor::matchesProduction(Production *p) const {
+  return m_nt == p->m_nt && m_symbols == p->m_symbols;
+}
+
+static bool matchWildcard(Vector<int>::const_iterator wcsymfirst, Vector<int>::const_iterator wcsymlast, Vector<int>::const_iterator symfirst, Vector<int>::const_iterator symlast) {
+  // TODO
+  return false;
+}
+
+bool ProductionDescriptor::matchesProductionStateItem(const ProductionStateItem &psi) const {
+  const Production *p = psi.m_p;
+  // Rule must have '*' nonterminal or exact same nonterminal.
+  if( m_nt != pptok::STAR && m_nt != p->m_nt )
+    return false;
+  // Look for the dot
+  int idx = -1;
+  for( Vector<int>::const_iterator cursym = m_symbols.begin(), endsym = m_symbols.end(); cursym != endsym; ++cursym ) {
+    if( (*cursym) == pptok::DOT ) {
+      idx = cursym-m_symbols.begin();
+    }
+  }
+  if( idx == -1 )
+    return false;
+  // Match the stuff before the dot.
+  if( ! matchWildcard(m_symbols.begin(), m_symbols.begin()+idx, p->m_symbols.begin(), p->m_symbols.begin()+psi.m_idx) )
+    return false;
+  // Match the stuff after the dot.
+  if( ! matchWildcard(m_symbols.begin()+idx+1, m_symbols.end(), p->m_symbols.begin()+psi.m_idx, p->m_symbols.end()) )
+    return false;
+  return true;
 }
 
 static int ParseNonterminal(Tokenizer &toks, ParserDef &parser) {
@@ -138,7 +227,13 @@ static Vector<Production*> ParseProductions(Tokenizer &toks, ParserDef &parser) 
     String action;
     if( toks.peek() == pptok::LBRACE )
       action = ParseAction(toks,parser);
-    productions.push_back(new Production(rejectable,nt,symbols,action));
+    char buf[64];
+    sprintf(buf,"Production-%d",parser.m_productions.size()+1);
+    String productionName = buf;
+    int productionId = parser.findOrAddSymbolId(toks,productionName,SymbolTypeProduction);
+    Production *p = new Production(productionId,rejectable,nt,symbols,action);
+    parser.m_tokdefs[productionId].m_p = p;
+    productions.push_back(p);
     if( toks.peek() != pptok::VSEP )
       break;
     toks.discard();

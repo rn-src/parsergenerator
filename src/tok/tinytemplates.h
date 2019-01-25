@@ -185,6 +185,29 @@ public:
   }
   int size() const { return m_size; }
   T &back() { return m_p[m_size-1]; }
+  bool operator!=(const Vector<T> &rhs) const {
+    if( size() != rhs.size() )
+      return true;
+    for( int i = 0, n = size(); i < n; ++i )
+      if( operator[](i) != rhs[i] )
+        return true;
+    return false;
+  }
+  bool operator==(const Vector<T> &rhs) const {
+    return ! operator!=(rhs);
+  }
+  bool operator<(const Vector<T> &rhs) const {
+    int len = size()<rhs.size()?size():rhs.size();
+    for( int i = 0, n = len; i < n; ++i ) {
+      if( operator[](i) < rhs[i] )
+        return true;
+      else if( rhs[i] < operator[](i) )
+        return false;
+    }
+    if( size() < rhs.size() )
+      return true;
+    return false;
+  }
 };
 
 template<class T, class T2>
@@ -253,6 +276,12 @@ public:
       return begin()+idx;
     return m_values.insert(begin()+idx,value);
   }
+  template<class Iter>
+  void insert(Iter first, Iter last) {
+    while( first != last ) {
+      insert(*first++);
+    }
+  }
   bool operator==(const Set<T> &rhs) const {
     if( size() != rhs.size() )
       return false;
@@ -261,6 +290,9 @@ public:
       if( *cur < *rhscur || *rhscur < *cur )
         return false;
     return true;
+  }
+  bool operator<(const Set<T> &rhs) const {
+    return m_values < rhs.m_values;
   }
 };
 
