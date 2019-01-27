@@ -114,6 +114,11 @@ bool ParserDef::isRejectedPlacement(const ProductionState &ps, Production *p) co
   return false;
 }
 
+bool ParserDef::isPartialReject(const ProductionState &ps) const {
+  // TODO
+  return false;
+}
+
 bool PrecedenceRule::isRejectedPlacement(const ProductionState &ps, Production *p) const {
   return false;
 }

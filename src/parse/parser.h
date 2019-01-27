@@ -124,6 +124,7 @@ public:
   Production *getStartProduction() const { return m_startProduction; }
   Vector<Production*> productionsAt(const ProductionState &ps) const;
   bool isRejectedPlacement(const ProductionState &ps, Production *p) const;
+  bool isPartialReject(const ProductionState &ps) const;
 };
 
 class ParserError {
