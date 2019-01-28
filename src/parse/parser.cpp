@@ -98,8 +98,11 @@ Vector<Production*> ParserDef::productionsAt(const ProductionState &ps) const {
   return productions;
 }
 
+// What is a rejected placement?  A rejected placement means that the production is
+// not allowed at the production state because of a rejection rule.  The rejection
+// rule can either be explicit (including wildcard matches) or implicit because of
+// a precedence rule.
 bool ParserDef::isRejectedPlacement(const ProductionState &ps, Production *p) const {
-  // Might be rejected due to a precedence rule of a disallow rule.
   if( ps.m_items.size() == 0 )
     return false;
   const ProductionStateItem &psi = ps.m_items[0];
@@ -113,9 +116,17 @@ bool ParserDef::isRejectedPlacement(const ProductionState &ps, Production *p) co
   }
   return false;
 }
-
+ 
+// What is a partial reject? A partical reject means that there is a production that
+// is not allowed at a production/index that is reachable, or more than one
+// production/index from the list of prouduction/indexes supplied.  Since we are
+// looking more than one deeper, predence rules are not a concern, they reach only
+// one deep.
 bool ParserDef::isPartialReject(const ProductionState &ps) const {
-  // TODO
+  for( Vector<DisallowRule*>::const_iterator cur = m_disallowrules.begin(), end = m_disallowrules.end(); cur != end; ++cur ) {
+    if( (*cur)->isPartialReject(ps) )
+      return true;
+  }
   return false;
 }
 
@@ -124,15 +135,30 @@ bool PrecedenceRule::isRejectedPlacement(const ProductionState &ps, Production *
 }
 
 bool DisallowRule::isRejectedPlacement(const ProductionState &ps, Production *p) const {
+  if( ps.m_items.size() < m_ats.size() || (m_ats.size() == ps.m_items.size() && m_finalat))
+    return false;
   if( ! m_disallowed->matchesProduction(p) )
     return false;
-  if( m_ats.size() > ps.m_items.size() || (m_ats.size() == ps.m_items.size() && m_finalat))
+  Vector<ProductionStateItem>::const_iterator highps = ps.m_items.end()-1;
+  if( m_finalat && ! m_finalat->matchesProductionStateItem(*highps--) )
     return false;
-  for( int i = 0, n = m_ats.size(); i < n; ++i )
-    if( ! m_ats[i]->matchesProductionStateItem(ps.m_items[i]) )
+  for( Vector<ProductionDescriptor*>::const_iterator lowat = m_ats.begin(), highat = m_ats.end()-1; highat >= lowat; --highat )
+    if( ! (*highat)->matchesProductionStateItem(*highps--) )
       return false;
+  return true;
+}
+
+bool DisallowRule::isPartialReject(const ProductionState &ps) const {
+  if( ps.m_items.size() < m_ats.size() || (m_ats.size() == ps.m_items.size() && m_finalat))
+    return false;
   if( m_finalat && ! m_finalat->matchesProductionStateItem(ps.m_items[ps.m_items.size()-1]) )
     return false;
+  Vector<ProductionStateItem>::const_iterator lowps = ps.m_items.begin(), highps = ps.m_items.end()-1;
+  if( m_finalat && ! m_finalat->matchesProductionStateItem(*highps--) )
+    return false;
+  for( Vector<ProductionDescriptor*>::const_iterator lowat = m_ats.begin(), highat = m_ats.end()-1; highps >= lowps; --highat )
+    if( ! (*highat)->matchesProductionStateItem(*highps--) )
+      return false;
   return true;
 }
 

@@ -50,6 +50,11 @@ public:
       return true;
     return false;
   }
+  int symbol() const {
+    if( m_idx >= m_p->m_symbols.size() )
+      return -1;
+    return m_p->m_symbols[m_idx];
+  }
 };
 
 class ProductionState {
@@ -87,6 +92,7 @@ public:
   ProductionDescriptor *m_finalat;
 
   bool isRejectedPlacement(const ProductionState &ps, Production *p) const;
+  bool isPartialReject(const ProductionState &ps) const;
 };
 
 enum SymbolType {
