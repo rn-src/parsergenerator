@@ -98,8 +98,8 @@ public:
 template<class T>
 class Vector {
   T *m_p;
-  int m_size;
-  int m_capacity;
+  size_t m_size;
+  size_t m_capacity;
 
   void capacity(size_t mincap) {
     if( mincap <= m_capacity )
@@ -144,6 +144,30 @@ public:
     new(dst) T(value);
     ++m_size;
     return dst;
+  }
+  void resize(size_t newsize, const T &def) {
+    if( newsize < m_size ) {
+      for( int i = newsize; i < m_size; ++i )
+        m_p[i].~T();
+      m_size = newsize;
+    } else if( newsize > m_size ) {
+      capacity(newsize);
+      for( int i = m_size; i < newsize; ++i )
+        new(m_p+i) T(def);
+      m_size = newsize;
+    }
+  }
+  void resize(size_t newsize) {
+    if( newsize < m_size ) {
+      for( int i = newsize; i < m_size; ++i )
+        m_p[i].~T();
+      m_size = newsize;
+    } else if( newsize > m_size ) {
+      capacity(newsize);
+      for( int i = m_size; i < newsize; ++i )
+        new(m_p+i) T();
+      m_size = newsize;
+    }
   }
   void pop_back() {
     if( m_size == 0 )

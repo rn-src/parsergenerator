@@ -85,6 +85,8 @@ bool ComputeStates(ParserDef &parser) {
     for( Set<int>::iterator cur = nextSymbols.begin(), end = nextSymbols.end(); cur != end; ++cur ) {
       advance(state,*cur,parser,nextState);
       closure(nextState,parser);
+      if( nextState.empty() )
+        continue;
       if( statemap.find(nextState) == statemap.end() ) {
         statemap[nextState] = states.size();
         states.push_back(nextState);

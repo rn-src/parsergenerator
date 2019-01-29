@@ -167,7 +167,34 @@ bool ProductionDescriptor::matchesProduction(Production *p) const {
 }
 
 static bool matchWildcard(Vector<int>::const_iterator wcsymfirst, Vector<int>::const_iterator wcsymlast, Vector<int>::const_iterator symfirst, Vector<int>::const_iterator symlast) {
-  // TODO
+  int nstates = wcsymlast-wcsymfirst;
+  if( symlast-symfirst < nstates )
+    return false; // simple case, no way to match
+  Set<int> states, nextstates;
+  states.insert(0);
+  for( int i = 0, n = symlast-symfirst; i < n; ++i ) {
+    int s = *(symfirst+i);
+    nextstates.clear();
+    for( Set<int>::const_iterator curstate = states.begin(), endstate = states.end(); curstate != endstate; ++curstate ) {
+      int state = *curstate;
+      int wc = *(wcsymfirst+state);
+      if( state >= nstates )
+        continue;
+      if( wc == s || wc == pptok::STAR ) {
+        nextstates.insert(state+1);
+      } else if( wc == pptok::ELIPSIS ) {
+        nextstates.insert(state);
+        nextstates.insert(state+1);
+      }
+    }
+    states = nextstates;
+    if( states.size() == 0 )
+      return false;
+  }
+  for( Set<int>::const_iterator curstate = states.begin(), endstate = states.end(); curstate != endstate; ++curstate ) {
+    if( *curstate == nstates )
+      return true;
+  }
   return false;
 }
 
