@@ -80,11 +80,44 @@ public:
 
 #endif
 
-struct Kernel {
-  int state;
+class ForbidAutomata {
+  int m_nextstate;
+public:
+  ForbidAutomata() : m_nextstate(0) {}
+  int newstate() { return m_nextstate++; }
+  int followDeterministic(int in, int symbol) {
+    // TODO
+  }
+  void ToDeterministicForbidAutomata(ForbidAutomata &out) {
+    // TODO
+  }
 };
 
+void addForbidRule(ForbidAutomata &nforbid, int q0, DisallowRule *rule) {
+}
+
 // Given a CFG+F ParserDef parserIn, produce a CFG ParserDef parserOut
-bool NormalizeParser(const ParserDef &parserIn, ParserDef &parserOut) {
-  return false;
+bool NormalizeParser(ParserDef &parser) {
+  parser.combineRules();
+  ForbidAutomata nforbid, forbid;
+  int q0 = nforbid.newstate();
+  Vector<DisallowRule*> finalrules;
+  CombineRules(parserIn.m_disallowrules,finalrules);
+  for( Vector<DisallowRule*>::const_iterator currule = parserIn.m_disallowrules.begin(), endrule = parserIn.m_disallowrules.end(); currule != endrule; ++currule ) {
+    int q1 = nforbid.newstate();
+    nforbid.addEpsilonTransition(q0,q1);
+    addForbidRule(nforbid, q1, *currule);
+  }
+  nforbid.ToDeterministicForbidAutomata(forbid);
+  Production *S = parserIn.getStartProduction();
+  Set< Pair<Production*,int> > nodes, prevnodes;
+  nodes.insert( Pair<Production*,int>(S,0) );
+  while( nodes.size() > 0 ) {
+    Pair<Production*,int> k = *nodes.begin();
+    //nodes.remove(k);
+    prevnodes.insert(k);
+    forbid.followDeterministic(s,k->second);
+    parserIn.m_disallowrules[i]
+  }
+  return true;
 }

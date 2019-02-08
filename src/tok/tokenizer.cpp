@@ -483,9 +483,9 @@ void Nfa::toDfa(Nfa &dfa) const {
       if(nextstate.size() == 0 )
         continue;
       Vector< Set<int> >::iterator iter = newstates.end();
-      for( Vector< Set<int> >::iterator cur = newstates.begin(), end = newstates.end(); cur != end; ++cur ) {
-        if( *cur == nextstate ) {
-          iter = cur;
+      for( Vector< Set<int> >::iterator curstate = newstates.begin(), endstate = newstates.end(); curstate != endstate; ++curstate ) {
+        if( *curstate == nextstate ) {
+          iter = curstate;
           break;
         }
       }
@@ -1241,7 +1241,7 @@ static void OutputDfaSource(FILE *out, const Nfa &dfa, const LanguageOutputter &
 
   lang.outDecl(out,"const int","tokenCount");
   fputs(" = ",out);
-  lang.outInt(out,,tokens.size());
+  lang.outInt(out,tokens.size());
   lang.outEndStmt(out);
   fputc('\n',out);
 

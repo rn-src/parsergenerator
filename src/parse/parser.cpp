@@ -46,6 +46,14 @@ void ParserDef::addProduction(Tokenizer &toks, Production *p) {
   m_productions.push_back(p);
 }
 
+void ParserDef::addLeftAssociativeForbids(ProductionSetDescriptor *p) {
+  // TODO
+}
+
+void ParserDef::addRightAssociativeForbids(ProductionSetDescriptor *p) {
+  // TODO
+}
+
 void ParserDef::addPrecedenceRuleForbids(const PrecedenceRule *rule) {
   // TODO
 }
@@ -363,12 +371,12 @@ static DisallowRule *ParseDisallowRule(Tokenizer &toks, ParserDef &parser) {
 static bool ParseParsePart(Tokenizer &toks, ParserDef &parser) {
   if( toks.peek() == pptok::TYPEDEF ) {
     ParseTypedefRule(toks,parser);
-  } else if( toks.peek() == pptok::LEFT_ASSOCIATIVE ) {
+  } else if( toks.peek() == pptok::LEFTASSOC ) {
     toks.discard();
     ProductionSetDescriptor *p = ParseProductionSet(toks,parser);
     parser.addLeftAssociativeForbids(p);
     delete p;
-  } else if( toks.peek() == pptok::RIGHT_ASSOCIATIVE ) {
+  } else if( toks.peek() == pptok::RIGHTASSOC ) {
     toks.discard();
     ProductionSetDescriptor *p = ParseProductionSet(toks,parser);
     parser.addRightAssociativeForbids(p);

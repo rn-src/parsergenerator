@@ -7,9 +7,9 @@
 		PRECEDENCE /PRECEDENCE/
 		REJECTABLE /REJECTABLE/
 		TYPEDEF    /TYPEDEF/
-		LEFTASSOC  /(l|left)-(assoc|associative)/
-		RIGHTASSOC /(r|right)-(assoc|associative)/
-		NONASSOC   /(n|non)-(assoc|associative)/
+		LEFTASSOC  /LEFT-ASSOCIATIVE/
+		RIGHTASSOC /RIGHT-ASSOCIATIVE/
+		NONASSOC   /NON-ASSOCIATIVE/
         ID         /[[:alpha:]_][[:alnum:]_]*/
         COLON      /:/
         SEMI       /;/
@@ -20,6 +20,7 @@ push b  LBRACE     /\{/
 		ARROW      /-+>/
 		GT         />/
 		DOT        /\./
+		ELIPSIS    /\.\.\./
 		STAR       /\*/
 		VSEP       /|/
 
