@@ -22,8 +22,6 @@ void closure(state_t &state, const ParserDef &parser) {
       productions = parser.productionsAt(*cur);
       for( Vector<Production*>::const_iterator curp = productions.begin(), endp = productions.end(); curp != endp; ++curp ) {
         ProductionState ps(*curp,0);
-        if( parser.isPartialReject(*cur) )
-          ps.m_items.insert(ps.m_items.end(),cur->m_items.begin(),cur->m_items.end());
         newparts.insert(ps);
       }
     }
@@ -34,7 +32,7 @@ void closure(state_t &state, const ParserDef &parser) {
 
 void nexts(const state_t &state, const ParserDef &parser, Set<int> &nextSymbols) {
   for( state_t::const_iterator curs = state.begin(), ends = state.end(); curs != ends; ++curs ) {
-    int symbol = curs->m_items[0].symbol();
+    int symbol = curs->symbol();
     if( symbol == -1 )
       continue;
     const SymbolDef &def = parser.m_tokdefs[symbol];
@@ -55,14 +53,14 @@ void advance(state_t &state, int tsymbol, const ParserDef &parser, state_t &next
   if( tdef.m_symboltype == SymbolTypeProduction )
     tnt = tdef.m_p->m_nt;
   for( state_t::const_iterator curs = state.begin(), ends = state.end(); curs != ends; ++curs ) {
-    int symbol = curs->m_items[0].symbol();
+    int symbol = curs->symbol();
     if( symbol == -1 )
       continue;
     const SymbolDef &def = parser.m_tokdefs[symbol];
     if( (def.m_symboltype == SymbolTypeTerminal && symbol == tsymbol) || (def.m_symboltype == SymbolTypeNonterminal && symbol == tnt) )
     {
       ProductionState ps(*curs);
-      ps.m_items[0].m_idx++;
+      ps.m_idx++;
       nextState.insert(ps);
     }
   }

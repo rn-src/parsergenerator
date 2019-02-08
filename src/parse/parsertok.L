@@ -17,12 +17,10 @@ push b  LBRACE     /\{/
         RBRACE     /\}/
         LBRKT      /\[/
         RBRKT      /\]/
-		AT         /@/
+		ARROW      /-+>/
 		GT         />/
-		EQ         /=/
 		DOT        /\./
 		STAR       /\*/
-		ELIPSIS    /\.\.\./
 		VSEP       /|/
 
 - section b

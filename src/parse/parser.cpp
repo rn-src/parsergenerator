@@ -46,6 +46,10 @@ void ParserDef::addProduction(Tokenizer &toks, Production *p) {
   m_productions.push_back(p);
 }
 
+void ParserDef::addPrecedenceRuleForbids(const PrecedenceRule *rule) {
+  // TODO
+}
+
 int ParserDef::findOrAddSymbolId(Tokenizer &toks, const String &s, SymbolType stype) {
   Map<String,int>::iterator iter = m_tokens.find(s);
   if( iter != m_tokens.end() ) {
@@ -78,88 +82,20 @@ int ParserDef::findOrAddSymbolId(Tokenizer &toks, const String &s, SymbolType st
 
 Vector<Production*> ParserDef::productionsAt(const ProductionState &ps) const {
   Vector<Production*> productions;
-  if( ps.m_items.size() == 0 )
-    return productions;
-  const ProductionStateItem &psi = ps.m_items[0];
-  if( psi.m_idx < psi.m_p->m_symbols.size() ) {
-    int symbol = psi.m_p->m_symbols[psi.m_idx];
+  if( ps.m_idx < ps.m_p->m_symbols.size() ) {
+    int symbol = ps.m_p->m_symbols[ps.m_idx];
     if( m_tokdefs.find(symbol)->second.m_symboltype == SymbolTypeNonterminal ) {
       for( Vector<Production*>::const_iterator cur = m_productions.begin(), end = m_productions.end(); cur != end; ++cur ) {
         Production *p = *cur;
         if( p->m_nt != symbol )
           continue;
-        if( ! isRejectedPlacement(ps,p) )
-          productions.push_back(p);
+        productions.push_back(p);
       }
     }
-  } else if( psi.m_idx == psi.m_p->m_symbols.size() ) {
+  } else if( ps.m_idx == ps.m_p->m_symbols.size() ) {
     // TODO get the follow productions?
   }
   return productions;
-}
-
-// What is a rejected placement?  A rejected placement means that the production is
-// not allowed at the production state because of a rejection rule.  The rejection
-// rule can either be explicit (including wildcard matches) or implicit because of
-// a precedence rule.
-bool ParserDef::isRejectedPlacement(const ProductionState &ps, Production *p) const {
-  if( ps.m_items.size() == 0 )
-    return false;
-  const ProductionStateItem &psi = ps.m_items[0];
-  for( Vector<PrecedenceRule*>::const_iterator cur = m_precedencerules.begin(), end = m_precedencerules.end(); cur != end; ++cur ) {
-    if( (*cur)->isRejectedPlacement(ps,p) )
-      return true;
-  }
-  for( Vector<DisallowRule*>::const_iterator cur = m_disallowrules.begin(), end = m_disallowrules.end(); cur != end; ++cur ) {
-    if( (*cur)->isRejectedPlacement(ps,p) )
-      return true;
-  }
-  return false;
-}
- 
-// What is a partial reject? A partical reject means that there is a production that
-// is not allowed at a production/index that is reachable, or more than one
-// production/index from the list of prouduction/indexes supplied.  Since we are
-// looking more than one deeper, predence rules are not a concern, they reach only
-// one deep.
-bool ParserDef::isPartialReject(const ProductionState &ps) const {
-  for( Vector<DisallowRule*>::const_iterator cur = m_disallowrules.begin(), end = m_disallowrules.end(); cur != end; ++cur ) {
-    if( (*cur)->isPartialReject(ps) )
-      return true;
-  }
-  return false;
-}
-
-bool PrecedenceRule::isRejectedPlacement(const ProductionState &ps, Production *p) const {
-  return false;
-}
-
-bool DisallowRule::isRejectedPlacement(const ProductionState &ps, Production *p) const {
-  if( ps.m_items.size() < m_ats.size() || (m_ats.size() == ps.m_items.size() && m_finalat))
-    return false;
-  if( ! m_disallowed->matchesProduction(p) )
-    return false;
-  Vector<ProductionStateItem>::const_iterator highps = ps.m_items.end()-1;
-  if( m_finalat && ! m_finalat->matchesProductionStateItem(*highps--) )
-    return false;
-  for( Vector<ProductionDescriptor*>::const_iterator lowat = m_ats.begin(), highat = m_ats.end()-1; highat >= lowat; --highat )
-    if( ! (*highat)->matchesProductionStateItem(*highps--) )
-      return false;
-  return true;
-}
-
-bool DisallowRule::isPartialReject(const ProductionState &ps) const {
-  if( ps.m_items.size() < m_ats.size() || (m_ats.size() == ps.m_items.size() && m_finalat))
-    return false;
-  if( m_finalat && ! m_finalat->matchesProductionStateItem(ps.m_items[ps.m_items.size()-1]) )
-    return false;
-  Vector<ProductionStateItem>::const_iterator lowps = ps.m_items.begin(), highps = ps.m_items.end()-1;
-  if( m_finalat && ! m_finalat->matchesProductionStateItem(*highps--) )
-    return false;
-  for( Vector<ProductionDescriptor*>::const_iterator lowat = m_ats.begin(), highat = m_ats.end()-1; highps >= lowps; --highat )
-    if( ! (*highat)->matchesProductionStateItem(*highps--) )
-      return false;
-  return true;
 }
 
 bool ProductionDescriptor::matchesProduction(Production *p) const {
@@ -198,8 +134,8 @@ static bool matchWildcard(Vector<int>::const_iterator wcsymfirst, Vector<int>::c
   return false;
 }
 
-bool ProductionDescriptor::matchesProductionStateItem(const ProductionStateItem &psi) const {
-  const Production *p = psi.m_p;
+bool ProductionDescriptor::matchesProductionState(const ProductionState &ps) const {
+  const Production *p = ps.m_p;
   // Rule must have '*' nonterminal or exact same nonterminal.
   if( m_nt != pptok::STAR && m_nt != p->m_nt )
     return false;
@@ -213,10 +149,10 @@ bool ProductionDescriptor::matchesProductionStateItem(const ProductionStateItem 
   if( idx == -1 )
     return false;
   // Match the stuff before the dot.
-  if( ! matchWildcard(m_symbols.begin(), m_symbols.begin()+idx, p->m_symbols.begin(), p->m_symbols.begin()+psi.m_idx) )
+  if( ! matchWildcard(m_symbols.begin(), m_symbols.begin()+idx, p->m_symbols.begin(), p->m_symbols.begin()+ps.m_idx) )
     return false;
   // Match the stuff after the dot.
-  if( ! matchWildcard(m_symbols.begin()+idx+1, m_symbols.end(), p->m_symbols.begin()+psi.m_idx, p->m_symbols.end()) )
+  if( ! matchWildcard(m_symbols.begin()+idx+1, m_symbols.end(), p->m_symbols.begin()+ps.m_idx, p->m_symbols.end()) )
     return false;
   return true;
 }
@@ -371,26 +307,12 @@ static void ParseTypedefRule(Tokenizer &toks, ParserDef &parser) {
   }
 }
 
-static PrecedencePart *ParsePrecedencePart(Tokenizer &toks, ParserDef &parser) {
-  PrecedencePart *prec = new PrecedencePart();
-  ProductionDescriptor *descriptor = ParseProductionDescriptor(toks,parser);
-  if( toks.peek() == pptok::LEFTASSOC ) {
-    prec->m_assoc = AssocLeft;
-    toks.discard();
-  } else if( toks.peek() == pptok::RIGHTASSOC ) {
-    prec->m_assoc = AssocRight;
-    toks.discard();
-  } else if( toks.peek() == pptok::NONASSOC ) {
-    prec->m_assoc = AssocNon;
-    toks.discard();
-  } else if( toks.peek() == pptok::DISALLOW ) {
-    prec->m_assoc = AssocByDisallow;
-    toks.discard();
-    if( toks.peek() != pptok::AT )
-      error(toks,"Expected @ after DISALLOW");
-    prec->m_disallowed = ParseProductionDescriptor(toks,parser);
-  } else
-    prec->m_assoc = AssocNull;
+static ProductionSetDescriptor *ParseProductionSet(Tokenizer &toks, ParserDef &parser) {
+  ProductionSetDescriptor *prec = new ProductionSetDescriptor();
+  ProductionDescriptor *descriptor = 0;
+  while( (descriptor = ParseProductionDescriptor(toks,parser)) != 0 ) {
+    prec->push_back(descriptor);
+  }
   return prec;
 }
 
@@ -398,18 +320,27 @@ static PrecedenceRule *ParsePrecedenceRule(Tokenizer &toks, ParserDef &parser) {
   if( toks.peek() != pptok::PRECEDENCE )
     return 0;
   toks.discard();
-  int localprecedence = 0;
   PrecedenceRule *rule = new PrecedenceRule();
-  PrecedencePart *part = ParsePrecedencePart(toks,parser);
-  while( toks.peek() == pptok::GT || toks.peek() == pptok::EQ ) {
-    if( toks.peek() == pptok::GT )
-      localprecedence++;
+  ProductionSetDescriptor *part = ParseProductionSet(toks,parser);
+  while( toks.peek() == pptok::GT ) {
     toks.discard();
-    PrecedencePart *part = ParsePrecedencePart(toks,parser);
-    part->m_localprecedence = localprecedence;
-    rule->m_parts.push_back(part);
+    ProductionSetDescriptor *part = ParseProductionSet(toks,parser);
+    rule->push_back(part);
   }
   return rule;
+}
+
+static DisallowProductionSetDescriptor *ParseDisallowProductionSeriesDescriptor(Tokenizer &toks, ParserDef &parser) {
+  ProductionSetDescriptor *psd = ParseProductionSet(toks,parser);
+  bool star = false;
+  if( toks.peek() == pptok::STAR ) {
+    star = true;
+    toks.discard();
+  }
+  DisallowProductionSetDescriptor *ret = new DisallowProductionSetDescriptor();
+  ret->m_descriptor = psd;
+  ret->m_star = star;
+  return ret;
 }
 
 static DisallowRule *ParseDisallowRule(Tokenizer &toks, ParserDef &parser) {
@@ -417,20 +348,14 @@ static DisallowRule *ParseDisallowRule(Tokenizer &toks, ParserDef &parser) {
     return 0;
   toks.discard();
   DisallowRule *rule = new DisallowRule();
-  rule->m_disallowed = ParseProductionDescriptor(toks,parser);
-  if( toks.peek() != pptok::AT )
-    error(toks,"expected @ in disallow rule");
+  rule->m_parts.push_back( ParseDisallowProductionSeriesDescriptor(toks,parser) );
+  if( toks.peek() != pptok::ARROW )
+    error(toks,"expected -> or -/-> in disallow rule");
   toks.discard();
-  rule->m_ats.push_back(ParseProductionDescriptor(toks,parser));
-  while( toks.peek() == pptok::AT ) {
+  rule->m_parts.push_back( ParseDisallowProductionSeriesDescriptor(toks,parser));
+  while( toks.peek() == pptok::ARROW ) {
+    rule->m_parts.push_back( ParseDisallowProductionSeriesDescriptor(toks,parser) );
     toks.discard();
-    if( toks.peek() == pptok::ELIPSIS ) {
-      toks.discard();
-      rule->m_finalat = ParseProductionDescriptor(toks,parser);
-      break;
-    } else {
-      rule->m_ats.push_back(ParseProductionDescriptor(toks,parser));
-    }
   }
   return rule;
 }
@@ -438,9 +363,20 @@ static DisallowRule *ParseDisallowRule(Tokenizer &toks, ParserDef &parser) {
 static bool ParseParsePart(Tokenizer &toks, ParserDef &parser) {
   if( toks.peek() == pptok::TYPEDEF ) {
     ParseTypedefRule(toks,parser);
+  } else if( toks.peek() == pptok::LEFT_ASSOCIATIVE ) {
+    toks.discard();
+    ProductionSetDescriptor *p = ParseProductionSet(toks,parser);
+    parser.addLeftAssociativeForbids(p);
+    delete p;
+  } else if( toks.peek() == pptok::RIGHT_ASSOCIATIVE ) {
+    toks.discard();
+    ProductionSetDescriptor *p = ParseProductionSet(toks,parser);
+    parser.addRightAssociativeForbids(p);
+    delete p;
   } else if( toks.peek() == pptok::PRECEDENCE ) {
     PrecedenceRule *p = ParsePrecedenceRule(toks,parser);
-    parser.m_precedencerules.push_back(p);
+    parser.addPrecedenceRuleForbids(p);
+    delete p;
   } else if( toks.peek() == pptok::DISALLOW ) {
     DisallowRule *d = ParseDisallowRule(toks,parser);
     parser.m_disallowrules.push_back(d);

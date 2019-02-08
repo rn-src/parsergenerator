@@ -1,8 +1,8 @@
 TYPEDEF double e ;
 
-PRECEDENCE [e : * e] >
-           [e : e TIMES e] left-assoc = [e : e DIV  e] left-assoc >
-           [e : e MINUS e] left-assoc = [e : e PLUS e] left-assoc ;
+LEFT-ASSOCIATIVE [e : e TIMES e][e : e DIV  e] ;
+LEFT-ASSOCIATIVE [e : e TIMES e][e : e DIV  e] ;
+PRECEDENCE [e : * e] > [e : e TIMES e][e : e DIV  e] > [e : e MINUS e][e : e PLUS e] ;
 
 <start> : e { fprintf(stdout, "%f",$1); }
         ;

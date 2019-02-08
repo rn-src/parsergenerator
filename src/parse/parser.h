@@ -17,31 +17,13 @@ public:
   Production(int symbolid, bool rejectable, int nt, const Vector<int> &symbols, String action);
 };
 
-enum Associativity {
-  AssocNull,
-  AssocLeft,
-  AssocRight,
-  AssocNon,
-  AssocByDisallow
-};
-
-class ProductionDescriptor;
-
-class PrecedencePart {
-public:
-  int m_localprecedence;
-  ProductionDescriptor *m_descriptor;
-  Associativity m_assoc;
-  ProductionDescriptor *m_disallowed;
-};
-
-class ProductionStateItem {
+class ProductionState {
 public:
   Production *m_p;
   int m_idx;
-  ProductionStateItem(Production *p, int idx) : m_p(p), m_idx(idx) {}
-  ProductionStateItem(const ProductionStateItem &rhs) : m_p(rhs.m_p), m_idx(rhs.m_idx) {}
-  bool operator<(const ProductionStateItem &rhs) const {
+  ProductionState(Production *p, int idx) : m_p(p), m_idx(idx) {}
+  ProductionState(const ProductionState &rhs) : m_p(rhs.m_p), m_idx(rhs.m_idx) {}
+  bool operator<(const ProductionState &rhs) const {
     if( m_p->m_nt < rhs.m_p->m_nt )
       return true;
     else if( rhs.m_p->m_nt < m_p->m_nt )
@@ -57,42 +39,27 @@ public:
   }
 };
 
-class ProductionState {
-public:
-  Vector<ProductionStateItem> m_items;
-  bool operator<(const ProductionState &rhs) const {
-    return m_items < rhs.m_items;
-  }
-  ProductionState() {}
-  ProductionState(const ProductionState &rhs) : m_items(rhs.m_items) {}
-  ProductionState(Production *p, int idx) {
-    m_items.push_back(ProductionStateItem(p,idx));
-  }
-};
-
 class ProductionDescriptor {
 public:
   int m_nt;
   Vector<int> m_symbols;
   ProductionDescriptor(int nt, Vector<int> symbols);
   bool matchesProduction(Production *p) const;
-  bool matchesProductionStateItem(const ProductionStateItem &rhs) const;
+  bool matchesProductionState(const ProductionState &rhs) const;
 };
 
-class PrecedenceRule {
+typedef Vector<ProductionDescriptor*> ProductionSetDescriptor;
+typedef Vector<ProductionSetDescriptor*> PrecedenceRule;
+
+class DisallowProductionSetDescriptor {
 public:
-  Vector<PrecedencePart*> m_parts;
-  bool isRejectedPlacement(const ProductionState &ps, Production *p) const;
+  ProductionSetDescriptor *m_descriptor;
+  bool m_star;
 };
 
 class DisallowRule {
 public:
-  ProductionDescriptor *m_disallowed;
-  Vector<ProductionDescriptor*> m_ats;
-  ProductionDescriptor *m_finalat;
-
-  bool isRejectedPlacement(const ProductionState &ps, Production *p) const;
-  bool isPartialReject(const ProductionState &ps) const;
+  Vector<DisallowProductionSetDescriptor*> m_parts;
 };
 
 enum SymbolType {
@@ -122,15 +89,15 @@ public:
   Map<String,int> m_tokens;
   Map<int,SymbolDef> m_tokdefs;
   Vector<Production*> m_productions;
-  Vector<PrecedenceRule*> m_precedencerules;
   Vector<DisallowRule*> m_disallowrules;
   void addProduction(Tokenizer &toks, Production *p);
+  void addLeftAssociativeForbids(ProductionSetDescriptor *p);
+  void addRightAssociativeForbids(ProductionSetDescriptor *p);
+  void addPrecedenceRuleForbids(const PrecedenceRule *rule);
   int findOrAddSymbolId(Tokenizer &toks, const String &s, SymbolType stype);
   int getStartNt() { return m_startnt; }
   Production *getStartProduction() const { return m_startProduction; }
   Vector<Production*> productionsAt(const ProductionState &ps) const;
-  bool isRejectedPlacement(const ProductionState &ps, Production *p) const;
-  bool isPartialReject(const ProductionState &ps) const;
 };
 
 class ParserError {
@@ -157,6 +124,7 @@ enum OutputLanguage {
 };
 
 void ParseParser(TokBuf *tokbuf, ParserDef &parser);
+bool NormalizeParser(const ParserDef &parserIn, ParserDef &parserOut);
 bool SolveParser(const ParserDef &parser, ParserSolution &solution);
 void OutputParserSolution(FILE *out, const ParserDef &parser, const ParserSolution &solution, OutputLanguage language);
 
