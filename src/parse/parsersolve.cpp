@@ -11,9 +11,7 @@ static bool error(const String &err) {
   return false;
 }
 
-typedef Set<ProductionState> state_t;
-
-void closure(state_t &state, ParserDef &parser) {
+void closure(state_t &state, const ParserDef &parser) {
   int prevsize = 0;
   Set<ProductionState> newparts;
   Vector<Production*> productions;
@@ -34,7 +32,7 @@ void closure(state_t &state, ParserDef &parser) {
   }
 }
 
-void nexts(const state_t &state, ParserDef &parser, Set<int> &nextSymbols) {
+void nexts(const state_t &state, const ParserDef &parser, Set<int> &nextSymbols) {
   for( state_t::const_iterator curs = state.begin(), ends = state.end(); curs != ends; ++curs ) {
     int symbol = curs->m_items[0].symbol();
     if( symbol == -1 )
@@ -50,7 +48,7 @@ void nexts(const state_t &state, ParserDef &parser, Set<int> &nextSymbols) {
   }
 }
 
-void advance(state_t &state, int tsymbol, ParserDef &parser, state_t &nextState) {
+void advance(state_t &state, int tsymbol, const ParserDef &parser, state_t &nextState) {
   nextState.clear();
   const SymbolDef &tdef = parser.m_tokdefs[tsymbol];
   int tnt = -1;
@@ -70,36 +68,39 @@ void advance(state_t &state, int tsymbol, ParserDef &parser, state_t &nextState)
   }
 }
 
-bool ComputeStates(ParserDef &parser) {
-  Vector<state_t> states;
+bool ComputeStates(const ParserDef &parser, ParserSolution &solution) {
   Map<state_t,int> statemap;
   state_t state, nextState;
   Set<int> nextSymbols;
   state.insert(ProductionState(parser.getStartProduction(),0));
   closure(state,parser);
-  statemap[state] = states.size();
-  states.push_back(state);
-  for( int i = 0; i < states.size(); ++i ) {
-    state = states[i];
+  statemap[state] = solution.m_states.size();
+  solution.m_states.push_back(state);
+  for( int i = 0; i < solution.m_states.size(); ++i ) {
+    state = solution.m_states[i];
+    int stateIdx = i;
     nexts(state,parser,nextSymbols);
     for( Set<int>::iterator cur = nextSymbols.begin(), end = nextSymbols.end(); cur != end; ++cur ) {
-      advance(state,*cur,parser,nextState);
+      int symbol = *cur;
+      advance(state,symbol,parser,nextState);
       closure(nextState,parser);
       if( nextState.empty() )
         continue;
       if( statemap.find(nextState) == statemap.end() ) {
-        statemap[nextState] = states.size();
-        states.push_back(nextState);
+        int nextStateIdx = solution.m_states.size();
+        statemap[nextState] = nextStateIdx;
+        solution.m_states.push_back(nextState);
+        solution.m_shifts[Pair<int,int>(stateIdx,nextStateIdx)].insert(symbol);
       }
     }
   }
   return true;
 }
 
-bool SolveParser(ParserDef &parser) {
+bool SolveParser(const ParserDef &parser, ParserSolution &solution) {
   if( ! parser.getStartProduction() )
     return error("The grammar definition requires a <start> production");
-  if( ! ComputeStates(parser) )
+  if( ! ComputeStates(parser,solution) )
     return error("failed to compute states");
   return true;
 }

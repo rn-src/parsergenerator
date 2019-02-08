@@ -1168,6 +1168,7 @@ public:
   virtual void outBool(FILE *out, bool b) const = 0;
   virtual void outStr(FILE *out, const char *str) const = 0;
   virtual void outChar(FILE *out, int c) const = 0;
+  virtual void outInt(FILE *out, int i) const = 0;
 };
 
 class CLanguageOutputter : public LanguageOutputter {
@@ -1200,6 +1201,7 @@ public:
     } else
       fprintf(out,"%d",c);
   }
+  virtual void outInt(FILE *out, int i) const  { fprintf(out,"%d",i); }
 };
 
 class JsLanguageOutputter : public LanguageOutputter {
@@ -1213,6 +1215,7 @@ public:
   virtual void outBool(FILE *out, bool b) const  { fputs((b ? "true" : "false"),out); }
   virtual void outStr(FILE *out, const char *str) const  { fputc('"',out); fputs(str,out); fputc('"',out); }
   virtual void outChar(FILE *out, int c) const  { fprintf(out,"%d",c); }
+  virtual void outInt(FILE *out, int i) const  { fprintf(out,"%d",i); }
 };
 
 LanguageOutputter *getLanguageOutputter(OutputLanguage language) {
@@ -1230,18 +1233,21 @@ static void OutputDfaSource(FILE *out, const Nfa &dfa, const LanguageOutputter &
 
   for( Vector<Token>::iterator cur = tokens.begin(), end = tokens.end(); cur != end; ++cur ) {
     lang.outDecl(out,"const int",cur->m_name.c_str());
-    fprintf(out," = %d",cur->m_token);
+    fprintf(out," = ",out);
+    lang.outInt(out,cur->m_token);
     lang.outEndStmt(out);
     fputc('\n',out);
   }
 
   lang.outDecl(out,"const int","tokenCount");
-  fprintf(out," = %d",tokens.size());
+  fputs(" = ",out);
+  lang.outInt(out,,tokens.size());
   lang.outEndStmt(out);
   fputc('\n',out);
 
   lang.outDecl(out,"const int","sectionCount");
-  fprintf(out," = %d", dfa.getSections());
+  fputs(" = ",out);
+  lang.outInt(out,dfa.getSections());
   lang.outEndStmt(out);
   fputc('\n',out);
 
@@ -1261,7 +1267,9 @@ static void OutputDfaSource(FILE *out, const Nfa &dfa, const LanguageOutputter &
         fputs("0,-1",out);
       } else {
         const Action &action = actioniter->second;
-        fprintf(out,"%d,%d",action.m_action,action.m_actionarg);
+        lang.outInt(out,action.m_action);
+        fputc(',',out);
+        lang.outInt(out,action.m_actionarg);
       }
     }
   }
@@ -1300,7 +1308,8 @@ static void OutputDfaSource(FILE *out, const Nfa &dfa, const LanguageOutputter &
   fputc('\n',out);
 
   lang.outDecl(out,"const int","stateCount");
-  fprintf(out," = %d",dfa.stateCount());
+  fputs(" = ",out);
+  lang.outInt(out,dfa.stateCount());
   lang.outEndStmt(out);
   fputc('\n',out);
 
@@ -1320,7 +1329,9 @@ static void OutputDfaSource(FILE *out, const Nfa &dfa, const LanguageOutputter &
       first = false;
     else
       fputc(',',out);
-    fprintf(out,"%d,%d",transition.m_to,ranges.size());
+    lang.outInt(out,transition.m_to);
+    fputc(',',out);
+    lang.outInt(out,ranges.size());
     for( CharSet::iterator cur = ranges.begin(), end = ranges.end(); cur != end; ++cur ) {
       fputc(',',out);
       lang.outChar(out,cur->m_low);
@@ -1342,7 +1353,7 @@ static void OutputDfaSource(FILE *out, const Nfa &dfa, const LanguageOutputter &
       first = false;
     else
       fputc(',',out);
-    fprintf(out,"%d",offset);
+    lang.outInt(out,offset);
     if( transitioncounts.find(i) != transitioncounts.end() )
       offset += transitioncounts[i];
   }
@@ -1350,7 +1361,7 @@ static void OutputDfaSource(FILE *out, const Nfa &dfa, const LanguageOutputter &
     first = false;
   else
     fputc(',',out);
-  fprintf(out,"%d",offset);
+  lang.outInt(out,offset);
   lang.outEndArray(out);
   lang.outEndStmt(out);
   fputc('\n',out);
@@ -1365,7 +1376,7 @@ static void OutputDfaSource(FILE *out, const Nfa &dfa, const LanguageOutputter &
     else
       fputc(',',out);
     int tok = dfa.getStateToken(i);
-    fprintf(out,"%d",tok);
+    lang.outInt(out,tok);
   }
   lang.outEndArray(out);
   lang.outEndStmt(out);

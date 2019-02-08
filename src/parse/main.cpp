@@ -9,8 +9,9 @@ int main(int argc, char *argv[]) {
   } catch(ParserError &pe) {
     fprintf(stderr, "<stdin>(%d:%d) : %s", pe.m_line, pe.m_col, pe.m_err.c_str());
   }
-  if( ! SolveParser(parser) )
+  ParserSolution solution;
+  if( ! SolveParser(parser, solution) )
     return 0;
-  OutputParser(parser);
+  OutputParserSolution(stdout, parser, solution, LanguageC);
   return 0;
 }

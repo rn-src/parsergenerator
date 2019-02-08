@@ -240,6 +240,13 @@ public:
   Pair(const T &f, const T2 &s) : first(f), second(s) {}
   T  first;
   T2 second;
+  bool operator<(const Pair<T,T2> &rhs) const {
+    if( first < rhs.first )
+      return true;
+    else if( rhs.first < first )
+      return false;
+    return second < rhs.second;
+  }
 };
 
 template<class T>
@@ -383,6 +390,14 @@ public:
     if( found )
       return m_entries[idx].second;
     return m_entries.insert(begin()+idx,Pair<T,T2>(key,T2()))->second;
+  }
+  const T2 &operator[](const T &key) const {
+    bool found = false;
+    int idx = findIdx(key,found);
+    if( found )
+      return m_entries[idx].second;
+    // uh oh. boom
+    return m_entries.end()->second;
   }
 };
 

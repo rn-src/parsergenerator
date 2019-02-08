@@ -140,8 +140,24 @@ public:
   ParserError(int line, int col, const String &err) : m_line(line), m_col(col), m_err(err) {}
 };
 
+typedef Set<ProductionState> state_t;
+
+class ParserSolution {
+public:
+  Vector<state_t> m_states;
+  // statesrc,statedst -> symbols
+  Map< Pair<int,int>,Set<int> > m_shifts;
+  // statesrc,ruleno -> symbols
+  Map< Pair<int,int>,Set<int> > m_reductions;
+};
+
+enum OutputLanguage {
+  LanguageJs,
+  LanguageC
+};
+
 void ParseParser(TokBuf *tokbuf, ParserDef &parser);
-bool SolveParser(ParserDef &parser);
-void OutputParser(ParserDef &parser);
+bool SolveParser(const ParserDef &parser, ParserSolution &solution);
+void OutputParserSolution(FILE *out, const ParserDef &parser, const ParserSolution &solution, OutputLanguage language);
 
 #endif /* __parser_h */
