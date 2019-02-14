@@ -149,7 +149,7 @@ public:
   int getSections() const;
   void setSections(int sections);
   void clear();
-  void closure(const Map<int,Set<int>> &emptytransitions, Set<int> &states) const;
+  void closure(const Map<int,Set<int> > &emptytransitions, Set<int> &states) const;
   void follow( const CharRange &range, const Set<int> &states, Set<int> &nextstates ) const;
   void stateTransitions(const Set<int> &states, CharSet &transitions) const;
   bool hasEndState(const Set<int> &states) const;

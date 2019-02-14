@@ -4,6 +4,7 @@
 
 #include <new>
 #include <string.h>
+#include <stdlib.h>
 
 class String {
 protected:
@@ -124,8 +125,8 @@ public:
     insert(end(),rhs.begin(),rhs.end());
     return *this;
   }
-  typedef typename const T *const_iterator;
-  typedef typename T *iterator;
+  typedef const T *const_iterator;
+  typedef T *iterator;
   iterator begin() { return m_p; }
   iterator end() { return m_p+m_size; }
   const_iterator begin() const { return m_p; }

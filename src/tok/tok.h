@@ -3,7 +3,7 @@
 
 #include <stdio.h>
 #include <string.h>
-#include "..\tok\tinytemplates.h"
+#include "tinytemplates.h"
 
 class TokBuf {
   char *m_buf;

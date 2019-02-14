@@ -410,7 +410,7 @@ void Nfa::closure(const Map<int,Set<int> > &emptytransitions, Set<int> &states) 
   vecstates.insert(vecstates.end(),nextstates.begin(),nextstates.end());
   for( int i = 0; i < vecstates.size(); ++i )
   {
-    Map<int,Set<int>>::const_iterator e = emptytransitions.find(vecstates[i]);
+    Map<int,Set<int> >::const_iterator e = emptytransitions.find(vecstates[i]);
     if( e == emptytransitions.end() )
       continue;
     const Set<int> &intset = e->second;
@@ -1233,7 +1233,7 @@ static void OutputDfaSource(FILE *out, const Nfa &dfa, const LanguageOutputter &
 
   for( Vector<Token>::iterator cur = tokens.begin(), end = tokens.end(); cur != end; ++cur ) {
     lang.outDecl(out,"const int",cur->m_name.c_str());
-    fprintf(out," = ",out);
+    fputs(" = ",out);
     lang.outInt(out,cur->m_token);
     lang.outEndStmt(out);
     fputc('\n',out);
