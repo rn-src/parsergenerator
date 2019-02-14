@@ -18,9 +18,9 @@ push b  LBRACE     /\{/
         LBRKT      /\[/
         RBRKT      /\]/
 		ARROW      /-+>/
+		NOTARROW   /-+\/-+>/
 		GT         />/
 		DOT        /\./
-		ELIPSIS    /\.\.\./
 		STAR       /\*/
 		VSEP       /|/
 

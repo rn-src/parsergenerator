@@ -3,7 +3,6 @@
 
 int main(int argc, char *argv[]) {
   ParserDef parser;
-  ParserDef parserNormal;
   try {
     TokBuf tokbuf(stdin);
     ParseParser(&tokbuf,parser);
@@ -11,7 +10,7 @@ int main(int argc, char *argv[]) {
     fprintf(stderr, "<stdin>(%d:%d) : %s", pe.m_line, pe.m_col, pe.m_err.c_str());
   }
   ParserSolution solution;
-  if( ! NormalizeParser(parser, parserNormal) )
+  if( ! NormalizeParser(parser) )
     return 0;
   if( ! SolveParser(parser, solution) )
     return 0;

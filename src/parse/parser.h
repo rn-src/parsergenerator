@@ -43,23 +43,69 @@ class ProductionDescriptor {
 public:
   int m_nt;
   Vector<int> m_symbols;
+  ProductionDescriptor() {}
   ProductionDescriptor(int nt, Vector<int> symbols);
-  bool matchesProduction(Production *p) const;
-  bool matchesProductionState(const ProductionState &rhs) const;
+  bool matchesProduction(const Production *p) const;
+  // Check if, ignoring dots, the productions are the same
+  bool hasSameProductionAs(const ProductionDescriptor &rhs) const;
+  // Add dots from rhs to this descriptor.  Fail if not same production.
+  bool addDotsFrom(const ProductionDescriptor &rhs);
+  bool operator<(const ProductionDescriptor &rhs) const;
+  ProductionDescriptor *clone() const;
+  bool operator==(const ProductionDescriptor &rhs) const {
+    return m_nt == rhs.m_nt && m_symbols == rhs.m_symbols;
+  }
+  bool operator!=(const ProductionDescriptor &rhs) const {
+    return ! operator==(rhs);
+  }
 };
 
-typedef Vector<ProductionDescriptor*> ProductionSetDescriptor;
-typedef Vector<ProductionSetDescriptor*> PrecedenceRule;
-
-class DisallowProductionSetDescriptor {
+class ProductionDescriptors {
 public:
-  ProductionSetDescriptor *m_descriptor;
+  Vector<ProductionDescriptor*> m_descriptors;
+  typedef Vector<ProductionDescriptor*>::iterator iterator;
+  typedef Vector<ProductionDescriptor*>::const_iterator const_iterator;
+  iterator begin() { return m_descriptors.begin(); }
+  const_iterator begin() const { return m_descriptors.begin(); }
+  iterator end() { return m_descriptors.end(); }
+  const_iterator end() const { return m_descriptors.end(); }
+  void push_back(ProductionDescriptor *p) { m_descriptors.push_back(p); }
+  void consolidateRules();
+  ProductionDescriptors *clone() const;
+  bool operator==(const ProductionDescriptors &rhs) const {
+    if( m_descriptors.size() != rhs.m_descriptors.size() )
+      return false;
+    for( int i = 0, n = m_descriptors.size(); i < n; ++i )
+      if( *m_descriptors[i] != *rhs.m_descriptors[i] )
+        return false;
+    return true;
+  }
+  bool operator!=(const ProductionDescriptors &rhs) const {
+    return ! operator==(rhs);
+  }
+};
+
+typedef Vector<ProductionDescriptors*> PrecedenceRule;
+
+class DisallowProductionDescriptors {
+public:
+  ProductionDescriptors *m_descriptors;
   bool m_star;
+  bool operator==(const DisallowProductionDescriptors &rhs) const {
+    return m_star == rhs.m_star && *m_descriptors == *rhs.m_descriptors;
+  }
+  bool operator!=(const DisallowProductionDescriptors &rhs) const {
+    return ! operator==(rhs);
+  }
 };
 
 class DisallowRule {
 public:
-  Vector<DisallowProductionSetDescriptor*> m_parts;
+  ProductionDescriptors *m_lead;
+  Vector<DisallowProductionDescriptors*> m_intermediates;
+  ProductionDescriptors *m_disallowed;
+  bool canCombineWith(const DisallowRule &rhs) const;
+  bool combineWith(const DisallowRule &rhs);
 };
 
 enum SymbolType {
@@ -80,6 +126,19 @@ public:
   SymbolDef(int tokid, const String &name, SymbolType symboltype) : m_tokid(tokid), m_name(name), m_symboltype(symboltype), m_p(0) {}
 };
 
+enum Assoc {
+  AssocLeft,
+  AssocRight,
+  AssocNon
+};
+
+class AssociativeRule {
+public:
+  Assoc m_assoc;
+  ProductionDescriptors *m_p;
+  AssociativeRule(Assoc assoc, ProductionDescriptors *p) : m_assoc(assoc), m_p(p) {}
+};
+
 class ParserDef {
   int m_nextsymbolid;
   int m_startnt;
@@ -90,14 +149,16 @@ public:
   Map<int,SymbolDef> m_tokdefs;
   Vector<Production*> m_productions;
   Vector<DisallowRule*> m_disallowrules;
+  Vector<AssociativeRule*> m_assocrules;
+  Vector<PrecedenceRule*> m_precrules;
   void addProduction(Tokenizer &toks, Production *p);
-  void addLeftAssociativeForbids(ProductionSetDescriptor *p);
-  void addRightAssociativeForbids(ProductionSetDescriptor *p);
-  void addPrecedenceRuleForbids(const PrecedenceRule *rule);
   int findOrAddSymbolId(Tokenizer &toks, const String &s, SymbolType stype);
   int getStartNt() { return m_startnt; }
   Production *getStartProduction() const { return m_startProduction; }
   Vector<Production*> productionsAt(const ProductionState &ps) const;
+  bool expandAssocRules(String &err);
+  bool expandPrecRules(String &err);
+  bool combineRules(String &err);
 };
 
 class ParserError {
@@ -124,7 +185,7 @@ enum OutputLanguage {
 };
 
 void ParseParser(TokBuf *tokbuf, ParserDef &parser);
-bool NormalizeParser(const ParserDef &parserIn, ParserDef &parserOut);
+bool NormalizeParser(ParserDef &parser);
 bool SolveParser(const ParserDef &parser, ParserSolution &solution);
 void OutputParserSolution(FILE *out, const ParserDef &parser, const ParserSolution &solution, OutputLanguage language);
 
