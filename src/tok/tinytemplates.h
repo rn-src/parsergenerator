@@ -308,6 +308,9 @@ public:
       return begin()+idx;
     return m_values.insert(begin()+idx,value);
   }
+  iterator erase(iterator iter) {
+    return m_values.erase(iter);
+  }
   template<class Iter>
   void insert(Iter first, Iter last) {
     while( first != last ) {

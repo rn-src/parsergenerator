@@ -12,9 +12,9 @@ public:
   int m_nt;
   Vector<int> m_symbols;
   String m_action;
-  int m_symbolid;
 
-  Production(int symbolid, bool rejectable, int nt, const Vector<int> &symbols, String action);
+  Production(bool rejectable, int nt, const Vector<int> &symbols, String action);
+  Production *clone();
 };
 
 class ProductionState {
@@ -45,7 +45,7 @@ public:
   Vector<int> m_symbols;
   ProductionDescriptor() {}
   ProductionDescriptor(int nt, Vector<int> symbols);
-  bool matchesProduction(const Production *p) const;
+  bool matchesProduction(const Production *p, bool useBaseTokId) const;
   // Check if, ignoring dots, the productions are the same
   bool hasSameProductionAs(const ProductionDescriptor &rhs) const;
   // Add dots from rhs to this descriptor.  Fail if not same production.
@@ -83,6 +83,12 @@ public:
   bool operator!=(const ProductionDescriptors &rhs) const {
     return ! operator==(rhs);
   }
+  bool matchesProduction(const Production *lhs, bool useBaseTokId) const {
+    for( const_iterator c = begin(), e = end(); c != e; ++c )
+     if( (*c)->matchesProduction(lhs,useBaseTokId) )
+       return true;
+    return false;
+  }
 };
 
 typedef Vector<ProductionDescriptors*> PrecedenceRule;
@@ -111,19 +117,19 @@ public:
 enum SymbolType {
   SymbolTypeUnknown,
   SymbolTypeTerminal,
-  SymbolTypeNonterminal,
-  SymbolTypeProduction
+  SymbolTypeNonterminal
 };
 
 class SymbolDef {
 public:
   int m_tokid;
+  int m_basetokid;
   String m_name;
   SymbolType m_symboltype;
   String m_semantictype;
   Production *m_p;
-  SymbolDef() : m_tokid(-1), m_symboltype(SymbolTypeUnknown), m_p(0) {}
-  SymbolDef(int tokid, const String &name, SymbolType symboltype) : m_tokid(tokid), m_name(name), m_symboltype(symboltype), m_p(0) {}
+  SymbolDef() : m_tokid(-1), m_basetokid(-1), m_symboltype(SymbolTypeUnknown), m_p(0) {}
+  SymbolDef(int tokid, const String &name, SymbolType symboltype, int basetokid) : m_tokid(tokid), m_basetokid(basetokid), m_name(name), m_symboltype(symboltype), m_p(0) {}
 };
 
 enum Assoc {
@@ -152,13 +158,18 @@ public:
   Vector<AssociativeRule*> m_assocrules;
   Vector<PrecedenceRule*> m_precrules;
   void addProduction(Tokenizer &toks, Production *p);
-  int findOrAddSymbolId(Tokenizer &toks, const String &s, SymbolType stype);
+  bool addProduction(Production *p);
+  int findSymbolId(const String &s) const;
+  int addSymbolId(const String &s, SymbolType stype, int basetokid);
+  int findOrAddSymbolId(Tokenizer &toks, const String &s, SymbolType stype, int basetokid);
   int getStartNt() { return m_startnt; }
+  int getBaseTokId(int s) const;
   Production *getStartProduction() const { return m_startProduction; }
-  Vector<Production*> productionsAt(const ProductionState &ps) const;
+  Vector<Production*> productionsAt(const Production *p, int idx) const;
   bool expandAssocRules(String &err);
   bool expandPrecRules(String &err);
   bool combineRules(String &err);
+  SymbolType getSymbolType(int tok) const;
 };
 
 class ParserError {

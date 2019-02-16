@@ -99,7 +99,11 @@ ProductionDescriptor *ProductionDescriptor::clone() const {
   return ret;
 }
 
-Production::Production(int symbolid, bool rejectable, int nt, const Vector<int> &symbols, String action) : m_symbolid(symbolid), m_rejectable(rejectable), m_nt(nt), m_symbols(symbols), m_action(action) {}
+Production::Production(bool rejectable, int nt, const Vector<int> &symbols, String action) : m_rejectable(rejectable), m_nt(nt), m_symbols(symbols), m_action(action) {}
+
+Production *Production::clone() {
+  return new Production(m_rejectable, m_nt, m_symbols, m_action);
+}
 
 void error(Tokenizer &toks, const String &err) {
   throw ParserError(toks.line(),toks.col(),err);
@@ -114,7 +118,43 @@ void ParserDef::addProduction(Tokenizer &toks, Production *p) {
   m_productions.push_back(p);
 }
 
-int ParserDef::findOrAddSymbolId(Tokenizer &toks, const String &s, SymbolType stype) {
+bool ParserDef::addProduction(Production *p) {
+  if( p->m_nt == m_startnt ) {
+    if( m_startProduction )
+      return false;
+    m_startProduction = p;
+  }
+  m_productions.push_back(p);
+  return true;
+}
+
+SymbolType ParserDef::getSymbolType(int tok) const {
+  if( m_tokdefs.find(tok) == m_tokdefs.end() )
+    return SymbolTypeUnknown;
+  return m_tokdefs[tok].m_symboltype;
+}
+
+int ParserDef::findSymbolId(const String &s) const {
+  Map<String,int>::const_iterator iter = m_tokens.find(s);
+  if( iter == m_tokens.end() )
+    return -1;
+  return iter->second;
+}
+
+int ParserDef::addSymbolId(const String &s, SymbolType stype, int basetokid) {
+  Map<String,int>::iterator iter = m_tokens.find(s);
+  if( iter != m_tokens.end() )
+    return -1;
+  String name(s);
+  int tokid = m_nextsymbolid++;
+  m_tokens[s] = tokid;
+  m_tokdefs[tokid] = SymbolDef(tokid, name, stype, basetokid);
+  if( strcmp(name.c_str(),"<start>") == 0 )
+    m_startnt = tokid;
+  return tokid;
+ } 
+
+int ParserDef::findOrAddSymbolId(Tokenizer &toks, const String &s, SymbolType stype, int basetokid) {
   Map<String,int>::iterator iter = m_tokens.find(s);
   if( iter != m_tokens.end() ) {
     int tokid = iter->second;
@@ -129,8 +169,6 @@ int ParserDef::findOrAddSymbolId(Tokenizer &toks, const String &s, SymbolType st
         error(toks,String("Attempted to turn Nonterminal ")+symboldef.m_name+"into a Terminal");
       else if( symboldef.m_symboltype == SymbolTypeTerminal )
         error(toks,String("Attempted to turn Terminal ")+symboldef.m_name+"into a NonTerminal");
-      else if( symboldef.m_symboltype == SymbolTypeProduction )
-        error(toks,String("Attempted to turn Production ")+symboldef.m_name+"into something else");
       symboldef.m_symboltype = stype;
     }
     return tokid;
@@ -138,17 +176,28 @@ int ParserDef::findOrAddSymbolId(Tokenizer &toks, const String &s, SymbolType st
   String name(s);
   int tokid = m_nextsymbolid++;
   m_tokens[s] = tokid;
-  m_tokdefs[tokid] = SymbolDef(tokid, name, stype);
+  m_tokdefs[tokid] = SymbolDef(tokid, name, stype, basetokid);
   if( strcmp(name.c_str(),"<start>") == 0 )
     m_startnt = tokid;
   return tokid;
 }
 
-Vector<Production*> ParserDef::productionsAt(const ProductionState &ps) const {
+int ParserDef::getBaseTokId(int s) const {
+  Map<int,SymbolDef>::const_iterator iter = m_tokdefs.find(s);
+  while( iter != m_tokdefs.end() ) {
+    if( iter->second.m_basetokid == -1 )
+      return s;
+    s = iter->second.m_basetokid;
+    iter = m_tokdefs.find(s);
+  }
+  return -1;
+}
+
+Vector<Production*> ParserDef::productionsAt(const Production *p, int idx) const {
   Vector<Production*> productions;
-  if( ps.m_idx < ps.m_p->m_symbols.size() ) {
-    int symbol = ps.m_p->m_symbols[ps.m_idx];
-    if( m_tokdefs.find(symbol)->second.m_symboltype == SymbolTypeNonterminal ) {
+  if( idx >= p->m_symbols.size() ) {
+    int symbol = p->m_symbols[idx];
+    if( getSymbolType(symbol) == SymbolTypeNonterminal ) {
       for( Vector<Production*>::const_iterator cur = m_productions.begin(), end = m_productions.end(); cur != end; ++cur ) {
         Production *p = *cur;
         if( p->m_nt != symbol )
@@ -156,8 +205,6 @@ Vector<Production*> ParserDef::productionsAt(const ProductionState &ps) const {
         productions.push_back(p);
       }
     }
-  } else if( ps.m_idx == ps.m_p->m_symbols.size() ) {
-    // TODO get the follow productions?
   }
   return productions;
 }
@@ -257,7 +304,7 @@ bool ParserDef::combineRules(String &err) {
   return true;
 }
 
-bool ProductionDescriptor::matchesProduction(const Production *p) const {
+bool ProductionDescriptor::matchesProduction(const Production *p, bool useBaseTokId) const {
   // '.' is ignored for matching purposes.
   if( m_nt != p->m_nt )
     return false;
@@ -279,7 +326,7 @@ static int ParseNonterminal(Tokenizer &toks, ParserDef &parser) {
   if( toks.peek() == pptok::START || toks.peek() == pptok::ID ) {
     String s = toks.tokstr();
     toks.discard();
-    return parser.findOrAddSymbolId(toks, s, SymbolTypeNonterminal);
+    return parser.findOrAddSymbolId(toks, s, SymbolTypeNonterminal, -1);
   }
   return -1;
 }
@@ -288,7 +335,7 @@ static int ParseSymbol(Tokenizer &toks, ParserDef &parser) {
   if( toks.peek() == pptok::ID ) {
     String s= toks.tokstr();
     toks.discard();
-    return parser.findOrAddSymbolId(toks, s, SymbolTypeUnknown);
+    return parser.findOrAddSymbolId(toks, s, SymbolTypeUnknown, -1);
   }
   return -1;
 }
@@ -342,9 +389,7 @@ static Vector<Production*> ParseProduction(Tokenizer &toks, ParserDef &parser) {
     char buf[64];
     sprintf(buf,"Production-%d",parser.m_productions.size()+1);
     String productionName = buf;
-    int productionId = parser.findOrAddSymbolId(toks,productionName,SymbolTypeProduction);
-    Production *p = new Production(productionId,rejectable,nt,symbols,action);
-    parser.m_tokdefs[productionId].m_p = p;
+    Production *p = new Production(rejectable,nt,symbols,action);
     productions.push_back(p);
     if( toks.peek() != pptok::VSEP )
       break;
@@ -655,7 +700,7 @@ static void ParseStart(Tokenizer &toks, ParserDef &parser) {
 void ParseParser(TokBuf *tokbuf, ParserDef &parser) {
   Tokenizer toks(tokbuf,&pptok::pptokinfo);
   for( int i = 0, n = pptok::pptokinfo.m_tokenCount; i < n; ++i )
-    parser.findOrAddSymbolId(toks, pptok::pptokinfo.m_tokenstr[i], SymbolTypeTerminal);
+    parser.findOrAddSymbolId(toks, pptok::pptokinfo.m_tokenstr[i], SymbolTypeTerminal, -1);
   ParseStart(toks,parser);
   if( toks.peek() != -1 )
     error(toks,"Expected EOF");
