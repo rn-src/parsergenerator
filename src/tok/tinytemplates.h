@@ -301,6 +301,11 @@ public:
       return begin()+idx;
     return end();
   }
+  bool contains(const  T &value) const {
+    bool found = false;
+    int idx = findIndex(value,found);
+    return found;
+  }
   iterator insert(const T &value) {
     bool found =false;
     int idx = findIndex(value,found);
@@ -325,6 +330,9 @@ public:
       if( *cur < *rhscur || *rhscur < *cur )
         return false;
     return true;
+  }
+  bool operator!=(const Set<T> &rhs) const {
+    return !operator==(rhs);
   }
   bool operator<(const Set<T> &rhs) const {
     return m_values < rhs.m_values;
@@ -381,6 +389,11 @@ public:
     if( found )
       return begin()+idx;
     return end();
+  }
+  bool contains(const T &key) const {
+    bool found =false;
+    int idx = findIdx(key,found);
+    return found;
   }
   iterator erase(const T &key) {
     iterator iter = find(key);

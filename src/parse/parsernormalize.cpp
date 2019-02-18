@@ -37,17 +37,22 @@ public:
     }
     return false;
   }
+  bool operator<(const ForbidDescriptor &rhs) const {
+    if( m_forbidden < rhs.m_forbidden )
+      return true;
+    return false;
+  }
 };
 
-typedef Vector<ForbidDescriptor> ForbidDescriptors;
+typedef Set<ForbidDescriptor> ForbidDescriptors;
 
 typedef Map<int,ForbidDescriptors> StateToForbids;
 
 class ForbidSub {
 public:
-  ProductionDescriptors *m_lhs, *m_rhs;
+  const ProductionDescriptors *m_lhs, *m_rhs;
   ForbidSub() : m_lhs(0), m_rhs(0) {}
-  ForbidSub(ProductionDescriptors *lhs, ProductionDescriptors *rhs) : m_lhs(lhs), m_rhs(rhs) {}
+  ForbidSub(const ProductionDescriptors *lhs, const ProductionDescriptors *rhs) : m_lhs(lhs), m_rhs(rhs) {}
   ForbidSub(const ForbidSub &rhs) : m_lhs(rhs.m_lhs), m_rhs(rhs.m_rhs) {}
 
   bool operator<(const ForbidSub &rhs) const {
@@ -83,7 +88,7 @@ public:
     m_emptytransitions[s0].insert(s1);
   }
 
-  void addTransition(int s0, int s1, ProductionDescriptors *subLhs, ProductionDescriptors *subRhs) {
+  void addTransition(int s0, int s1, const ProductionDescriptors *subLhs, const ProductionDescriptors *subRhs) {
     m_transitions[s0][ForbidSub(subLhs,subRhs)].insert(s1);
   }
 
@@ -175,26 +180,60 @@ public:
         multistate.insert(nextstates.begin(), nextstates.end());
       }
     } while( multistate != nextmultistate );
-    return nextmultistate;
+    multistate = nextmultistate;
   }
 
   void toDeterministicForbidAutomata(ForbidAutomata &out) {
     Vector< Set<int> > states;
     Map< Set<int>, int > multi2state;
-    states.push_back(Set<int>());
-    states[0].insert(0);
-    closure(states[0]);
+    Set<int> initstate;
+    closure(initstate);
+    multi2state[initstate] = out.newstate();
+    states.push_back(initstate);
     for( int i = 0; i < states.size(); ++i ) {
       Set<int> &multistate = states[i];
+      ForbidDescriptors forbids;
       Set<ForbidSub> symbols;
-      // TODO
       for( Set<int>::const_iterator curstate = multistate.begin(), endstate = multistate.end(); curstate != endstate; ++curstate ) {
         int state = *curstate;
-        Set<ForbidSub> statesymbols = m_forbids[state];
-        symbols.insert(statesymbols.begin(), statesymbols.end());
+        if( m_statetoforbids.contains(state) ) {
+          const ForbidDescriptors &stateforbids = m_statetoforbids[state];
+          forbids.insert(stateforbids.begin(), stateforbids.end());
+        }
+        if( m_transitions.contains(state) ) {
+          const Map<ForbidSub,Set<int> > &statetransitions = m_transitions[state];
+          for( Map<ForbidSub,Set<int> >::const_iterator curtrans = statetransitions.begin(), endtrans = statetransitions.end(); curtrans != endtrans; ++curtrans )
+            symbols.insert(curtrans->first);
+        }
       }
-      int state = out.nextstate();
-      multi2state[multistate] = state;
+      out.m_statetoforbids[i] = forbids;
+      
+      for( Set<ForbidSub>::const_iterator cursym = symbols.begin(), endsym = symbols.end(); cursym != endsym; ++cursym ) {
+        Set<int> nextstate;
+        const ForbidSub &sub = *cursym;
+        for( Set<int>::const_iterator curstate = multistate.begin(), endstate = multistate.end(); curstate != endstate; ++curstate ) {
+          int state = *curstate;
+          if( m_transitions.contains(state) ) {
+            const Map<ForbidSub,Set<int> > &statetransitions = m_transitions[state];
+            if( statetransitions.contains(sub) ) {
+              const Set<int> &nxtstates = statetransitions[sub];
+              nextstate.insert(nxtstates.begin(),nxtstates.end());
+            }
+          }
+        }
+        closure(nextstate);
+        int nextStateNo = -1;
+        if( ! multi2state.contains(nextstate) ) {
+          nextStateNo = out.newstate();
+          multi2state[nextstate] = nextStateNo;
+          states.push_back(nextstate);
+        } else
+          nextStateNo = multi2state[nextstate];
+        if( nextStateNo == 0 ) {
+         // no need to add transition, default is transition to 0
+        } else
+          out.addTransition(i,nextStateNo,sub.m_lhs,sub.m_rhs);
+      } 
     }
   }
 };
