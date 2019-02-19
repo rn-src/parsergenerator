@@ -174,9 +174,14 @@ public:
 
 class ParserError {
 public:
-  int m_line, m_col;
   String m_err;
-  ParserError(int line, int col, const String &err) : m_line(line), m_col(col), m_err(err) {}
+  ParserError(const String &err) : m_err(err) {}
+};
+
+class ParserErrorWithLineCol : public ParserError {
+public:
+  int m_line, m_col;
+  ParserErrorWithLineCol(int line, int col, const String &err) : ParserError(err), m_line(line), m_col(col) {}
 };
 
 typedef Set<ProductionState> state_t;
@@ -196,8 +201,8 @@ enum OutputLanguage {
 };
 
 void ParseParser(TokBuf *tokbuf, ParserDef &parser);
-bool NormalizeParser(ParserDef &parser);
-bool SolveParser(const ParserDef &parser, ParserSolution &solution);
+void NormalizeParser(ParserDef &parser);
+void SolveParser(const ParserDef &parser, ParserSolution &solution);
 void OutputParserSolution(FILE *out, const ParserDef &parser, const ParserSolution &solution, OutputLanguage language);
 
 #endif /* __parser_h */

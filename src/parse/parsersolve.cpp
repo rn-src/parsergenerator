@@ -4,11 +4,8 @@ namespace pptok {
 #include "parsertok.h"
 }
 
-static bool error(const String &err) {
-  fputs(err.c_str(),stderr);
-  fputc('\n',stderr);
-  fflush(stderr);
-  return false;
+static void error(const String &err) {
+  throw ParserError(err);
 }
 
 void closure(state_t &state, const ParserDef &parser) {
@@ -55,7 +52,7 @@ void advance(state_t &state, int tsymbol, const ParserDef &parser, state_t &next
   }
 }
 
-bool ComputeStates(const ParserDef &parser, ParserSolution &solution) {
+void ComputeStates(const ParserDef &parser, ParserSolution &solution) {
   Map<state_t,int> statemap;
   state_t state, nextState;
   Set<int> nextSymbols;
@@ -81,13 +78,10 @@ bool ComputeStates(const ParserDef &parser, ParserSolution &solution) {
       }
     }
   }
-  return true;
 }
 
-bool SolveParser(const ParserDef &parser, ParserSolution &solution) {
+void SolveParser(const ParserDef &parser, ParserSolution &solution) {
   if( ! parser.getStartProduction() )
-    return error("The grammar definition requires a <start> production");
-  if( ! ComputeStates(parser,solution) )
-    return error("failed to compute states");
-  return true;
+    error("The grammar definition requires a <start> production");
+  ComputeStates(parser,solution);
 }

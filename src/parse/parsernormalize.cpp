@@ -1,5 +1,9 @@
 #include "parser.h"
 
+static void error(const String &err) {
+  throw ParserError(err);
+}
+
 class gnode {
 public:
   Production *m_p;
@@ -238,14 +242,12 @@ public:
   }
 };
 
-bool NormalizeParser(ParserDef &parser) {
+void NormalizeParser(ParserDef &parser) {
   ForbidAutomata nforbid(parser), forbid(parser);
-  int q0 = nforbid.newstate();
   String err;
   // Expand and combine the rules
   if( ! parser.expandAssocRules(err) || ! parser.expandPrecRules(err) || ! parser.combineRules(err) ) {
-    fputs(err.c_str(),stderr);
-    return false;
+    error(err.c_str());
   }
   // Turn the rules into a nondeterministic forbid automata
   for( Vector<DisallowRule*>::const_iterator cur = parser.m_disallowrules.begin(), end = parser.m_disallowrules.end(); cur != end; ++cur )
@@ -264,7 +266,5 @@ bool NormalizeParser(ParserDef &parser) {
     processednodes.insert(k);
     forbid.expandNode(k,nodes,processednodes);
   }
-  // done
-  return true;
 }
 

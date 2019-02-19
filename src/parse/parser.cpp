@@ -44,6 +44,8 @@ bool ProductionDescriptor::hasSameProductionAs(const ProductionDescriptor &rhs) 
       ++currhs;
     if( *curlhs != *currhs )
       return false;
+    ++curlhs;
+    ++currhs;
   }
   if( curlhs != endlhs || currhs != endrhs )
     return false;
@@ -105,8 +107,8 @@ Production *Production::clone() {
   return new Production(m_rejectable, m_nt, m_symbols, m_action);
 }
 
-void error(Tokenizer &toks, const String &err) {
-  throw ParserError(toks.line(),toks.col(),err);
+static void error(Tokenizer &toks, const String &err) {
+  throw ParserErrorWithLineCol(toks.line(),toks.col(),err);
 }
 
 void ParserDef::addProduction(Tokenizer &toks, Production *p) {
@@ -458,12 +460,15 @@ static void ParseTypedefRule(Tokenizer &toks, ParserDef &parser) {
 }
 
 static ProductionDescriptors *ParseProductionDescriptors(Tokenizer &toks, ParserDef &parser) {
-  ProductionDescriptors *pd = new ProductionDescriptors();
-  ProductionDescriptor *descriptor = 0;
-  while( (descriptor = ParseProductionDescriptor(toks,parser)) != 0 )
-    pd->push_back(descriptor);
-  pd->consolidateRules();
-  return pd;
+  ProductionDescriptor *pd = ParseProductionDescriptor(toks,parser);
+  ProductionDescriptors *pds = new ProductionDescriptors();
+  pds->push_back(pd);
+  while( toks.peek() == pptok::LBRKT ) {
+    pd = ParseProductionDescriptor(toks,parser);
+    pds->push_back(pd);
+  }
+  pds->consolidateRules();
+  return pds;
 }
 
 static ProductionDescriptors *ParseProductions(Tokenizer &toks, ParserDef &parser);
@@ -479,7 +484,7 @@ static int cmpdesc(const void *vplhs, const void *vprhs) {
 
 void ProductionDescriptors::consolidateRules() {
   for( int ilhs = 0; ilhs < m_descriptors.size(); ++ilhs ) {
-    for( int irhs = ilhs+1; irhs < m_descriptors.size(); ++ilhs ) {
+    for( int irhs = ilhs+1; irhs < m_descriptors.size(); ++irhs ) {
       if( m_descriptors[ilhs]->addDotsFrom(*m_descriptors[irhs]) ) {
         delete m_descriptors[irhs];
         m_descriptors.erase(m_descriptors.begin()+irhs);
@@ -576,12 +581,12 @@ static PrecedenceRule *ParsePrecedenceRule(Tokenizer &toks, ParserDef &parser) {
     return 0;
   toks.discard();
   PrecedenceRule *rule = new PrecedenceRule();
-  ProductionDescriptors *part = ParseProductionDescriptors(toks,parser);
-  checkProductionDescriptorsSameNonterminalAndDotsAgree(toks,part,-1,"precedence rule group");
+  ProductionDescriptors *part = ParseProductions(toks,parser);
+  checkProductionDescriptorsSameNonterminal(toks,part,-1,"precedence rule group");
   while( toks.peek() == pptok::GT ) {
     toks.discard();
-    ProductionDescriptors *part = ParseProductionDescriptors(toks,parser);
-    checkProductionDescriptorsSameNonterminalAndDotsAgree(toks,part,-1,"precedence rule group");
+    ProductionDescriptors *part = ParseProductions(toks,parser);
+    checkProductionDescriptorsSameNonterminal(toks,part,-1,"precedence rule group");
     rule->push_back(part);
   }
   return rule;

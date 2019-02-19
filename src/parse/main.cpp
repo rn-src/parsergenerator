@@ -6,14 +6,14 @@ int main(int argc, char *argv[]) {
   try {
     TokBuf tokbuf(stdin);
     ParseParser(&tokbuf,parser);
-  } catch(ParserError &pe) {
+    ParserSolution solution;
+    NormalizeParser(parser);
+    SolveParser(parser, solution);
+    OutputParserSolution(stdout, parser, solution, LanguageC);
+  } catch(ParserErrorWithLineCol &pe) {
     fprintf(stderr, "<stdin>(%d:%d) : %s", pe.m_line, pe.m_col, pe.m_err.c_str());
+  } catch(ParserError &pe) {
+    fputs(pe.m_err.c_str(),stderr);
   }
-  ParserSolution solution;
-  if( ! NormalizeParser(parser) )
-    return 0;
-  if( ! SolveParser(parser, solution) )
-    return 0;
-  OutputParserSolution(stdout, parser, solution, LanguageC);
   return 0;
 }
