@@ -60,6 +60,12 @@ public:
   }
 };
 
+enum Assoc {
+  AssocLeft,
+  AssocRight,
+  AssocNon
+};
+
 class ProductionDescriptors {
 public:
   Vector<ProductionDescriptor*> m_descriptors;
@@ -72,6 +78,9 @@ public:
   void push_back(ProductionDescriptor *p) { m_descriptors.push_back(p); }
   void consolidateRules();
   ProductionDescriptors *clone() const;
+  ProductionDescriptors *DottedProductionDescriptors(int nt, Assoc assoc) const;
+  ProductionDescriptors *UnDottedProductionDescriptors() const;
+
   bool operator==(const ProductionDescriptors &rhs) const {
     if( m_descriptors.size() != rhs.m_descriptors.size() )
       return false;
@@ -132,17 +141,11 @@ public:
   SymbolDef(int tokid, const String &name, SymbolType symboltype, int basetokid) : m_tokid(tokid), m_basetokid(basetokid), m_name(name), m_symboltype(symboltype), m_p(0) {}
 };
 
-enum Assoc {
-  AssocLeft,
-  AssocRight,
-  AssocNon
-};
-
 class AssociativeRule {
 public:
   Assoc m_assoc;
-  ProductionDescriptors *m_p;
-  AssociativeRule(Assoc assoc, ProductionDescriptors *p) : m_assoc(assoc), m_p(p) {}
+  ProductionDescriptors *m_pds;
+  AssociativeRule(Assoc assoc, ProductionDescriptors *pds) : m_assoc(assoc), m_pds(pds) {}
 };
 
 class ParserDef {
@@ -166,9 +169,9 @@ public:
   int getBaseTokId(int s) const;
   Production *getStartProduction() const { return m_startProduction; }
   Vector<Production*> productionsAt(const Production *p, int idx) const;
-  bool expandAssocRules(String &err);
-  bool expandPrecRules(String &err);
-  bool combineRules(String &err);
+  void expandAssocRules();
+  void expandPrecRules();
+  void combineRules();
   SymbolType getSymbolType(int tok) const;
 };
 

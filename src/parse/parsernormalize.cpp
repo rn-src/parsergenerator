@@ -33,6 +33,13 @@ public:
   String m_name;
   ProductionDescriptors *m_forbidden;
 
+  ForbidDescriptor() : m_forbidden(0) {}
+  ForbidDescriptor(const String &name, ProductionDescriptors *forbidden) : m_name(name), m_forbidden(forbidden) {}
+  ForbidDescriptor(const ForbidDescriptor &rhs) {
+    m_name = rhs.m_name;
+    m_forbidden = rhs.m_forbidden;
+  }
+
   bool forbids(const Production *p) const {
     for( ProductionDescriptors::iterator curdesc = m_forbidden->begin(), enddesc = m_forbidden->end(); curdesc != enddesc; ++curdesc ) {
       ProductionDescriptor *pd = *curdesc;
@@ -74,8 +81,27 @@ public:
   }
 };
 
+static String NameIndexToName(int idx) {
+  String name;
+  if( idx == 0 )
+    name = "A";
+  else {
+    char namestr[10];
+    namestr[9] = 0;
+    char *s = namestr+9; 
+    while( idx ) {
+      --s;
+      *s = (idx%26)+'A';
+      idx /= 26;
+    }
+    name = s;
+  }
+  return name;
+}
+
 class ForbidAutomata {
   int m_nextstate;
+  int m_nxtnameidx;
   ParserDef &m_parser;
   int m_q0;
   StateToForbids m_statetoforbids;
@@ -84,7 +110,7 @@ class ForbidAutomata {
 public:
   int newstate() { return m_nextstate++; }
 
-  ForbidAutomata(ParserDef &parser) : m_nextstate(0), m_parser(parser) {
+  ForbidAutomata(ParserDef &parser) : m_nextstate(0), m_parser(parser), m_nxtnameidx(0) {
     m_q0 = newstate();
   }
 
@@ -112,19 +138,33 @@ public:
   }
 
   void addRule(const DisallowRule *rule) {
-    int qLast = newstate();
-    addEmptyTransition(m_q0,qLast);
-    ProductionDescriptors *prevDesc = rule->m_lead;
-    for( int i = 0, n = rule->m_intermediates.size(); i < n; ++i ) {
-      int qNext = newstate();
+    ProductionDescriptors *nextDesc = 0;
+    ProductionDescriptors *disallowed = rule->m_disallowed;
+    int qNext = -1;
+    for( int i = rule->m_intermediates.size()-1; i >= 0; --i ) {
+      int qCur = newstate();
       DisallowProductionDescriptors *ddesc = rule->m_intermediates[i];
       ProductionDescriptors *desc = ddesc->m_descriptors;
-      addTransition(qLast,qNext,prevDesc,desc);
+      if( nextDesc )
+        addTransition(qCur,qNext,desc->clone(),nextDesc->UnDottedProductionDescriptors());
+      if( disallowed ) {
+        m_statetoforbids[qCur].insert(ForbidDescriptor(NameIndexToName(m_nxtnameidx++),disallowed->clone()));
+        if( ! ddesc->m_star )
+          disallowed = 0;
+      }
       if( ddesc->m_star )
-        addEmptyTransition(qNext,qLast);
-      qLast = qNext;
-      prevDesc = desc;
+        addTransition(qCur,qCur,desc->clone(),desc->UnDottedProductionDescriptors());
+      qNext = qCur;
+      nextDesc = desc;
     }
+    int qCur = newstate();
+    ProductionDescriptors *desc = rule->m_lead;
+    if( nextDesc )
+      addTransition(qCur,qNext,desc->clone(),nextDesc->UnDottedProductionDescriptors());
+    if( disallowed )
+      m_statetoforbids[qCur].insert(ForbidDescriptor(NameIndexToName(m_nxtnameidx++),disallowed->clone()));
+    int qFirst = newstate();
+    addEmptyTransition(m_q0,qFirst);
   }
 
   void expandNode(const gnode &k, Set<gnode> &nodes, const Set<gnode> &processednodes) {
@@ -244,11 +284,10 @@ public:
 
 void NormalizeParser(ParserDef &parser) {
   ForbidAutomata nforbid(parser), forbid(parser);
-  String err;
   // Expand and combine the rules
-  if( ! parser.expandAssocRules(err) || ! parser.expandPrecRules(err) || ! parser.combineRules(err) ) {
-    error(err.c_str());
-  }
+  parser.expandAssocRules();
+  parser.expandPrecRules();
+  parser.combineRules();
   // Turn the rules into a nondeterministic forbid automata
   for( Vector<DisallowRule*>::const_iterator cur = parser.m_disallowrules.begin(), end = parser.m_disallowrules.end(); cur != end; ++cur )
     nforbid.addRule(*cur);

@@ -11,6 +11,7 @@ protected:
   struct strkernel {
     char *m_s;
     int m_refs;
+    int m_len;
   } *m_p;
   void decref() {
     if( m_p && --(m_p->m_refs) == 0 ) {
@@ -21,9 +22,11 @@ protected:
 public:
   String() : m_p(0) {}
   String(const char *s) : m_p(0) {
-    if( s ) {
+    if( s && *s ) {
       m_p = new strkernel();
-      m_p->m_s = strdup(s);
+      m_p->m_len = strlen(s);
+      m_p->m_s = (char*)malloc(m_p->m_len+1);
+      strcpy(m_p->m_s,s);
       m_p->m_refs = 1;
     }
   }
@@ -40,8 +43,56 @@ public:
     m_p = s.m_p;
     return *this;
   }
+  String &operator=(const char *s) {
+    if( m_p && m_p->m_refs == 1 ) {
+      m_p->m_len = strlen(s);
+      m_p->m_s = (char*)realloc(m_p->m_s,m_p->m_len+1);
+      strcpy(m_p->m_s,s);
+    } else {
+      decref();
+      m_p = 0;
+      if( s && *s) {
+        m_p = new strkernel();
+        m_p->m_len = strlen(s);
+        m_p->m_s = (char*)malloc(m_p->m_len);
+        strcpy(m_p->m_s,s);
+        m_p->m_refs = 1;
+      }
+    }
+    return *this;
+  }
   ~String() {
     decref();
+  }
+  String &operator+=(const char *s) {
+    if( ! s || ! *s )
+      return *this;
+    if( m_p && m_p->m_refs == 1 ) {
+      m_p->m_len += strlen(s);
+      m_p->m_s = (char*)realloc(m_p->m_s,m_p->m_len+1);
+      strcat(m_p->m_s,s);
+    } else {
+      strkernel *newp = new strkernel();
+      newp->m_len = length()+strlen(s);
+      newp->m_s = (char*)malloc(newp->m_len);
+      *newp->m_s = 0;
+      if( m_p->m_s )
+        strcat(newp->m_s,m_p->m_s);
+      strcat(newp->m_s,s);
+      newp->m_refs = 1;
+      decref();
+      m_p = newp;
+    }
+    return *this;
+  }
+  String &operator+=(char c) {
+    if( ! c )
+      return *this;
+    char cc[2];
+    cc[0] = c;
+    cc[1] = 0;
+    *this += cc;
+    return *this;
   }
   String &operator+=(const String &rhs) {
     if( rhs.m_p ) {
@@ -58,14 +109,24 @@ public:
     }
     return *this;
   }
-  String operator+(const String &rhs) {
+  String operator+(const char *s) const {
+    String ret =*this;
+    ret += s;
+    return ret;
+  }
+  String operator+(char c) const {
+    String ret =*this;
+    ret += c;
+    return ret;
+  }
+  String operator+(const String &rhs) const {
     String ret =*this;
     ret += rhs;
     return ret;
   }
   int length() const {
     if( m_p )
-      return strlen(m_p->m_s);
+      return m_p->m_len;
     return 0;
   }
   const char *c_str() const {
