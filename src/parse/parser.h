@@ -15,6 +15,7 @@ public:
 
   Production(bool rejectable, int nt, const Vector<int> &symbols, String action);
   Production *clone();
+  void print(FILE *out, const Map<int,String> &tokens) const;
 };
 
 class ProductionState {
@@ -46,6 +47,7 @@ public:
   ProductionDescriptor() {}
   ProductionDescriptor(int nt, Vector<int> symbols);
   bool matchesProduction(const Production *p, bool useBaseTokId) const;
+  bool matchesProductionAndPosition(const Production *p, int pos, bool useBaseTokId) const;
   // Check if, ignoring dots, the productions are the same
   bool hasSameProductionAs(const ProductionDescriptor &rhs) const;
   // Add dots from rhs to this descriptor.  Fail if not same production.
@@ -58,6 +60,7 @@ public:
   bool operator!=(const ProductionDescriptor &rhs) const {
     return ! operator==(rhs);
   }
+  void print(FILE *out, const Map<int,String> &tokens) const;
 };
 
 enum Assoc {
@@ -66,28 +69,15 @@ enum Assoc {
   AssocNon
 };
 
-class ProductionDescriptors {
+class ProductionDescriptors : public Vector<ProductionDescriptor*> {
 public:
-  Vector<ProductionDescriptor*> m_descriptors;
-  typedef Vector<ProductionDescriptor*>::iterator iterator;
-  typedef Vector<ProductionDescriptor*>::const_iterator const_iterator;
-  iterator begin() { return m_descriptors.begin(); }
-  const_iterator begin() const { return m_descriptors.begin(); }
-  iterator end() { return m_descriptors.end(); }
-  const_iterator end() const { return m_descriptors.end(); }
-  void push_back(ProductionDescriptor *p) { m_descriptors.push_back(p); }
   void consolidateRules();
   ProductionDescriptors *clone() const;
   ProductionDescriptors *DottedProductionDescriptors(int nt, Assoc assoc) const;
   ProductionDescriptors *UnDottedProductionDescriptors() const;
 
   bool operator==(const ProductionDescriptors &rhs) const {
-    if( m_descriptors.size() != rhs.m_descriptors.size() )
-      return false;
-    for( int i = 0, n = m_descriptors.size(); i < n; ++i )
-      if( *m_descriptors[i] != *rhs.m_descriptors[i] )
-        return false;
-    return true;
+    return Vector<ProductionDescriptor*>::operator==(rhs);
   }
   bool operator!=(const ProductionDescriptors &rhs) const {
     return ! operator==(rhs);
@@ -98,9 +88,19 @@ public:
        return true;
     return false;
   }
+  bool matchesProductionAndPosition(const Production *lhs, int pos, bool useBaseTokId) const {
+    for( const_iterator c = begin(), e = end(); c != e; ++c )
+     if( (*c)->matchesProductionAndPosition(lhs,pos,useBaseTokId) )
+       return true;
+    return false;
+  }
+  void print(FILE *out, const Map<int,String> &tokens) const;
 };
 
-typedef Vector<ProductionDescriptors*> PrecedenceRule;
+class PrecedenceRule : public Vector<ProductionDescriptors*> {
+public:
+  void print(FILE *out, const Map<int,String> &tokens) const;
+};
 
 class DisallowProductionDescriptors {
 public:
@@ -112,6 +112,7 @@ public:
   bool operator!=(const DisallowProductionDescriptors &rhs) const {
     return ! operator==(rhs);
   }
+  void print(FILE *out, const Map<int,String> &tokens) const;
 };
 
 class DisallowRule {
@@ -121,6 +122,7 @@ public:
   ProductionDescriptors *m_disallowed;
   bool canCombineWith(const DisallowRule &rhs) const;
   bool combineWith(const DisallowRule &rhs);
+  void print(FILE *out, const Map<int,String> &tokens) const;
 };
 
 enum SymbolType {
@@ -146,6 +148,7 @@ public:
   Assoc m_assoc;
   ProductionDescriptors *m_pds;
   AssociativeRule(Assoc assoc, ProductionDescriptors *pds) : m_assoc(assoc), m_pds(pds) {}
+  void print(FILE *out, const Map<int,String> &tokens) const;
 };
 
 class ParserDef {
@@ -173,6 +176,7 @@ public:
   void expandPrecRules();
   void combineRules();
   SymbolType getSymbolType(int tok) const;
+  void print(FILE *out) const;
 };
 
 class ParserError {

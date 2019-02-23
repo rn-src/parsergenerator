@@ -197,7 +197,7 @@ int ParserDef::getBaseTokId(int s) const {
 
 Vector<Production*> ParserDef::productionsAt(const Production *p, int idx) const {
   Vector<Production*> productions;
-  if( idx >= p->m_symbols.size() ) {
+  if( idx < p->m_symbols.size() ) {
     int symbol = p->m_symbols[idx];
     if( getSymbolType(symbol) == SymbolTypeNonterminal ) {
       for( Vector<Production*>::const_iterator cur = m_productions.begin(), end = m_productions.end(); cur != end; ++cur ) {
@@ -298,7 +298,7 @@ void ParserDef::expandPrecRules() {
         m_disallowrules.push_back(dr);
       }
       nt = (*pds->begin())->m_nt;
-      descriptors.m_descriptors.insert(descriptors.m_descriptors.end(), pds->begin(), pds->end());
+      descriptors.insert(descriptors.end(), pds->begin(), pds->end());
     }
     delete precrule;
     m_precrules.pop_back();
@@ -306,7 +306,6 @@ void ParserDef::expandPrecRules() {
 }
 
 // Combine whatever rules can be combined.
-// If something truly disasterous happens, return false.
 void ParserDef::combineRules() {
   for( int i = 0; i < m_disallowrules.size(); ++i ) {
     DisallowRule *lhs = m_disallowrules[i];
@@ -337,6 +336,29 @@ bool ProductionDescriptor::matchesProduction(const Production *p, bool useBaseTo
   if( curs != ends || curwc != endwc )
     return false;
   return true;
+}
+
+bool ProductionDescriptor::matchesProductionAndPosition(const Production *p, int pos, bool useBaseTokId) const {
+  int matchPos = 0;
+  bool matchedPos = false;
+  if( m_nt != p->m_nt )
+    return false;
+  Vector<int>::const_iterator curs = p->m_symbols.begin(), ends = p->m_symbols.end(), curwc = m_symbols.begin(), endwc = m_symbols.end();
+  while( curs != ends && curwc != endwc ) {
+    if( *curwc == pptok::DOT ) {
+      ++curwc;
+      if( matchPos == pos )
+        matchedPos = true;
+    }
+    if( *curs != *curwc )
+      return false;
+    ++curs;
+    ++curwc;
+    ++matchPos;
+  }
+  if( curs != ends || curwc != endwc )
+    return false;
+  return matchedPos;
 }
 
 static int ParseNonterminal(Tokenizer &toks, ParserDef &parser) {
@@ -498,24 +520,24 @@ static int cmpdesc(const void *vplhs, const void *vprhs) {
 }
 
 void ProductionDescriptors::consolidateRules() {
-  for( int ilhs = 0; ilhs < m_descriptors.size(); ++ilhs ) {
-    for( int irhs = ilhs+1; irhs < m_descriptors.size(); ++irhs ) {
-      if( m_descriptors[ilhs]->addDotsFrom(*m_descriptors[irhs]) ) {
-        delete m_descriptors[irhs];
-        m_descriptors.erase(m_descriptors.begin()+irhs);
+  for( int ilhs = 0; ilhs < size(); ++ilhs ) {
+    for( int irhs = ilhs+1; irhs < size(); ++irhs ) {
+      if( operator[](ilhs)->addDotsFrom(*operator[](irhs)) ) {
+        delete operator[](irhs);
+        erase(begin()+irhs);
         --irhs;
       }
     }
   }
   // Also sort them
-  qsort(m_descriptors.begin(),m_descriptors.size(),sizeof(ProductionDescriptor*),cmpdesc);
+  qsort(begin(),size(),sizeof(ProductionDescriptor*),cmpdesc);
 }
 
 ProductionDescriptors *ProductionDescriptors::clone() const {
   ProductionDescriptors *ret = new ProductionDescriptors();
-  ret->m_descriptors.resize(m_descriptors.size());
-  for( int i = 0, n = m_descriptors.size(); i < n; ++i )
-    ret->m_descriptors[i] = m_descriptors[i]->clone();
+  ret->resize(size());
+  for( int i = 0, n = size(); i < n; ++i )
+    ret->operator[](i) = operator[](i)->clone();
   return ret;
 }
 
@@ -745,16 +767,112 @@ bool DisallowRule::combineWith(const DisallowRule &rhs) {
       return false;
   if( *m_lead == *rhs.m_lead ) {
     if( *m_disallowed == *rhs.m_disallowed ) {
-      m_disallowed->m_descriptors.insert(m_disallowed->m_descriptors.end(), rhs.m_disallowed->m_descriptors.begin(), rhs.m_disallowed->m_descriptors.end());
+      m_disallowed->insert(m_disallowed->end(), rhs.m_disallowed->begin(), rhs.m_disallowed->end());
       m_disallowed->consolidateRules();
     }
     return true;
   } else if( *m_disallowed == *rhs.m_disallowed ) {
     if( *m_lead != *rhs.m_lead ) {
-      m_lead->m_descriptors.insert(m_lead->m_descriptors.end(), rhs.m_lead->m_descriptors.begin(), rhs.m_lead->m_descriptors.end());
+      m_lead->insert(m_lead->end(), rhs.m_lead->begin(), rhs.m_lead->end());
       m_lead->consolidateRules();
     }
     return true;
   }
   return false;
+}
+
+void ParserDef::print(FILE *out) const {
+  Map<int,String> tokens;
+  for( Map<String,int>::const_iterator tok = m_tokens.begin(); tok != m_tokens.end(); ++tok )
+    tokens[tok->second] = tok->first;
+  for( Vector<Production*>::const_iterator p = m_productions.begin(); p != m_productions.end(); ++p ) {
+    (*p)->print(out, tokens);
+    fputs(" ;\n",out);
+  }
+  for( Vector<PrecedenceRule*>::const_iterator r = m_precrules.begin(); r != m_precrules.end(); ++r ) {
+    (*r)->print(out, tokens);
+    fputs(" ;\n", out);
+  }
+  for( Vector<AssociativeRule*>::const_iterator r = m_assocrules.begin(); r != m_assocrules.end(); ++r ) {
+    (*r)->print(out, tokens);
+    fputs(" ;\n", out);
+  }
+  for( Vector<DisallowRule*>::const_iterator r = m_disallowrules.begin(); r != m_disallowrules.end(); ++r ) {
+    (*r)->print(out, tokens);
+    fputs(" ;\n", out);
+  }
+}
+
+void Production::print(FILE *out, const Map<int,String> &tokens) const {
+  fputs(tokens[m_nt].c_str(), out);
+  fputs(" :", out);
+  for( int i = 0; i < m_symbols.size(); ++i ) {
+    fputc(' ',out);
+    fputs(tokens[m_symbols[i]].c_str(),out);
+  }
+}
+
+void PrecedenceRule::print(FILE *out, const Map<int,String> &tokens) const {
+  bool first = true;
+  fputs("PRECEDENCE ",out);
+  for( const_iterator cur = begin(); cur != end(); ++cur ) {
+    if( first )
+      first = false;
+    else
+      fputs(" > ",out);
+    (*cur)->print(out,tokens);
+  }
+}
+
+void ProductionDescriptors::print(FILE *out, const Map<int,String> &tokens) const {
+  for( const_iterator cur = begin(); cur != end(); ++cur )
+    (*cur)->print(out,tokens);
+}
+
+void ProductionDescriptor::print(FILE *out, const Map<int,String> &tokens) const {
+  fputc('[',out);
+  fputs(tokens[m_nt].c_str(), out);
+  fputs(" :", out);
+  for( int i = 0; i < m_symbols.size(); ++i ) {
+    if( m_symbols[i] == pptok::DOT ) {
+      fputc('.',out);
+      ++i;
+    } else {
+      fputc(' ',out);
+    }
+    fputs(tokens[m_symbols[i]].c_str(),out);
+  }
+  fputc(']',out);
+}
+
+void AssociativeRule::print(FILE *out, const Map<int,String> &tokens) const {
+  switch(m_assoc) {
+  case AssocLeft:
+    fputs("LEFT-ASSOCIATIVE ", out);
+    break;
+  case AssocRight:
+    fputs("RIGHT-ASSOCIATIVE ", out);
+    break;
+  case AssocNon:
+    fputs("NON-ASSOCIATIVE ", out);
+    break;
+  }
+  m_pds->print(out,tokens);
+}
+
+void DisallowRule::print(FILE *out, const Map<int,String> &tokens) const {
+  fputs("DISALLOW ",out);
+  m_lead->print(out,tokens);
+  for( Vector<DisallowProductionDescriptors*>::const_iterator cur = m_intermediates.begin(); cur != m_intermediates.end(); ++cur ) {
+    fputs(" --> ",out);
+    (*cur)->print(out,tokens);
+  }
+  fputs(" -/-> ",out);
+  m_disallowed->print(out,tokens);
+}
+
+void DisallowProductionDescriptors::print(FILE *out, const Map<int,String> &tokens) const {
+  m_descriptors->print(out,tokens);
+  if( m_star )
+    fputc('*',out);
 }

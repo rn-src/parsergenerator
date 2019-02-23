@@ -26,27 +26,29 @@ public:
   bool operator==(const gnode &rhs) const {
     return m_p == rhs.m_p && m_stateNo == rhs.m_stateNo;
   }
+  void print(FILE *out, const Map<int,String> &tokens) const {
+    fprintf(out,"{state=%d,[",m_stateNo);
+    m_p->print(out,tokens);
+    fputs("]}",out);
+  }
 };
 
 class ForbidDescriptor {
 public:
   String m_name;
+  ProductionDescriptors *m_positions;
   ProductionDescriptors *m_forbidden;
 
-  ForbidDescriptor() : m_forbidden(0) {}
-  ForbidDescriptor(const String &name, ProductionDescriptors *forbidden) : m_name(name), m_forbidden(forbidden) {}
+  ForbidDescriptor() : m_positions(0), m_forbidden(0) {}
+  ForbidDescriptor(const String &name, ProductionDescriptors *positions, ProductionDescriptors *forbidden) : m_name(name), m_positions(positions), m_forbidden(forbidden) {}
   ForbidDescriptor(const ForbidDescriptor &rhs) {
     m_name = rhs.m_name;
+    m_positions = rhs.m_positions;
     m_forbidden = rhs.m_forbidden;
   }
 
-  bool forbids(const Production *p) const {
-    for( ProductionDescriptors::iterator curdesc = m_forbidden->begin(), enddesc = m_forbidden->end(); curdesc != enddesc; ++curdesc ) {
-      ProductionDescriptor *pd = *curdesc;
-      if( pd->matchesProduction(p,true) )
-        return true;
-    }
-    return false;
+  bool forbids(const Production *positionProduction, int pos, const Production *expandProduction) const {
+    return m_positions->matchesProductionAndPosition(positionProduction,pos,true) && m_forbidden->matchesProduction(expandProduction,true);
   }
   bool operator<(const ForbidDescriptor &rhs) const {
     if( m_forbidden < rhs.m_forbidden )
@@ -148,7 +150,7 @@ public:
       if( nextDesc )
         addTransition(qCur,qNext,desc->clone(),nextDesc->UnDottedProductionDescriptors());
       if( disallowed ) {
-        m_statetoforbids[qCur].insert(ForbidDescriptor(NameIndexToName(m_nxtnameidx++),disallowed->clone()));
+        m_statetoforbids[qCur].insert(ForbidDescriptor(NameIndexToName(m_nxtnameidx++),desc->clone(),disallowed->clone()));
         if( ! ddesc->m_star )
           disallowed = 0;
       }
@@ -157,43 +159,66 @@ public:
       qNext = qCur;
       nextDesc = desc;
     }
-    int qCur = newstate();
+    int qFirst = newstate();
     ProductionDescriptors *desc = rule->m_lead;
     if( nextDesc )
-      addTransition(qCur,qNext,desc->clone(),nextDesc->UnDottedProductionDescriptors());
+      addTransition(qFirst,qNext,desc->clone(),nextDesc->UnDottedProductionDescriptors());
     if( disallowed )
-      m_statetoforbids[qCur].insert(ForbidDescriptor(NameIndexToName(m_nxtnameidx++),disallowed->clone()));
-    int qFirst = newstate();
+      m_statetoforbids[qFirst].insert(ForbidDescriptor(NameIndexToName(m_nxtnameidx++),desc->clone(),disallowed->clone()));
     addEmptyTransition(m_q0,qFirst);
   }
 
-  void expandNode(const gnode &k, Set<gnode> &nodes, const Set<gnode> &processednodes) {
+  void expandNode(const gnode &k, Set<gnode> &nodes, const Set<gnode> &processednodes, Map<int,String> &tokens, FILE *out) {
+    if( out ) {
+      fputs("Considering ",out);
+      k.print(out,tokens);
+      fputs("\n",out);
+    }
+    // These are the forbids that apply to the current state.
     ForbidDescriptors &forbids = m_statetoforbids[k.m_stateNo];
+    // Look at all of the nonterminals of the production.
     for( int i = 0, n = k.m_p->m_symbols.size(); i < n; ++i ) {
       int s = k.m_p->m_symbols[i];
       if( m_parser.getSymbolType(s) != SymbolTypeNonterminal )
         continue;
-      // If any production is forbidden, we'll have to create a new nonterminal and productions
-      String forbidName;
+      Set<String> forbidnames;
+      // Get the list of candidate productions that might be at the current location
       Vector<Production*> productions = m_parser.productionsAt(k.m_p,i);
-      for( ForbidDescriptors::iterator curforbid = forbids.begin(), endforbid = forbids.end(); curforbid != endforbid; ++curforbid ) {
-        for( Vector<Production*>::iterator curp = productions.begin(); curp != productions.end(); ++curp ) {
-          if( curforbid->forbids(*curp) ) {
-            forbidName = curforbid->m_name;
-            curp = productions.erase(curp);
-            --curp;
+      // Weed out some of the candidates based on the forbids
+      for( Vector<Production*>::iterator curp = productions.begin(); curp != productions.end(); ++curp ) {
+        if( out ) {
+          fputs(" Is [", out);
+          (*curp)->print(out,tokens);
+          fprintf(out,"] forbidden at %d --> ",i);
+        }
+        bool thisProductionForbidden = false;
+        for( ForbidDescriptors::iterator curforbid = forbids.begin(), endforbid = forbids.end(); curforbid != endforbid; ++curforbid ) {
+          if( curforbid->forbids(k.m_p,i,*curp) ) {
+            forbidnames.insert(curforbid->m_name);
+            thisProductionForbidden = true;
           }
         }
+        if( out ) {
+          fputs((thisProductionForbidden?"yes":"no"),out);
+          fputc('\n',out);
+        }
+        if( thisProductionForbidden ) {
+          curp = productions.erase(curp);
+          --curp;
+        }
       }
-      if( forbidName.length() ) {
-        String sName = m_parser.m_tokdefs[s].m_name;
-        sName += "_";
-        sName += forbidName;
+      if( forbidnames.size() > 0 ) {
+        String sName = tokens[s];
+        for( Set<String>::const_iterator c = forbidnames.begin(), e = forbidnames.end(); c != e; ++c) {
+          sName += "_";
+          sName += *c;
+        }
         s = m_parser.findSymbolId(sName);
         if( s == -1 ) {
           int nexts = m_parser.addSymbolId(sName,SymbolTypeNonterminal,m_parser.getBaseTokId(s));
           s = nexts;
           k.m_p->m_symbols[i] = s;
+          tokens[s] = sName;
           for( Vector<Production*>::iterator curp = productions.begin(), endp = productions.end(); curp != endp; ++curp ) {
             Production *pClone = (*curp)->clone();
             pClone->m_nt = s;
@@ -206,56 +231,74 @@ public:
       for( Vector<Production*>::iterator curp = productions.begin(), endp = productions.end(); curp != endp; ++curp ) {
         int nextStateNo = nextState(k,*curp);
         gnode nextk(*curp,nextStateNo);
-        if( processednodes.find(nextk) == processednodes.end() )
+        if( processednodes.find(nextk) == processednodes.end() ) {
+          if( out ) {
+            fputs("Adding ",out);
+            nextk.print(out,tokens);
+            fputs("\n",out);
+          }
           nodes.insert(nextk);
+        }
       }
     }
   }
 
   void closure(Set<int> &multistate) const {
     int lastsize = 0;
-    Set<int> nextmultistate = multistate;
+    Set<int> snapshot;
     do {
-      multistate = nextmultistate;
-      for( Set<int>::const_iterator curstate = multistate.begin(), endstate = multistate.end(); curstate != endstate; ++curstate ) {
-        if( m_emptytransitions.find(*curstate) == m_emptytransitions.end() )
-          continue;
-        const Set<int> &nextstates = m_emptytransitions[*curstate];
-        multistate.insert(nextstates.begin(), nextstates.end());
+      lastsize = multistate.size();
+      snapshot = multistate;
+      for( Set<int>::const_iterator curstate = snapshot.begin(), endstate = snapshot.end(); curstate != endstate; ++curstate ) {
+        if( m_emptytransitions.contains(*curstate) ) {
+          const Set<int> &nextstates = m_emptytransitions[*curstate];
+          multistate.insert(nextstates.begin(), nextstates.end());
+        }
       }
-    } while( multistate != nextmultistate );
-    multistate = nextmultistate;
+    } while( multistate.size() > lastsize );
+  }
+
+  void ForbidsFromStates(const Set<int> &stateset, ForbidDescriptors &forbids) const {
+    for( Set<int>::const_iterator curstate = stateset.begin(), endstate = stateset.end(); curstate != endstate; ++curstate ) {
+      int state = *curstate;
+      if( m_statetoforbids.contains(state) ) {
+        const ForbidDescriptors &stateforbids = m_statetoforbids[state];
+        forbids.insert(stateforbids.begin(), stateforbids.end());
+      }
+    }
+  }
+
+  void SymbolsFromStates(const Set<int> &stateset, Set<ForbidSub> &symbols) const {
+    for( Set<int>::const_iterator curstate = stateset.begin(), endstate = stateset.end(); curstate != endstate; ++curstate ) {
+      int state = *curstate;
+      if( m_transitions.contains(state) ) {
+        const Map<ForbidSub,Set<int> > &statetransitions = m_transitions[state];
+        for( Map<ForbidSub,Set<int> >::const_iterator curtrans = statetransitions.begin(), endtrans = statetransitions.end(); curtrans != endtrans; ++curtrans )
+          symbols.insert(curtrans->first);
+      }
+    }
   }
 
   void toDeterministicForbidAutomata(ForbidAutomata &out) {
-    Vector< Set<int> > states;
-    Map< Set<int>, int > multi2state;
+    Vector< Set<int> > statesets;
+    Map< Set<int>, int > stateset2state;
     Set<int> initstate;
+    initstate.insert(m_q0);
     closure(initstate);
-    multi2state[initstate] = out.newstate();
-    states.push_back(initstate);
-    for( int i = 0; i < states.size(); ++i ) {
-      Set<int> &multistate = states[i];
+    stateset2state[initstate] = out.m_q0;
+    statesets.push_back(initstate);
+    for( int i = 0; i < statesets.size(); ++i ) {
+      Set<int> &stateset = statesets[i];
       ForbidDescriptors forbids;
       Set<ForbidSub> symbols;
-      for( Set<int>::const_iterator curstate = multistate.begin(), endstate = multistate.end(); curstate != endstate; ++curstate ) {
-        int state = *curstate;
-        if( m_statetoforbids.contains(state) ) {
-          const ForbidDescriptors &stateforbids = m_statetoforbids[state];
-          forbids.insert(stateforbids.begin(), stateforbids.end());
-        }
-        if( m_transitions.contains(state) ) {
-          const Map<ForbidSub,Set<int> > &statetransitions = m_transitions[state];
-          for( Map<ForbidSub,Set<int> >::const_iterator curtrans = statetransitions.begin(), endtrans = statetransitions.end(); curtrans != endtrans; ++curtrans )
-            symbols.insert(curtrans->first);
-        }
-      }
+      ForbidsFromStates(stateset,forbids);
+      SymbolsFromStates(stateset,symbols);
       out.m_statetoforbids[i] = forbids;
       
       for( Set<ForbidSub>::const_iterator cursym = symbols.begin(), endsym = symbols.end(); cursym != endsym; ++cursym ) {
         Set<int> nextstate;
         const ForbidSub &sub = *cursym;
-        for( Set<int>::const_iterator curstate = multistate.begin(), endstate = multistate.end(); curstate != endstate; ++curstate ) {
+        for( Set<int>::const_iterator curstate = stateset.begin(), endstate = stateset.end(); curstate != endstate; ++curstate ) {
           int state = *curstate;
           if( m_transitions.contains(state) ) {
             const Map<ForbidSub,Set<int> > &statetransitions = m_transitions[state];
@@ -267,22 +310,27 @@ public:
         }
         closure(nextstate);
         int nextStateNo = -1;
-        if( ! multi2state.contains(nextstate) ) {
+        if( ! stateset2state.contains(nextstate) ) {
           nextStateNo = out.newstate();
-          multi2state[nextstate] = nextStateNo;
-          states.push_back(nextstate);
+          stateset2state[nextstate] = nextStateNo;
+          statesets.push_back(nextstate);
         } else
-          nextStateNo = multi2state[nextstate];
-        if( nextStateNo == 0 ) {
-         // no need to add transition, default is transition to 0
-        } else
+          nextStateNo = stateset2state[nextstate];
+        // no need to add transition to 0, default is transition to 0
+        if( nextStateNo != 0 )
           out.addTransition(i,nextStateNo,sub.m_lhs,sub.m_rhs);
       } 
     }
   }
 };
 
+void StringToInt_2_IntToString(const Map<String,int> &src, Map<int,String> &tokens) {
+  for( Map<String,int>::const_iterator tok = src.begin(); tok != src.end(); ++tok )
+    tokens[tok->second] = tok->first;
+}
+
 void NormalizeParser(ParserDef &parser) {
+  parser.print(stdout);
   ForbidAutomata nforbid(parser), forbid(parser);
   // Expand and combine the rules
   parser.expandAssocRules();
@@ -298,12 +346,17 @@ void NormalizeParser(ParserDef &parser) {
   Set<gnode> nodes, processednodes;
   nodes.insert(gnode(S,0));
   // expand each production/state until closure
+  Map<int,String> tokens;
+  StringToInt_2_IntToString(parser.m_tokens,tokens);
+  FILE *out = stdout;
   while( nodes.size() ) {
     Set<gnode>::iterator curgnode = nodes.begin();
     gnode k = *curgnode;
     nodes.erase(curgnode);
     processednodes.insert(k);
-    forbid.expandNode(k,nodes,processednodes);
+    forbid.expandNode(k,nodes,processednodes,tokens,out);
   }
+  parser.m_disallowrules.clear();
+  parser.print(stdout);
 }
 

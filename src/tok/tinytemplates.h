@@ -76,7 +76,7 @@ public:
       newp->m_len = length()+strlen(s);
       newp->m_s = (char*)malloc(newp->m_len);
       *newp->m_s = 0;
-      if( m_p->m_s )
+      if( m_p && m_p->m_s )
         strcat(newp->m_s,m_p->m_s);
       strcat(newp->m_s,s);
       newp->m_refs = 1;
