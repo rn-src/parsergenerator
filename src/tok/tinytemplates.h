@@ -74,7 +74,7 @@ public:
     } else {
       strkernel *newp = new strkernel();
       newp->m_len = length()+strlen(s);
-      newp->m_s = (char*)malloc(newp->m_len);
+      newp->m_s = (char*)malloc(newp->m_len+1);
       *newp->m_s = 0;
       if( m_p && m_p->m_s )
         strcat(newp->m_s,m_p->m_s);
@@ -95,18 +95,7 @@ public:
     return *this;
   }
   String &operator+=(const String &rhs) {
-    if( rhs.m_p ) {
-      size_t len = length()+rhs.length();
-      char *s = (char*)malloc(len+1);
-      *s = 0;
-      if( m_p )
-        strcat(s,m_p->m_s);
-      strcat(s,rhs.m_p->m_s);
-      decref();
-      m_p = new strkernel();
-      m_p->m_s = s;
-      m_p->m_refs = 1;
-    }
+    *this += rhs.c_str();
     return *this;
   }
   String operator+(const char *s) const {

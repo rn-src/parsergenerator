@@ -8,6 +8,64 @@ static void error(const String &err) {
   throw ParserError(err);
 }
 
+void ComputeFirsts(const ParserDef &parser, ParserSolution &solution) {
+  for( Map<int,SymbolDef>::const_iterator cur = parser.m_tokdefs.begin(), end = parser.m_tokdefs.end(); cur != end; ++cur ) {
+    if( cur->second.m_symboltype == SymbolTypeTerminal )
+      solution.m_firsts[cur->second.m_tokid].insert(cur->second.m_tokid);
+  }
+  bool added = true;
+  while( added ) {
+    added = false;
+    for( Map<int,SymbolDef>::const_iterator cur = parser.m_tokdefs.begin(), end = parser.m_tokdefs.end(); cur != end; ++cur ) {
+      if( cur->second.m_symboltype == SymbolTypeTerminal )
+        continue;
+      int tokid = cur->second.m_tokid;
+      int beforecnt = solution.m_firsts[tokid].size();
+      for( Vector<Production*>::const_iterator curp = parser.m_productions.begin(), endp = parser.m_productions.end(); curp != endp; ++curp ) {
+        const Production *p = *curp;
+        int s = p->m_symbols[0];
+        if( p->m_nt != tokid || p->m_nt == s )
+          continue;
+        const Set<int> &sfirsts = solution.m_firsts[s];
+        solution.m_firsts[cur->second.m_tokid].insert(sfirsts.begin(),sfirsts.end());
+      }
+      int aftercnt = solution.m_firsts[tokid].size();
+      if( beforecnt != aftercnt )
+        added = true;
+    }
+  }
+}
+
+void ComputeFollows(const ParserDef &parser, ParserSolution &solution) {
+  solution.m_follows[parser.getStartNt()].insert(EOF_TOK);
+  bool added = true;
+  while( added ) {
+    added = false;
+    for( Map<int,SymbolDef>::const_iterator cur = parser.m_tokdefs.begin(), end = parser.m_tokdefs.end(); cur != end; ++cur ) {
+      int tokid = cur->second.m_tokid;
+      int beforecnt = 0;
+      if( solution.m_follows.find(tokid) != solution.m_follows.end() )
+        beforecnt = solution.m_follows[tokid].size();
+      for( Vector<Production*>::const_iterator curp = parser.m_productions.begin(), endp = parser.m_productions.end(); curp != endp; ++curp ) {
+        const Production *p = *curp;
+        for( Vector<int>::const_iterator curs = p->m_symbols.begin(), ends = p->m_symbols.end(); curs != ends; ++curs ) {
+          if( *curs != tokid )
+            continue;
+          Vector<int>::const_iterator nxts = curs+1;
+          int s = (nxts==ends) ? p->m_nt : *nxts;
+          const Set<int> &sfirsts = solution.m_firsts[s];
+          solution.m_follows[cur->second.m_tokid].insert(sfirsts.begin(),sfirsts.end());
+        }
+      }
+      int aftercnt = 0;
+      if( solution.m_follows.find(tokid) != solution.m_follows.end() )
+        aftercnt = solution.m_follows[tokid].size();
+      if( beforecnt != aftercnt )
+        added = true;
+    }
+  }
+}
+
 void closure(state_t &state, const ParserDef &parser) {
   int prevsize = 0;
   Set<ProductionState> newparts;
@@ -74,14 +132,19 @@ void ComputeStates(const ParserDef &parser, ParserSolution &solution) {
         int nextStateIdx = solution.m_states.size();
         statemap[nextState] = nextStateIdx;
         solution.m_states.push_back(nextState);
-        solution.m_shifts[Pair<int,int>(stateIdx,nextStateIdx)].insert(symbol);
       }
     }
   }
 }
 
+void ComputeActions(const ParserDef &parser, ParserSolution &solution) {
+}
+
 void SolveParser(const ParserDef &parser, ParserSolution &solution) {
   if( ! parser.getStartProduction() )
-    error("The grammar definition requires a <start> production");
+    error("The grammar definition requires a START production");
+  ComputeFirsts(parser,solution);
+  ComputeFollows(parser,solution);
   ComputeStates(parser,solution);
+  ComputeActions(parser,solution);
 }

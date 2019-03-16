@@ -112,7 +112,7 @@ static void error(Tokenizer &toks, const String &err) {
 }
 
 void ParserDef::addProduction(Tokenizer &toks, Production *p) {
-  if( p->m_nt == m_startnt ) {
+  if( p->m_nt == pptok::START ) {
     if( m_startProduction )
       error(toks,"<start> production can be defined only once");
     m_startProduction = p;
@@ -121,7 +121,7 @@ void ParserDef::addProduction(Tokenizer &toks, Production *p) {
 }
 
 bool ParserDef::addProduction(Production *p) {
-  if( p->m_nt == m_startnt ) {
+  if( p->m_nt == pptok::START ) {
     if( m_startProduction )
       return false;
     m_startProduction = p;
@@ -151,8 +151,6 @@ int ParserDef::addSymbolId(const String &s, SymbolType stype, int basetokid) {
   int tokid = m_nextsymbolid++;
   m_tokens[s] = tokid;
   m_tokdefs[tokid] = SymbolDef(tokid, name, stype, basetokid);
-  if( strcmp(name.c_str(),"<start>") == 0 )
-    m_startnt = tokid;
   return tokid;
  } 
 
@@ -179,9 +177,11 @@ int ParserDef::findOrAddSymbolId(Tokenizer &toks, const String &s, SymbolType st
   int tokid = m_nextsymbolid++;
   m_tokens[s] = tokid;
   m_tokdefs[tokid] = SymbolDef(tokid, name, stype, basetokid);
-  if( strcmp(name.c_str(),"<start>") == 0 )
-    m_startnt = tokid;
   return tokid;
+}
+
+int ParserDef::getStartNt() const {
+  return pptok::START;
 }
 
 int ParserDef::getBaseTokId(int s) const {
@@ -195,12 +195,14 @@ int ParserDef::getBaseTokId(int s) const {
   return -1;
 }
 
-Vector<Production*> ParserDef::productionsAt(const Production *p, int idx) const {
+Vector<Production*> ParserDef::productionsAt(const Production *p, int idx, const Vector<Production*> *pproductions) const {
   Vector<Production*> productions;
+  if( ! pproductions )
+    pproductions = &m_productions;
   if( idx < p->m_symbols.size() ) {
     int symbol = p->m_symbols[idx];
     if( getSymbolType(symbol) == SymbolTypeNonterminal ) {
-      for( Vector<Production*>::const_iterator cur = m_productions.begin(), end = m_productions.end(); cur != end; ++cur ) {
+      for( Vector<Production*>::const_iterator cur = pproductions->begin(), end = pproductions->end(); cur != end; ++cur ) {
         Production *p = *cur;
         if( p->m_nt != symbol )
           continue;
@@ -211,14 +213,14 @@ Vector<Production*> ParserDef::productionsAt(const Production *p, int idx) const
   return productions;
 }
 
-ProductionDescriptor *UnDottedProductionDescriptor(const ProductionDescriptor *pd) {
-  ProductionDescriptor *pdundotted = new ProductionDescriptor();
-  pdundotted->m_nt = pd->m_nt;
-  for( int i = 0; i < pd->m_symbols.size(); ++i ) {
-    int sym = pd->m_symbols[i];
+ProductionDescriptor UnDottedProductionDescriptor(const ProductionDescriptor &pd) {
+  ProductionDescriptor pdundotted;
+  pdundotted.m_nt = pd.m_nt;
+  for( int i = 0; i < pd.m_symbols.size(); ++i ) {
+    int sym = pd.m_symbols[i];
     if( sym == pptok::DOT )
       continue;
-    pdundotted->m_symbols.push_back(sym);
+    pdundotted.m_symbols.push_back(sym);
   }
   return pdundotted;
 }
@@ -226,30 +228,30 @@ ProductionDescriptor *UnDottedProductionDescriptor(const ProductionDescriptor *p
 ProductionDescriptors *ProductionDescriptors::UnDottedProductionDescriptors() const {
   ProductionDescriptors *pdsundotted = new ProductionDescriptors();
   for( ProductionDescriptors::const_iterator cur = begin(), enditer = end(); cur != enditer; ++cur ) {
-    ProductionDescriptor *pd = UnDottedProductionDescriptor(*cur);
-    pdsundotted->push_back(pd);
+    ProductionDescriptor pd = UnDottedProductionDescriptor(*cur);
+    pdsundotted->insert(pd);
   }
   return pdsundotted;
 }
 
-ProductionDescriptor *DottedProductionDescriptor(const ProductionDescriptor *pd, int nt, Assoc assoc) {
-  ProductionDescriptor *pddotted = new ProductionDescriptor();
-  pddotted->m_nt = pd->m_nt;
+ProductionDescriptor DottedProductionDescriptor(const ProductionDescriptor &pd, int nt, Assoc assoc) {
+  ProductionDescriptor pddotted;
+  pddotted.m_nt = pd.m_nt;
   int firstnt = -1;
   int lastnt = -1;
-  for( int i = 0; i < pd->m_symbols.size(); ++i ) {
-    int sym = pd->m_symbols[i];
+  for( int i = 0; i < pd.m_symbols.size(); ++i ) {
+    int sym = pd.m_symbols[i];
     if( sym == nt ) {
       if( firstnt == -1 )
         firstnt = i;
-      lastnt = sym;
+      lastnt = i;
     }
   }
-  for( int i = 0; i < pd->m_symbols.size(); ++i ) {
-    int sym = pd->m_symbols[i];
-    if( sym == nt && ( assoc == AssocNon || (assoc == AssocLeft && i == firstnt) || (assoc == AssocRight && i == lastnt) ) )
-      pddotted->m_symbols.push_back(pptok::DOT);
-    pddotted->m_symbols.push_back(sym);
+  for( int i = 0; i < pd.m_symbols.size(); ++i ) {
+    int sym = pd.m_symbols[i];
+    if( sym == nt && ( assoc == AssocNon || (assoc == AssocLeft && i != firstnt) || (assoc == AssocRight && i != lastnt) ) )
+      pddotted.m_symbols.push_back(pptok::DOT);
+    pddotted.m_symbols.push_back(sym);
   }
   return pddotted;
 }
@@ -257,8 +259,8 @@ ProductionDescriptor *DottedProductionDescriptor(const ProductionDescriptor *pd,
 ProductionDescriptors *ProductionDescriptors::DottedProductionDescriptors(int nt, Assoc assoc) const {
   ProductionDescriptors *pdsdotted = new ProductionDescriptors();
   for( ProductionDescriptors::const_iterator cur = begin(), enditer = end(); cur != enditer; ++cur ) {
-    ProductionDescriptor *pd = DottedProductionDescriptor(*cur,nt,assoc);
-    pdsdotted->push_back(pd);
+    ProductionDescriptor pd = DottedProductionDescriptor(*cur,nt,assoc);
+    pdsdotted->insert(pd);
   }
   return pdsdotted;
 }
@@ -269,7 +271,7 @@ ProductionDescriptors *ProductionDescriptors::DottedProductionDescriptors(int nt
 void ParserDef::expandAssocRules() {
   while( m_assocrules.size() ) {
     AssociativeRule *rule = m_assocrules.back();
-    int nt = (*rule->m_pds->begin())->m_nt;
+    int nt = rule->m_pds->begin()->m_nt;
     DisallowRule *dr = new DisallowRule();
     dr->m_disallowed = rule->m_pds->clone();
     dr->m_lead = rule->m_pds->DottedProductionDescriptors(nt, rule->m_assoc);
@@ -292,13 +294,12 @@ void ParserDef::expandPrecRules() {
       if( nt != -1 ) {
         DisallowRule *dr = new DisallowRule();
         dr->m_lead = pds->DottedProductionDescriptors(nt,AssocNon);
-        dr->m_lead->consolidateRules();
         dr->m_disallowed = descriptors.clone();
-        dr->m_disallowed->consolidateRules();
+        dr->consolidateRules();
         m_disallowrules.push_back(dr);
       }
-      nt = (*pds->begin())->m_nt;
-      descriptors.insert(descriptors.end(), pds->begin(), pds->end());
+      nt = pds->begin()->m_nt;
+      descriptors.insert(pds->begin(), pds->end());
     }
     delete precrule;
     m_precrules.pop_back();
@@ -307,20 +308,65 @@ void ParserDef::expandPrecRules() {
 
 // Combine whatever rules can be combined.
 void ParserDef::combineRules() {
+  for( int i = 0; i < m_disallowrules.size(); ++i )
+    m_disallowrules[i]->consolidateRules();
+
+  // Trifrucate intersections
   for( int i = 0; i < m_disallowrules.size(); ++i ) {
     DisallowRule *lhs = m_disallowrules[i];
     for( int j = i+1; j < m_disallowrules.size(); ++j ) {
       DisallowRule *rhs = m_disallowrules[j];
-      if( ! lhs->combineWith(*rhs) )
+      if( lhs->m_intermediates != rhs->m_intermediates )
         continue;
-      delete rhs;
-      m_disallowrules.erase(m_disallowrules.begin()+j);
-      --j;
+      ProductionDescriptors overlap;
+      lhs->m_lead->trifrucate(*rhs->m_lead,overlap);
+      if( overlap.size() ) {
+        DisallowRule *dr = new DisallowRule();
+        dr->m_lead = overlap.clone();
+        dr->m_disallowed = lhs->m_disallowed->clone();
+        dr->m_disallowed->insert(rhs->m_disallowed->begin(),rhs->m_disallowed->end());
+        dr->m_disallowed->consolidateRules();
+        m_disallowrules.push_back(dr);
+      }
+      if( rhs->m_lead->size() == 0 ) {
+        m_disallowrules.erase(m_disallowrules.begin()+j);
+        --j;
+      }
+      if( lhs->m_lead->size() == 0 ) {
+        m_disallowrules.erase(m_disallowrules.begin()+i);
+        --i;
+        j = m_disallowrules.size()-1;
+      }
+    }
+  }
+
+  // Simplify anything left
+  for( int i = 0; i < m_disallowrules.size(); ++i ) {
+    DisallowRule *lhs = m_disallowrules[i];
+    for( int j = i+1; j < m_disallowrules.size(); ++j ) {
+      DisallowRule *rhs = m_disallowrules[j];
+      if( lhs->m_intermediates != rhs->m_intermediates )
+        continue;
+      if( *lhs->m_lead == *rhs->m_lead ) {
+        lhs->m_disallowed->insert(rhs->m_disallowed->begin(),rhs->m_disallowed->end());
+        lhs->consolidateRules();
+        delete rhs;
+        m_disallowrules.erase(m_disallowrules.begin()+j);
+        --i;
+        j = m_disallowrules.size()-1;
+      } else if( *lhs->m_disallowed == *rhs->m_disallowed ) {
+        lhs->m_lead->insert(rhs->m_lead->begin(),rhs->m_lead->end());
+        lhs->consolidateRules();
+        delete rhs;
+        m_disallowrules.erase(m_disallowrules.begin()+j);
+        --i;
+        j = m_disallowrules.size()-1;
+      }
     }
   }
 }
 
-bool ProductionDescriptor::matchesProduction(const Production *p, bool useBaseTokId) const {
+bool ProductionDescriptor::matchesProduction(const Production *p, const ParserDef &parser, bool useBaseTokId) const {
   // '.' is ignored for matching purposes.
   if( m_nt != p->m_nt )
     return false;
@@ -328,7 +374,7 @@ bool ProductionDescriptor::matchesProduction(const Production *p, bool useBaseTo
   while( curs != ends && curwc != endwc ) {
     if( *curwc == pptok::DOT )
       ++curwc;
-    if( *curs != *curwc )
+    if( parser.getBaseTokId(*curs) != *curwc )
       return false;
     ++curs;
     ++curwc;
@@ -338,10 +384,10 @@ bool ProductionDescriptor::matchesProduction(const Production *p, bool useBaseTo
   return true;
 }
 
-bool ProductionDescriptor::matchesProductionAndPosition(const Production *p, int pos, bool useBaseTokId) const {
+bool ProductionDescriptor::matchesProductionAndPosition(const Production *p, int pos, const ParserDef &parser, bool useBaseTokId) const {
   int matchPos = 0;
   bool matchedPos = false;
-  if( m_nt != p->m_nt )
+  if( m_nt != parser.getBaseTokId(p->m_nt) )
     return false;
   Vector<int>::const_iterator curs = p->m_symbols.begin(), ends = p->m_symbols.end(), curwc = m_symbols.begin(), endwc = m_symbols.end();
   while( curs != ends && curwc != endwc ) {
@@ -350,7 +396,7 @@ bool ProductionDescriptor::matchesProductionAndPosition(const Production *p, int
       if( matchPos == pos )
         matchedPos = true;
     }
-    if( *curs != *curwc )
+    if( parser.getBaseTokId(*curs) != *curwc )
       return false;
     ++curs;
     ++curwc;
@@ -362,7 +408,10 @@ bool ProductionDescriptor::matchesProductionAndPosition(const Production *p, int
 }
 
 static int ParseNonterminal(Tokenizer &toks, ParserDef &parser) {
-  if( toks.peek() == pptok::START || toks.peek() == pptok::ID ) {
+  if( toks.peek() == pptok::START ) {
+    toks.discard();
+    return pptok::START;
+  } else if( toks.peek() == pptok::ID ) {
     String s = toks.tokstr();
     toks.discard();
     return parser.findOrAddSymbolId(toks, s, SymbolTypeNonterminal, -1);
@@ -499,10 +548,12 @@ static void ParseTypedefRule(Tokenizer &toks, ParserDef &parser) {
 static ProductionDescriptors *ParseProductionDescriptors(Tokenizer &toks, ParserDef &parser) {
   ProductionDescriptor *pd = ParseProductionDescriptor(toks,parser);
   ProductionDescriptors *pds = new ProductionDescriptors();
-  pds->push_back(pd);
+  pds->insert(*pd);
+  delete pd;
   while( toks.peek() == pptok::LBRKT ) {
     pd = ParseProductionDescriptor(toks,parser);
-    pds->push_back(pd);
+    pds->insert(*pd);
+    delete pd;
   }
   pds->consolidateRules();
   return pds;
@@ -510,40 +561,27 @@ static ProductionDescriptors *ParseProductionDescriptors(Tokenizer &toks, Parser
 
 static ProductionDescriptors *ParseProductions(Tokenizer &toks, ParserDef &parser);
 
-static int cmpdesc(const void *vplhs, const void *vprhs) {
-  const ProductionDescriptor *lhs = (const ProductionDescriptor*)vplhs, *rhs = (const ProductionDescriptor*)vprhs;
-  if( *lhs < *rhs )
-     return -1;
-  else if( *rhs < *lhs )
-     return 1;
-  return 0;
-}
-
+// Combine the dots from two production descriptors that decribe the same production.
 void ProductionDescriptors::consolidateRules() {
-  for( int ilhs = 0; ilhs < size(); ++ilhs ) {
-    for( int irhs = ilhs+1; irhs < size(); ++irhs ) {
-      if( operator[](ilhs)->addDotsFrom(*operator[](irhs)) ) {
-        delete operator[](irhs);
-        erase(begin()+irhs);
-        --irhs;
+  for( iterator lhs = begin(); lhs != end(); ++lhs ) {
+    for( iterator rhs = lhs+1; rhs != end(); ++rhs ) {
+      if( lhs->addDotsFrom(*rhs) ) {
+        rhs = erase(rhs);
+        --rhs;
       }
     }
   }
-  // Also sort them
-  qsort(begin(),size(),sizeof(ProductionDescriptor*),cmpdesc);
 }
 
 ProductionDescriptors *ProductionDescriptors::clone() const {
   ProductionDescriptors *ret = new ProductionDescriptors();
-  ret->resize(size());
-  for( int i = 0, n = size(); i < n; ++i )
-    ret->operator[](i) = operator[](i)->clone();
+  *ret = *this;
   return ret;
 }
 
 static void checkProductionDescriptorsSameNonterminal(Tokenizer &toks, ProductionDescriptors *p, int lastnt, const char *name) {
   // Check all parts have the same nonterminal.
-  int nt = (*p->begin())->m_nt;
+  int nt = p->begin()->m_nt;
   if( lastnt != -1 && nt != lastnt ) {
     String err = "The dotted nonterminals of a ";
     err += name;
@@ -554,8 +592,8 @@ static void checkProductionDescriptorsSameNonterminal(Tokenizer &toks, Productio
   }
   int dottednt = -1;
   for( ProductionDescriptors::iterator cur = p->begin(), end = p->end(); cur != end; ++cur ) {
-    ProductionDescriptor *pd = *cur;
-    if( nt != pd->m_nt ) {
+    ProductionDescriptor &pd = *cur;
+    if( nt != pd.m_nt ) {
       String err = "All production descriptors in an ";
       err += name;
       err += " must have the same nonterminal";
@@ -569,10 +607,10 @@ static int checkProductionDescriptorsSameNonterminalAndDotsAgree(Tokenizer &toks
   // Check all parts have the same nonterminal.
   int dottednt = -1;
   for( ProductionDescriptors::iterator cur = p->begin(), end = p->end(); cur != end; ++cur ) {
-    ProductionDescriptor *pd = *cur;
+    const ProductionDescriptor &pd = *cur;
     // Check that all dotted nonterminals are the same (and that there is at least 1)
     int dotcnt = 0;
-    for( Vector<int>::iterator cursym = pd->m_symbols.begin(), endsym = pd->m_symbols.end(); cursym != endsym; ++cursym ) {
+    for( Vector<int>::const_iterator cursym = pd.m_symbols.begin(), endsym = pd.m_symbols.end(); cursym != endsym; ++cursym ) {
       if( *cursym == pptok::DOT ) {
         ++dotcnt;
         ++cursym;
@@ -666,7 +704,7 @@ static ProductionDescriptors *ParseProductions(Tokenizer &toks, ParserDef &parse
     if( toks.peek() != pptok::RBRKT )
       error(toks,"Expected ']' to end production description");
     toks.discard();
-    ret->push_back( new ProductionDescriptor(nt,symbols) );
+    ret->insert(ProductionDescriptor(nt,symbols));
   }
   ret->consolidateRules();
   return ret;
@@ -686,7 +724,7 @@ static DisallowRule *ParseDisallowRule(Tokenizer &toks, ParserDef &parser) {
   DisallowProductionDescriptors *dpd = ParseDisallowProductionDescriptors(toks,parser);
   lastnt = checkProductionDescriptorsSameNonterminalAndDotsAgree(toks,dpd->m_descriptors,lastnt,"disallow rule group");
   // when using stars, dots must be self consistent
-  if( dpd->m_star && (*dpd->m_descriptors->begin())->m_nt != lastnt )
+  if( dpd->m_star && dpd->m_descriptors->begin()->m_nt != lastnt )
     error(toks,"When using '*' with a disallow group, the productions must dot their own nonterminals");
   rule->m_intermediates.push_back(dpd);
   while( toks.peek() == pptok::ARROW ) {
@@ -694,7 +732,7 @@ static DisallowRule *ParseDisallowRule(Tokenizer &toks, ParserDef &parser) {
     dpd = ParseDisallowProductionDescriptors(toks,parser);
     lastnt = checkProductionDescriptorsSameNonterminalAndDotsAgree(toks,dpd->m_descriptors,lastnt,"disallow rule group");
     // when using stars, dots must be self consistent
-    if( dpd->m_star && (*dpd->m_descriptors->begin())->m_nt != lastnt )
+    if( dpd->m_star && dpd->m_descriptors->begin()->m_nt != lastnt )
       error(toks,"When using '*' with a disallow group, the productions must dot their own nonterminals");
     rule->m_intermediates.push_back(dpd);
   }
@@ -747,38 +785,9 @@ void ParseParser(TokBuf *tokbuf, ParserDef &parser) {
   ParseStart(toks,parser);
   if( toks.peek() != -1 )
     error(toks,"Expected EOF");
-}
-
-// Better think over this definition
-bool DisallowRule::canCombineWith(const DisallowRule &rhs) const {
-  if( m_intermediates.size() != rhs.m_intermediates.size() )
-    return false;
-  for( int i = 0, n = m_intermediates.size(); i < n; ++i )
-    if( *m_intermediates[i] != *rhs.m_intermediates[i] )
-      return false;
-  return (*m_lead == *rhs.m_lead) || (*m_disallowed == *rhs.m_disallowed);
-}
-
-bool DisallowRule::combineWith(const DisallowRule &rhs) {
-  if( m_intermediates.size() != rhs.m_intermediates.size() )
-    return false;
-  for( int i = 0, n = m_intermediates.size(); i < n; ++i )
-    if( *m_intermediates[i] != *rhs.m_intermediates[i] )
-      return false;
-  if( *m_lead == *rhs.m_lead ) {
-    if( *m_disallowed == *rhs.m_disallowed ) {
-      m_disallowed->insert(m_disallowed->end(), rhs.m_disallowed->begin(), rhs.m_disallowed->end());
-      m_disallowed->consolidateRules();
-    }
-    return true;
-  } else if( *m_disallowed == *rhs.m_disallowed ) {
-    if( *m_lead != *rhs.m_lead ) {
-      m_lead->insert(m_lead->end(), rhs.m_lead->begin(), rhs.m_lead->end());
-      m_lead->consolidateRules();
-    }
-    return true;
-  }
-  return false;
+  for( Map<int,SymbolDef>::iterator curdef = parser.m_tokdefs.begin(), enddef = parser.m_tokdefs.end(); curdef != enddef; ++curdef )
+    if( curdef->second.m_symboltype == SymbolTypeUnknown )
+      curdef->second.m_symboltype = SymbolTypeTerminal;
 }
 
 void ParserDef::print(FILE *out) const {
@@ -824,9 +833,74 @@ void PrecedenceRule::print(FILE *out, const Map<int,String> &tokens) const {
   }
 }
 
+bool ProductionDescriptor::dotIntersection(const ProductionDescriptor &rhs, Vector<int> &lhsdot, Vector<int> &rhsdot, Vector<int> &dots) const {
+  Vector<int>::const_iterator beginlhs = m_symbols.begin(), curlhs = m_symbols.begin(), endlhs = m_symbols.end();
+  Vector<int>::const_iterator beginrhs = rhs.m_symbols.begin(), currhs = rhs.m_symbols.begin(), endrhs = rhs.m_symbols.end();
+  int symidx = 0;
+  while( curlhs != endlhs && currhs != endrhs ) {
+    if( *curlhs == pptok::DOT && *currhs == pptok::DOT ) {
+      lhsdot.push_back(curlhs-beginlhs);
+      rhsdot.push_back(currhs-beginrhs);
+      dots.push_back(symidx);
+      ++curlhs;
+      ++currhs;
+      ++symidx;
+    }
+    else if( *curlhs == pptok::DOT ) {
+      ++curlhs;
+    }
+    else if( *currhs == pptok::DOT ) {
+      ++currhs;
+    } else if( *curlhs == *currhs ) {
+      ++curlhs;
+      ++currhs;
+      ++symidx;
+    } else {
+      return false;
+    }
+  }
+  return dots.size() != 0;
+}
+
+void ProductionDescriptor::insert(const Vector<int> &dots, int sym) {
+  for( int i = dots.size()-1; i >= 0; --i )
+    m_symbols.insert(m_symbols.begin()+dots[i],sym);
+}
+
+void ProductionDescriptor::remove(const Vector<int> &dots) {
+  for( int i = dots.size()-1; i >= 0; --i )
+    m_symbols.erase(m_symbols.begin()+dots[i]);
+}
+
+void ProductionDescriptors::trifrucate(ProductionDescriptors &rhs, ProductionDescriptors &overlap) {
+  Vector<int> dots;
+  for( iterator c = begin(); c != end(); ++c ) {
+    for( iterator c2 = rhs.begin(); c != end() && c2 != rhs.end(); ++c2 ) {
+      Vector<int> lhsdots, rhsdots, dots;
+      c->dotIntersection(*c2,lhsdots,rhsdots,dots);
+      if( ! dots.size() )
+        continue;
+      ProductionDescriptor pd = UnDottedProductionDescriptor(*c);
+      pd.insert(dots,pptok::DOT);
+      overlap.insert(pd);
+      c2->remove(rhsdots);
+      if( c2->countOf(pptok::DOT) == 0 ) {
+        c2 = rhs.erase(c2); 
+        --c2;
+      }
+      c->remove(lhsdots);
+      if( c->countOf(pptok::DOT) == 0  ) {
+        c = erase(c);
+        --c;
+        c2 = rhs.end()-1;
+      }
+    }
+  }
+}
+
 void ProductionDescriptors::print(FILE *out, const Map<int,String> &tokens) const {
   for( const_iterator cur = begin(); cur != end(); ++cur )
-    (*cur)->print(out,tokens);
+    cur->print(out,tokens);
 }
 
 void ProductionDescriptor::print(FILE *out, const Map<int,String> &tokens) const {
@@ -858,6 +932,15 @@ void AssociativeRule::print(FILE *out, const Map<int,String> &tokens) const {
     break;
   }
   m_pds->print(out,tokens);
+}
+
+void DisallowRule::consolidateRules() {
+  if( m_lead )
+    m_lead->consolidateRules();
+  if( m_disallowed )
+    m_disallowed->consolidateRules();
+  for( int i = 0, n = m_intermediates.size(); i < n; ++i )
+    m_intermediates[i]->m_descriptors->consolidateRules();
 }
 
 void DisallowRule::print(FILE *out, const Map<int,String> &tokens) const {

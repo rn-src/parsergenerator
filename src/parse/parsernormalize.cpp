@@ -47,8 +47,8 @@ public:
     m_forbidden = rhs.m_forbidden;
   }
 
-  bool forbids(const Production *positionProduction, int pos, const Production *expandProduction) const {
-    return m_positions->matchesProductionAndPosition(positionProduction,pos,true) && m_forbidden->matchesProduction(expandProduction,true);
+  bool forbids(const Production *positionProduction, int pos, const Production *expandProduction, const ParserDef &parser) const {
+    return m_positions->matchesProductionAndPosition(positionProduction,pos,parser,true) && m_forbidden->matchesProduction(expandProduction,parser,true);
   }
   bool operator<(const ForbidDescriptor &rhs) const {
     if( m_forbidden < rhs.m_forbidden )
@@ -78,8 +78,8 @@ public:
     return false;
   }
 
-  bool matches(const Production *lhs, const Production *rhs) const {
-    return m_lhs->matchesProduction(lhs,true) && m_rhs->matchesProduction(rhs,true);
+  bool matches(const Production *lhs, const Production *rhs, const ParserDef &parser) const {
+    return m_lhs->matchesProduction(lhs,parser,true) && m_rhs->matchesProduction(rhs,parser,true);
   }
 };
 
@@ -130,7 +130,7 @@ public:
       return 0; // "other" -> 0
     const Map< ForbidSub,Set<int> > &t = m_transitions[g.m_stateNo];
     for( Map<ForbidSub,Set<int> >::const_iterator cursub = t.begin(), endsub = t.end(); cursub != endsub; ++cursub ) {
-      if( cursub->first.matches(g.m_p,p) ) {
+      if( cursub->first.matches(g.m_p,p,m_parser) ) {
         if( cursub->second.size() == 0 )
           return 0; // "other" -> 0
         return *cursub->second.begin();
@@ -168,12 +168,14 @@ public:
     addEmptyTransition(m_q0,qFirst);
   }
 
-  void expandNode(const gnode &k, Set<gnode> &nodes, const Set<gnode> &processednodes, Map<int,String> &tokens, FILE *out) {
+  void expandNode(const gnode &k, Set<gnode> &nodes, const Set<gnode> &processednodes, Map<int,String> &tokens) {
+#if 0
     if( out ) {
       fputs("Considering ",out);
       k.print(out,tokens);
       fputs("\n",out);
     }
+#endif
     // These are the forbids that apply to the current state.
     ForbidDescriptors &forbids = m_statetoforbids[k.m_stateNo];
     // Look at all of the nonterminals of the production.
@@ -186,22 +188,26 @@ public:
       Vector<Production*> productions = m_parser.productionsAt(k.m_p,i);
       // Weed out some of the candidates based on the forbids
       for( Vector<Production*>::iterator curp = productions.begin(); curp != productions.end(); ++curp ) {
+#if 0
         if( out ) {
           fputs(" Is [", out);
           (*curp)->print(out,tokens);
           fprintf(out,"] forbidden at %d --> ",i);
         }
+#endif
         bool thisProductionForbidden = false;
         for( ForbidDescriptors::iterator curforbid = forbids.begin(), endforbid = forbids.end(); curforbid != endforbid; ++curforbid ) {
-          if( curforbid->forbids(k.m_p,i,*curp) ) {
+          if( curforbid->forbids(k.m_p,i,*curp,m_parser) ) {
             forbidnames.insert(curforbid->m_name);
             thisProductionForbidden = true;
           }
         }
+#if 0
         if( out ) {
           fputs((thisProductionForbidden?"yes":"no"),out);
           fputc('\n',out);
         }
+#endif
         if( thisProductionForbidden ) {
           curp = productions.erase(curp);
           --curp;
@@ -213,30 +219,40 @@ public:
           sName += "_";
           sName += *c;
         }
-        s = m_parser.findSymbolId(sName);
-        if( s == -1 ) {
-          int nexts = m_parser.addSymbolId(sName,SymbolTypeNonterminal,m_parser.getBaseTokId(s));
-          s = nexts;
-          k.m_p->m_symbols[i] = s;
-          tokens[s] = sName;
+        int derivedS = m_parser.findSymbolId(sName);
+        if( derivedS == -1 ) {
+          //fprintf(out, "Added symbol %s\n",sName.c_str());
+          derivedS = m_parser.addSymbolId(sName,SymbolTypeNonterminal,m_parser.getBaseTokId(s));
+          tokens[derivedS] = sName;
+          Vector<Production*> clones;
           for( Vector<Production*>::iterator curp = productions.begin(), endp = productions.end(); curp != endp; ++curp ) {
             Production *pClone = (*curp)->clone();
-            pClone->m_nt = s;
+            clones.push_back(pClone);
+            pClone->m_nt = derivedS;
             m_parser.addProduction(pClone);
+#if 0
+            fputs("Added production ", out);
+            pClone->print(out,tokens);
+            fputs("\n", out);
+#endif
           }
-        } else {
-          k.m_p->m_symbols[i] = s;
+          productions = clones;
         }
+        k.m_p->m_symbols[i] = derivedS;
+        // expansions should be based on the new nonterminal
+        s = derivedS;
       }
       for( Vector<Production*>::iterator curp = productions.begin(), endp = productions.end(); curp != endp; ++curp ) {
         int nextStateNo = nextState(k,*curp);
         gnode nextk(*curp,nextStateNo);
-        if( processednodes.find(nextk) == processednodes.end() ) {
+        if( processednodes.find(nextk) == processednodes.end() && nodes.find(nextk) == nodes.end() ) {
+#if 0
           if( out ) {
             fputs("Adding ",out);
             nextk.print(out,tokens);
             fputs("\n",out);
           }
+#endif
           nodes.insert(nextk);
         }
       }
@@ -330,7 +346,6 @@ void StringToInt_2_IntToString(const Map<String,int> &src, Map<int,String> &toke
 }
 
 void NormalizeParser(ParserDef &parser) {
-  parser.print(stdout);
   ForbidAutomata nforbid(parser), forbid(parser);
   // Expand and combine the rules
   parser.expandAssocRules();
@@ -348,13 +363,12 @@ void NormalizeParser(ParserDef &parser) {
   // expand each production/state until closure
   Map<int,String> tokens;
   StringToInt_2_IntToString(parser.m_tokens,tokens);
-  FILE *out = stdout;
   while( nodes.size() ) {
     Set<gnode>::iterator curgnode = nodes.begin();
     gnode k = *curgnode;
     nodes.erase(curgnode);
     processednodes.insert(k);
-    forbid.expandNode(k,nodes,processednodes,tokens,out);
+    forbid.expandNode(k,nodes,processednodes,tokens);
   }
   parser.m_disallowrules.clear();
   parser.print(stdout);

@@ -3,8 +3,10 @@
 
 #include "../tok/tok.h"
 #include "../tok/tinytemplates.h"
+#define EOF_TOK (-1)
 
 using namespace std;
+class ParserDef;
 
 class Production {
 public:
@@ -46,12 +48,22 @@ public:
   Vector<int> m_symbols;
   ProductionDescriptor() {}
   ProductionDescriptor(int nt, Vector<int> symbols);
-  bool matchesProduction(const Production *p, bool useBaseTokId) const;
-  bool matchesProductionAndPosition(const Production *p, int pos, bool useBaseTokId) const;
+  bool matchesProduction(const Production *p, const ParserDef &parser, bool useBaseTokId) const;
+  bool matchesProductionAndPosition(const Production *p, int pos, const ParserDef &parser, bool useBaseTokId) const;
   // Check if, ignoring dots, the productions are the same
   bool hasSameProductionAs(const ProductionDescriptor &rhs) const;
   // Add dots from rhs to this descriptor.  Fail if not same production.
   bool addDotsFrom(const ProductionDescriptor &rhs);
+  bool dotIntersection(const ProductionDescriptor &rhs, Vector<int> &lhsdot, Vector<int> &rhsdot, Vector<int> &dots) const;
+  void insert(const Vector<int> &dots, int sym);
+  void remove(const Vector<int> &dots);
+  int countOf(int sym) const {
+    int cnt = 0;
+    for( Vector<int>::const_iterator c = m_symbols.begin(), e = m_symbols.end(); c != e; ++c )
+      if( *c == sym )
+        ++cnt;
+    return cnt;
+  }
   bool operator<(const ProductionDescriptor &rhs) const;
   ProductionDescriptor *clone() const;
   bool operator==(const ProductionDescriptor &rhs) const {
@@ -69,7 +81,7 @@ enum Assoc {
   AssocNon
 };
 
-class ProductionDescriptors : public Vector<ProductionDescriptor*> {
+class ProductionDescriptors : public Set<ProductionDescriptor> {
 public:
   void consolidateRules();
   ProductionDescriptors *clone() const;
@@ -77,23 +89,24 @@ public:
   ProductionDescriptors *UnDottedProductionDescriptors() const;
 
   bool operator==(const ProductionDescriptors &rhs) const {
-    return Vector<ProductionDescriptor*>::operator==(rhs);
+    return Set<ProductionDescriptor>::operator==(rhs);
   }
   bool operator!=(const ProductionDescriptors &rhs) const {
     return ! operator==(rhs);
   }
-  bool matchesProduction(const Production *lhs, bool useBaseTokId) const {
+  bool matchesProduction(const Production *lhs, const ParserDef &parser, bool useBaseTokId) const {
     for( const_iterator c = begin(), e = end(); c != e; ++c )
-     if( (*c)->matchesProduction(lhs,useBaseTokId) )
+     if( c->matchesProduction(lhs,parser,useBaseTokId) )
        return true;
     return false;
   }
-  bool matchesProductionAndPosition(const Production *lhs, int pos, bool useBaseTokId) const {
+  bool matchesProductionAndPosition(const Production *lhs, int pos, const ParserDef &parser, bool useBaseTokId) const {
     for( const_iterator c = begin(), e = end(); c != e; ++c )
-     if( (*c)->matchesProductionAndPosition(lhs,pos,useBaseTokId) )
+     if( c->matchesProductionAndPosition(lhs,pos,parser,useBaseTokId) )
        return true;
     return false;
   }
+  void trifrucate(ProductionDescriptors &rhs, ProductionDescriptors &overlap);
   void print(FILE *out, const Map<int,String> &tokens) const;
 };
 
@@ -120,8 +133,7 @@ public:
   ProductionDescriptors *m_lead;
   Vector<DisallowProductionDescriptors*> m_intermediates;
   ProductionDescriptors *m_disallowed;
-  bool canCombineWith(const DisallowRule &rhs) const;
-  bool combineWith(const DisallowRule &rhs);
+  void consolidateRules();
   void print(FILE *out, const Map<int,String> &tokens) const;
 };
 
@@ -153,10 +165,9 @@ public:
 
 class ParserDef {
   int m_nextsymbolid;
-  int m_startnt;
   Production *m_startProduction;
 public:
-  ParserDef() : m_nextsymbolid(0), m_startnt(-1), m_startProduction(0) {}
+  ParserDef() : m_nextsymbolid(0), m_startProduction(0) {}
   Map<String,int> m_tokens;
   Map<int,SymbolDef> m_tokdefs;
   Vector<Production*> m_productions;
@@ -168,10 +179,10 @@ public:
   int findSymbolId(const String &s) const;
   int addSymbolId(const String &s, SymbolType stype, int basetokid);
   int findOrAddSymbolId(Tokenizer &toks, const String &s, SymbolType stype, int basetokid);
-  int getStartNt() { return m_startnt; }
+  int getStartNt() const;
   int getBaseTokId(int s) const;
   Production *getStartProduction() const { return m_startProduction; }
-  Vector<Production*> productionsAt(const Production *p, int idx) const;
+  Vector<Production*> productionsAt(const Production *p, int idx, const Vector<Production*> *pproductions = 0) const;
   void expandAssocRules();
   void expandPrecRules();
   void combineRules();
@@ -195,6 +206,8 @@ typedef Set<ProductionState> state_t;
 
 class ParserSolution {
 public:
+  Map<int, Set<int> > m_firsts;
+  Map<int, Set<int> > m_follows;
   Vector<state_t> m_states;
   // statesrc,statedst -> symbols
   Map< Pair<int,int>,Set<int> > m_shifts;
