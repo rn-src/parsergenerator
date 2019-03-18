@@ -95,27 +95,31 @@ static void OutputParser(FILE *out, const ParserDef &parser, const ParserSolutio
 
   first = true;
   lang.outArrayDecl(out,"static const int", "symbols");
-  for( Map< Pair<int,int>,Set<int> >::const_iterator cur = solution.m_shifts.begin(), end = solution.m_shifts.end(); cur != end; ++cur ) {
-    for( Set<int>::const_iterator cursymbol = cur->second.begin(), endsymbol = cur->second.end(); cursymbol != endsymbol; ++cursymbol ) {
-      if( first )
-        first = false;
-      else
-        fputc(',',out);
-      lang.outInt(out,*cursymbol);
+  for( shiftmap_t::const_iterator cur = solution.m_shifts.begin(), end = solution.m_shifts.end(); cur != end; ++cur ) {
+    for( shifttosymbols_t::const_iterator curdstsymbols = cur->second.begin(), enddstsymbols = cur->second.end(); curdstsymbols != enddstsymbols; ++curdstsymbols ) {
+      for( Set<int>::const_iterator cursymbol = curdstsymbols->second.begin(), endsymbol = curdstsymbols->second.end(); cursymbol != endsymbol; ++cursymbol ) {
+        if( first )
+          first = false;
+        else
+          fputc(',',out);
+        lang.outInt(out,*cursymbol);
+      }
+      shiftOffsets.push_back(symbolOffset);
+      symbolOffset += curdstsymbols->second.size();
     }
-    shiftOffsets.push_back(symbolOffset);
-    symbolOffset += cur->second.size();
   }
-  for( Map< Pair<int,int>,Set<int> >::const_iterator cur = solution.m_reductions.begin(), end = solution.m_reductions.end(); cur != end; ++cur ) {
-    for( Set<int>::const_iterator cursymbol = cur->second.begin(), endsymbol = cur->second.end(); cursymbol != endsymbol; ++cursymbol ) {
-      if( first )
-        first = false;
-      else
-        fputc(',',out);
-      lang.outInt(out,*cursymbol);
+  for( shiftmap_t::const_iterator cur = solution.m_shifts.begin(), end = solution.m_shifts.end(); cur != end; ++cur ) {
+    for( shifttosymbols_t::const_iterator curdstsymbols = cur->second.begin(), enddstsymbols = cur->second.end(); curdstsymbols != enddstsymbols; ++curdstsymbols ) {
+      for( Set<int>::const_iterator cursymbol = curdstsymbols->second.begin(), endsymbol = curdstsymbols->second.end(); cursymbol != endsymbol; ++cursymbol ) {
+        if( first )
+          first = false;
+        else
+          fputc(',',out);
+        lang.outInt(out,*cursymbol);
+      }
+      reduceOffsets.push_back(symbolOffset);
+      symbolOffset += curdstsymbols->second.size();
     }
-    reduceOffsets.push_back(symbolOffset);
-    symbolOffset += cur->second.size();
   }
   lang.outEndArray(out);
   fputc('\n',out);
@@ -123,17 +127,21 @@ static void OutputParser(FILE *out, const ParserDef &parser, const ParserSolutio
   first = true;
   i = 0;
   lang.outArrayDecl(out,"static const int", "shifts");
-  for( Map< Pair<int,int>,Set<int> >::const_iterator cur = solution.m_shifts.begin(), end = solution.m_shifts.end(); cur != end; ++cur ) {
-    if( first )
-      first = false;
-    else
+  for( shiftmap_t::const_iterator cur = solution.m_shifts.begin(), end = solution.m_shifts.end(); cur != end; ++cur ) {
+    for( shifttosymbols_t::const_iterator curdstsymbols = cur->second.begin(), enddstsymbols = cur->second.end(); curdstsymbols != enddstsymbols; ++curdstsymbols ) {
+      for( Set<int>::const_iterator cursymbol = curdstsymbols->second.begin(), endsymbol = curdstsymbols->second.end(); cursymbol != endsymbol; ++cursymbol ) {
+        if( first )
+          first = false;
+        else
+          fputc(',',out);
+        fputc('\n',out);
+        lang.outInt(out,curdstsymbols->first);
+        fputc(',',out);
+        lang.outInt(out,*cursymbol);
+      }
       fputc(',',out);
-    fputc('\n',out);
-    lang.outInt(out,cur->first.first);
-    fputc(',',out);
-    lang.outInt(out,cur->first.second);
-    fputc(',',out);
-    lang.outInt(out,shiftOffsets[i++]);
+      lang.outInt(out,shiftOffsets[i++]);
+    }
   }
   lang.outEndArray(out);
   fputc('\n',out);
@@ -141,15 +149,15 @@ static void OutputParser(FILE *out, const ParserDef &parser, const ParserSolutio
   first = true;
   i = 0;
   lang.outArrayDecl(out,"static const int", "reductions");
-  for( Map< Pair<int,int>,Set<int> >::const_iterator cur = solution.m_reductions.begin(), end = solution.m_reductions.end(); cur != end; ++cur ) {
+  for( reducemap_t::const_iterator cur = solution.m_reductions.begin(), end = solution.m_reductions.end(); cur != end; ++cur ) {
     if( first )
       first = false;
     else
       fputc(',',out);
     fputc('\n',out);
-    lang.outInt(out,cur->first.first);
+    lang.outInt(out,cur->first);
     fputc(',',out);
-    lang.outInt(out,cur->first.second);
+    //lang.outInt(out,cur->first.second);
     fputc(',',out);
     lang.outInt(out,reduceOffsets[i++]);
   }

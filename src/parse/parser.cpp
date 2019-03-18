@@ -812,13 +812,18 @@ void ParserDef::print(FILE *out) const {
   }
 }
 
-void Production::print(FILE *out, const Map<int,String> &tokens) const {
+void Production::print(FILE *out, const Map<int,String> &tokens, int idx) const {
   fputs(tokens[m_nt].c_str(), out);
   fputs(" :", out);
   for( int i = 0; i < m_symbols.size(); ++i ) {
-    fputc(' ',out);
+    if( idx == i )
+      fputc('.',out);
+    else
+      fputc(' ',out);
     fputs(tokens[m_symbols[i]].c_str(),out);
   }
+  if( idx == m_symbols.size() )
+    fputc('.',out);
 }
 
 void PrecedenceRule::print(FILE *out, const Map<int,String> &tokens) const {
@@ -958,4 +963,12 @@ void DisallowProductionDescriptors::print(FILE *out, const Map<int,String> &toke
   m_descriptors->print(out,tokens);
   if( m_star )
     fputc('*',out);
+}
+
+void state_t::print(FILE *out, const Map<int,String> &tokens) const {
+  for( state_t::const_iterator curps = begin(), endps = end(); curps != endps; ++curps ) {
+    curps->m_p->print(out,tokens,curps->m_idx);
+    fputs("\n",out);
+  
+  }
 }

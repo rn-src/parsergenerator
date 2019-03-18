@@ -345,7 +345,12 @@ void StringToInt_2_IntToString(const Map<String,int> &src, Map<int,String> &toke
     tokens[tok->second] = tok->first;
 }
 
-void NormalizeParser(ParserDef &parser) {
+void NormalizeParser(ParserDef &parser, bool bVerbose) {
+  if( bVerbose ) {
+    fputs("Before normalizing:\n", stderr);
+    parser.print(stderr);
+    fputs("\n", stderr);
+  }
   ForbidAutomata nforbid(parser), forbid(parser);
   // Expand and combine the rules
   parser.expandAssocRules();
@@ -371,6 +376,10 @@ void NormalizeParser(ParserDef &parser) {
     forbid.expandNode(k,nodes,processednodes,tokens);
   }
   parser.m_disallowrules.clear();
-  parser.print(stdout);
+  if( bVerbose ) {
+    fputs("After normalizing:\n", stderr);
+    parser.print(stderr);
+    fputs("\n", stderr);
+  }
 }
 

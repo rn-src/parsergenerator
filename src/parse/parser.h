@@ -17,7 +17,7 @@ public:
 
   Production(bool rejectable, int nt, const Vector<int> &symbols, String action);
   Production *clone();
-  void print(FILE *out, const Map<int,String> &tokens) const;
+  void print(FILE *out, const Map<int,String> &tokens, int idx=-1) const;
 };
 
 class ProductionState {
@@ -27,9 +27,9 @@ public:
   ProductionState(Production *p, int idx) : m_p(p), m_idx(idx) {}
   ProductionState(const ProductionState &rhs) : m_p(rhs.m_p), m_idx(rhs.m_idx) {}
   bool operator<(const ProductionState &rhs) const {
-    if( m_p->m_nt < rhs.m_p->m_nt )
+    if( m_p < rhs.m_p )
       return true;
-    else if( rhs.m_p->m_nt < m_p->m_nt )
+    else if( rhs.m_p < m_p )
       return false;
     if( m_idx < rhs.m_idx )
       return true;
@@ -202,17 +202,23 @@ public:
   ParserErrorWithLineCol(int line, int col, const String &err) : ParserError(err), m_line(line), m_col(col) {}
 };
 
-typedef Set<ProductionState> state_t;
+class state_t : public Set<ProductionState> {
+public:
+  void print(FILE *out, const Map<int,String> &tokens) const;
+};
+
+typedef Map<int,Set<int> > shifttosymbols_t;
+typedef Map<int,shifttosymbols_t> shiftmap_t;
+typedef Map<Production*,Set<int> > reducebysymbols_t;
+typedef Map<int,reducebysymbols_t> reducemap_t;
 
 class ParserSolution {
 public:
   Map<int, Set<int> > m_firsts;
   Map<int, Set<int> > m_follows;
   Vector<state_t> m_states;
-  // statesrc,statedst -> symbols
-  Map< Pair<int,int>,Set<int> > m_shifts;
-  // statesrc,ruleno -> symbols
-  Map< Pair<int,int>,Set<int> > m_reductions;
+  shiftmap_t m_shifts;
+  reducemap_t m_reductions;
 };
 
 enum OutputLanguage {
@@ -221,8 +227,8 @@ enum OutputLanguage {
 };
 
 void ParseParser(TokBuf *tokbuf, ParserDef &parser);
-void NormalizeParser(ParserDef &parser);
-void SolveParser(const ParserDef &parser, ParserSolution &solution);
+void NormalizeParser(ParserDef &parser, bool bVerbose);
+void SolveParser(const ParserDef &parser, ParserSolution &solution, bool bVerbose);
 void OutputParserSolution(FILE *out, const ParserDef &parser, const ParserSolution &solution, OutputLanguage language);
 
 #endif /* __parser_h */

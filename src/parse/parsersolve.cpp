@@ -80,8 +80,8 @@ void closure(state_t &state, const ParserDef &parser) {
         newparts.insert(ps);
       }
     }
-    for( Set<ProductionState>::const_iterator cur = newparts.begin(), end = newparts.end(); cur != end; ++cur )
-      state.insert(*cur);
+    for( Set<ProductionState>::const_iterator curpart = newparts.begin(), endpart = newparts.end(); curpart != endpart; ++curpart )
+      state.insert(*curpart);
   }
 }
 
@@ -90,12 +90,7 @@ void nexts(const state_t &state, const ParserDef &parser, Set<int> &nextSymbols)
     int symbol = curs->symbol();
     if( symbol == -1 )
       continue;
-    const SymbolDef &def = parser.m_tokdefs[symbol];
-    if( def.m_symboltype == SymbolTypeTerminal )
-      nextSymbols.insert(symbol);
-    else if( def.m_symboltype == SymbolTypeNonterminal ) {
-      //nextSymbols.insert(firsts(symbol));
-    }
+    nextSymbols.insert(symbol);
   }
 }
 
@@ -110,7 +105,7 @@ void advance(state_t &state, int tsymbol, const ParserDef &parser, state_t &next
   }
 }
 
-void ComputeStates(const ParserDef &parser, ParserSolution &solution) {
+void ComputeStatesAndActions(const ParserDef &parser, ParserSolution &solution) {
   Map<state_t,int> statemap;
   state_t state, nextState;
   Set<int> nextSymbols;
@@ -128,23 +123,100 @@ void ComputeStates(const ParserDef &parser, ParserSolution &solution) {
       closure(nextState,parser);
       if( nextState.empty() )
         continue;
-      if( statemap.find(nextState) == statemap.end() ) {
-        int nextStateIdx = solution.m_states.size();
+      Map<state_t,int>::iterator stateiter = statemap.find(nextState);
+      int nextStateIdx = -1;
+      if( stateiter == statemap.end() ) {
+        nextStateIdx = solution.m_states.size();
         statemap[nextState] = nextStateIdx;
         solution.m_states.push_back(nextState);
+      } else {
+        nextStateIdx = stateiter->second;
       }
+      solution.m_shifts[stateIdx][nextStateIdx].insert(symbol);
+    }
+    for( state_t::const_iterator curps = state.begin(), endps = state.end(); curps != endps; ++curps ) {
+      if( curps->m_idx < curps->m_p->m_symbols.size() )
+        continue;
+      const Set<int> &follows = solution.m_follows[curps->m_p->m_nt];
+      solution.m_reductions[stateIdx][curps->m_p].insert(follows.begin(),follows.end());
     }
   }
 }
 
-void ComputeActions(const ParserDef &parser, ParserSolution &solution) {
+#define SHIFT (1)
+#define REDUCE (2)
+#define REDUCE2 (4)
+
+void PrintStatesAndActions(const ParserDef &parser, const ParserSolution &solution, const Map<int,String> &tokens, FILE *out) {
+  fprintf(out, "%d states\n\n", solution.m_states.size());
+  for( int i = 0, n = solution.m_states.size(); i != n; ++i ) {
+    Set<int> symbols;
+    Set<int> shiftsymbols;
+    Map<int,Set<const Production*> > reductions;
+    fprintf(out, "State %d:\n", i);
+    const state_t &state = solution.m_states[i];
+    state.print(out,tokens);
+    shiftmap_t::const_iterator shiftiter = solution.m_shifts.find(i);
+    if( shiftiter != solution.m_shifts.end() ) {
+      for( shifttosymbols_t::const_iterator curshift = shiftiter->second.begin(), endshift = shiftiter->second.end(); curshift != endshift; ++curshift ) {
+        fprintf(out, "shift to state %d on ", curshift->first);
+        bool bFirst = true;
+        for( Set<int>::const_iterator cursym = curshift->second.begin(), endsym = curshift->second.end(); cursym != endsym; ++cursym ) {
+          if( bFirst )
+            bFirst = false;
+          else
+            fputs(", ", out);
+          fputs(tokens[*cursym].c_str(), out);
+          shiftsymbols.insert(*cursym);
+          symbols.insert(*cursym);
+        }
+        fputs("\n",out);
+      }
+    }
+    reducemap_t::const_iterator reduceiter = solution.m_reductions.find(i);
+    if( reduceiter != solution.m_reductions.end() ) {
+      for( reducebysymbols_t::const_iterator curreduce = reduceiter->second.begin(), endreduce = reduceiter->second.end(); curreduce != endreduce; ++curreduce ) {
+        fputs("reduce by production ", out);
+        curreduce->first->print(out,tokens);
+        fputs(" on ", out);
+        bool bFirst = true;
+        for( Set<int>::const_iterator cursym = curreduce->second.begin(), endsym = curreduce->second.end(); cursym != endsym; ++cursym ) {
+          const char *symstr = (*cursym==-1) ? "$" : tokens[*cursym].c_str();
+          if( bFirst )
+            bFirst = false;
+          else
+            fputs(", ", out);
+          fputs(symstr, out);
+          reductions[*cursym].insert(curreduce->first);
+          symbols.insert(*cursym);
+        }
+        fputs("\n",out);
+      }
+    }
+    for( Set<int>::const_iterator cursym = symbols.begin(), endsym = symbols.end(); cursym != endsym; ++cursym ) {
+      int sym = *cursym;
+      const char *symstr = (sym==-1) ? "$" : tokens[sym].c_str();
+      if( shiftsymbols.find(sym) != shiftsymbols.end() && reductions.find(sym) != reductions.end() )
+        fprintf(out, "shift/reduce conflict on %s\n", symstr);
+      if( reductions.find(sym) != reductions.end() && reductions.find(sym)->second.size() > 1 )
+        fprintf(out, "reduce/reduce conflict on %s\n", symstr);
+    }
+    fputs("\n",out);
+  }
+  fputs("\n",out);
 }
 
-void SolveParser(const ParserDef &parser, ParserSolution &solution) {
+void StringToInt_2_IntToString(const Map<String,int> &src, Map<int,String> &tokens);
+
+void SolveParser(const ParserDef &parser, ParserSolution &solution, bool bVerbose) {
   if( ! parser.getStartProduction() )
     error("The grammar definition requires a START production");
   ComputeFirsts(parser,solution);
   ComputeFollows(parser,solution);
-  ComputeStates(parser,solution);
-  ComputeActions(parser,solution);
+  ComputeStatesAndActions(parser,solution);
+  if( bVerbose ) {
+    Map<int,String> tokens;
+    StringToInt_2_IntToString(parser.m_tokens,tokens);
+    PrintStatesAndActions(parser,solution,tokens,stderr);
+  }
 }
