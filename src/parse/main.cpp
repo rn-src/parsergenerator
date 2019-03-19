@@ -9,14 +9,21 @@ bool hasarg(int argc, char *argv[], const char *arg) {
 }
 
 int main(int argc, char *argv[]) {
-  bool bVerbose = hasarg(argc,argv,"--verbose");
+  int verbosity = 0;
+  if( hasarg(argc,argv,"-vvv") )
+    verbosity = 3;
+  if( hasarg(argc,argv,"-vv") )
+    verbosity = 2;
+  else if( hasarg(argc,argv,"-v") )
+    verbosity = 1;
   ParserDef parser;
   try {
+    FILE *vout = stderr;
     TokBuf tokbuf(stdin);
-    ParseParser(&tokbuf,parser);
+    ParseParser(&tokbuf,parser,vout,verbosity);
     ParserSolution solution;
-    NormalizeParser(parser, bVerbose);
-    SolveParser(parser, solution, bVerbose);
+    NormalizeParser(parser, vout, verbosity);
+    SolveParser(parser, solution, vout, verbosity);
     OutputParserSolution(stdout, parser, solution, LanguageC);
   } catch(ParserErrorWithLineCol &pe) {
     fprintf(stderr, "<stdin>(%d:%d) : %s", pe.m_line, pe.m_col, pe.m_err.c_str());

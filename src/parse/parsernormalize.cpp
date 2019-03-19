@@ -168,14 +168,12 @@ public:
     addEmptyTransition(m_q0,qFirst);
   }
 
-  void expandNode(const gnode &k, Set<gnode> &nodes, const Set<gnode> &processednodes, Map<int,String> &tokens) {
-#if 0
-    if( out ) {
-      fputs("Considering ",out);
-      k.print(out,tokens);
-      fputs("\n",out);
+  void expandNode(const gnode &k, Set<gnode> &nodes, const Set<gnode> &processednodes, Map<int,String> &tokens, FILE *vout, int verbosity) {
+    if( verbosity > 2 ) {
+      fputs("Considering ",stderr);
+      k.print(stderr,tokens);
+      fputs("\n",stderr);
     }
-#endif
     // These are the forbids that apply to the current state.
     ForbidDescriptors &forbids = m_statetoforbids[k.m_stateNo];
     // Look at all of the nonterminals of the production.
@@ -188,13 +186,13 @@ public:
       Vector<Production*> productions = m_parser.productionsAt(k.m_p,i);
       // Weed out some of the candidates based on the forbids
       for( Vector<Production*>::iterator curp = productions.begin(); curp != productions.end(); ++curp ) {
-#if 0
-        if( out ) {
-          fputs(" Is [", out);
-          (*curp)->print(out,tokens);
-          fprintf(out,"] forbidden at %d --> ",i);
+        if( verbosity > 2 ) {
+          fputs(" Is [", stderr);
+          (*curp)->print(stderr,tokens);
+          fputs("] forbidden at [", stderr);
+          k.m_p->print(stderr,tokens,i);
+          fputs("] --> ",stderr);
         }
-#endif
         bool thisProductionForbidden = false;
         for( ForbidDescriptors::iterator curforbid = forbids.begin(), endforbid = forbids.end(); curforbid != endforbid; ++curforbid ) {
           if( curforbid->forbids(k.m_p,i,*curp,m_parser) ) {
@@ -202,12 +200,10 @@ public:
             thisProductionForbidden = true;
           }
         }
-#if 0
-        if( out ) {
-          fputs((thisProductionForbidden?"yes":"no"),out);
-          fputc('\n',out);
+        if( verbosity > 2 ) {
+          fputs((thisProductionForbidden?"yes":"no"),stderr);
+          fputc('\n',stderr);
         }
-#endif
         if( thisProductionForbidden ) {
           curp = productions.erase(curp);
           --curp;
@@ -230,11 +226,11 @@ public:
             clones.push_back(pClone);
             pClone->m_nt = derivedS;
             m_parser.addProduction(pClone);
-#if 0
-            fputs("Added production ", out);
-            pClone->print(out,tokens);
-            fputs("\n", out);
-#endif
+            if( verbosity > 2 ) {
+              fputs("Added production ", stderr);
+              pClone->print(stderr,tokens);
+              fputs("\n", stderr);
+            }
           }
           productions = clones;
         }
@@ -246,13 +242,11 @@ public:
         int nextStateNo = nextState(k,*curp);
         gnode nextk(*curp,nextStateNo);
         if( processednodes.find(nextk) == processednodes.end() && nodes.find(nextk) == nodes.end() ) {
-#if 0
-          if( out ) {
-            fputs("Adding ",out);
-            nextk.print(out,tokens);
-            fputs("\n",out);
+          if( verbosity > 2 ) {
+            fputs("Adding ",stderr);
+            nextk.print(stderr,tokens);
+            fputs("\n",stderr);
           }
-#endif
           nodes.insert(nextk);
         }
       }
@@ -345,11 +339,11 @@ void StringToInt_2_IntToString(const Map<String,int> &src, Map<int,String> &toke
     tokens[tok->second] = tok->first;
 }
 
-void NormalizeParser(ParserDef &parser, bool bVerbose) {
-  if( bVerbose ) {
-    fputs("Before normalizing:\n", stderr);
-    parser.print(stderr);
-    fputs("\n", stderr);
+void NormalizeParser(ParserDef &parser, FILE *vout, int verbosity) {
+  if( verbosity > 1 ) {
+    fputs("Before normalizing:\n", vout);
+    parser.print(vout);
+    fputs("\n", vout);
   }
   ForbidAutomata nforbid(parser), forbid(parser);
   // Expand and combine the rules
@@ -373,13 +367,13 @@ void NormalizeParser(ParserDef &parser, bool bVerbose) {
     gnode k = *curgnode;
     nodes.erase(curgnode);
     processednodes.insert(k);
-    forbid.expandNode(k,nodes,processednodes,tokens);
+    forbid.expandNode(k,nodes,processednodes,tokens,vout,verbosity);
   }
   parser.m_disallowrules.clear();
-  if( bVerbose ) {
-    fputs("After normalizing:\n", stderr);
-    parser.print(stderr);
-    fputs("\n", stderr);
+  if( verbosity > 1 ) {
+    fputs("After normalizing:\n", vout);
+    parser.print(vout);
+    fputs("\n", vout);
   }
 }
 

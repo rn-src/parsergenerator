@@ -8,7 +8,7 @@ static void error(const String &err) {
   throw ParserError(err);
 }
 
-void ComputeFirsts(const ParserDef &parser, ParserSolution &solution) {
+void ComputeFirsts(const ParserDef &parser, ParserSolution &solution, FILE *out, int verbosity) {
   for( Map<int,SymbolDef>::const_iterator cur = parser.m_tokdefs.begin(), end = parser.m_tokdefs.end(); cur != end; ++cur ) {
     if( cur->second.m_symboltype == SymbolTypeTerminal )
       solution.m_firsts[cur->second.m_tokid].insert(cur->second.m_tokid);
@@ -36,7 +36,7 @@ void ComputeFirsts(const ParserDef &parser, ParserSolution &solution) {
   }
 }
 
-void ComputeFollows(const ParserDef &parser, ParserSolution &solution) {
+void ComputeFollows(const ParserDef &parser, ParserSolution &solution, FILE *out, int verbosity) {
   solution.m_follows[parser.getStartNt()].insert(EOF_TOK);
   bool added = true;
   while( added ) {
@@ -105,7 +105,7 @@ void advance(state_t &state, int tsymbol, const ParserDef &parser, state_t &next
   }
 }
 
-void ComputeStatesAndActions(const ParserDef &parser, ParserSolution &solution) {
+void ComputeStatesAndActions(const ParserDef &parser, ParserSolution &solution, FILE *vout, int verbosity) {
   Map<state_t,int> statemap;
   state_t state, nextState;
   Set<int> nextSymbols;
@@ -208,15 +208,16 @@ void PrintStatesAndActions(const ParserDef &parser, const ParserSolution &soluti
 
 void StringToInt_2_IntToString(const Map<String,int> &src, Map<int,String> &tokens);
 
-void SolveParser(const ParserDef &parser, ParserSolution &solution, bool bVerbose) {
+void SolveParser(const ParserDef &parser, ParserSolution &solution, FILE *vout, int verbosity) {
+  FILE *out = stderr;
   if( ! parser.getStartProduction() )
     error("The grammar definition requires a START production");
-  ComputeFirsts(parser,solution);
-  ComputeFollows(parser,solution);
-  ComputeStatesAndActions(parser,solution);
-  if( bVerbose ) {
+  ComputeFirsts(parser,solution,out,verbosity);
+  ComputeFollows(parser,solution,out,verbosity);
+  ComputeStatesAndActions(parser,solution,out,verbosity);
+  if( verbosity >= 1 ) {
     Map<int,String> tokens;
     StringToInt_2_IntToString(parser.m_tokens,tokens);
-    PrintStatesAndActions(parser,solution,tokens,stderr);
+    PrintStatesAndActions(parser,solution,tokens,vout);
   }
 }

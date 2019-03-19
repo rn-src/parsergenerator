@@ -778,7 +778,7 @@ static void ParseStart(Tokenizer &toks, ParserDef &parser) {
   }
 }
 
-void ParseParser(TokBuf *tokbuf, ParserDef &parser) {
+void ParseParser(TokBuf *tokbuf, ParserDef &parser, FILE *vout, int verbosity) {
   Tokenizer toks(tokbuf,&pptok::pptokinfo);
   for( int i = 0, n = pptok::pptokinfo.m_tokenCount; i < n; ++i )
     parser.findOrAddSymbolId(toks, pptok::pptokinfo.m_tokenstr[i], SymbolTypeTerminal, -1);

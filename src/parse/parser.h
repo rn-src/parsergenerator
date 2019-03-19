@@ -226,9 +226,9 @@ enum OutputLanguage {
   LanguageC
 };
 
-void ParseParser(TokBuf *tokbuf, ParserDef &parser);
-void NormalizeParser(ParserDef &parser, bool bVerbose);
-void SolveParser(const ParserDef &parser, ParserSolution &solution, bool bVerbose);
+void ParseParser(TokBuf *tokbuf, ParserDef &parser, FILE *vout, int verbosity);
+void NormalizeParser(ParserDef &parser, FILE *vout, int verbosity);
+void SolveParser(const ParserDef &parser, ParserSolution &solution, FILE *vout, int verbosity);
 void OutputParserSolution(FILE *out, const ParserDef &parser, const ParserSolution &solution, OutputLanguage language);
 
 #endif /* __parser_h */
