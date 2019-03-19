@@ -169,10 +169,11 @@ public:
   }
 
   void expandNode(const gnode &k, Set<gnode> &nodes, const Set<gnode> &processednodes, Map<int,String> &tokens, FILE *vout, int verbosity) {
+    Map< Production*,Vector<Production*> > clonemap;
     if( verbosity > 2 ) {
-      fputs("Considering ",stderr);
-      k.print(stderr,tokens);
-      fputs("\n",stderr);
+      fputs("Considering ",vout);
+      k.print(vout,tokens);
+      fputs("\n",vout);
     }
     // These are the forbids that apply to the current state.
     ForbidDescriptors &forbids = m_statetoforbids[k.m_stateNo];
@@ -187,11 +188,11 @@ public:
       // Weed out some of the candidates based on the forbids
       for( Vector<Production*>::iterator curp = productions.begin(); curp != productions.end(); ++curp ) {
         if( verbosity > 2 ) {
-          fputs(" Is [", stderr);
-          (*curp)->print(stderr,tokens);
-          fputs("] forbidden at [", stderr);
-          k.m_p->print(stderr,tokens,i);
-          fputs("] --> ",stderr);
+          fputs(" Is [", vout);
+          (*curp)->print(vout,tokens);
+          fputs("] forbidden at [", vout);
+          k.m_p->print(vout,tokens,i);
+          fputs("] --> ",vout);
         }
         bool thisProductionForbidden = false;
         for( ForbidDescriptors::iterator curforbid = forbids.begin(), endforbid = forbids.end(); curforbid != endforbid; ++curforbid ) {
@@ -201,8 +202,8 @@ public:
           }
         }
         if( verbosity > 2 ) {
-          fputs((thisProductionForbidden?"yes":"no"),stderr);
-          fputc('\n',stderr);
+          fputs((thisProductionForbidden?"yes":"no"),vout);
+          fputc('\n',vout);
         }
         if( thisProductionForbidden ) {
           curp = productions.erase(curp);
@@ -217,19 +218,21 @@ public:
         }
         int derivedS = m_parser.findSymbolId(sName);
         if( derivedS == -1 ) {
-          //fprintf(out, "Added symbol %s\n",sName.c_str());
+          if( verbosity > 2 )
+            fprintf(vout, "Added symbol %s\n",sName.c_str());
           derivedS = m_parser.addSymbolId(sName,SymbolTypeNonterminal,m_parser.getBaseTokId(s));
           tokens[derivedS] = sName;
           Vector<Production*> clones;
           for( Vector<Production*>::iterator curp = productions.begin(), endp = productions.end(); curp != endp; ++curp ) {
             Production *pClone = (*curp)->clone();
+            clonemap[*curp].push_back(pClone);
             clones.push_back(pClone);
             pClone->m_nt = derivedS;
             m_parser.addProduction(pClone);
             if( verbosity > 2 ) {
-              fputs("Added production ", stderr);
-              pClone->print(stderr,tokens);
-              fputs("\n", stderr);
+              fputs("Added production ", vout);
+              pClone->print(vout,tokens);
+              fputs("\n", vout);
             }
           }
           productions = clones;
@@ -243,11 +246,66 @@ public:
         gnode nextk(*curp,nextStateNo);
         if( processednodes.find(nextk) == processednodes.end() && nodes.find(nextk) == nodes.end() ) {
           if( verbosity > 2 ) {
-            fputs("Adding ",stderr);
-            nextk.print(stderr,tokens);
-            fputs("\n",stderr);
+            fputs("Adding ",vout);
+            nextk.print(vout,tokens);
+            fputs("\n",vout);
           }
           nodes.insert(nextk);
+        }
+      }
+    }
+    // fix-up cloned productions
+    Map<int,int> ntcnt;
+    for( Map<Production*,Vector<Production*> >::iterator curcloneentry = clonemap.begin(), endcloneentry = clonemap.end(); curcloneentry != endcloneentry; ++curcloneentry ) {
+      Production *orig = curcloneentry->first;
+      Vector<Production*> &clones = curcloneentry->second;
+      int ntclone = -1;
+      for( Vector<Production*>::iterator curclone = clones.begin(), endclone = clones.end(); curclone != endclone; ++curclone ) {
+        Production *clone = *curclone;
+        if( orig->m_symbols != clone->m_symbols )
+          continue;
+        if( ntclone == -1 ) {
+          int idx = (ntcnt.find(orig->m_nt) == ntcnt.end()) ? 2 : ntcnt[orig->m_nt]+1;
+          ntcnt[ntclone] = idx;
+          String sName = tokens[orig->m_nt];
+          sName += "_";
+          sName += '0'+idx;
+          if( verbosity > 2 )
+            fprintf(vout, "Added symbol %s\n",sName.c_str());
+          ntclone = m_parser.addSymbolId(sName,SymbolTypeNonterminal,m_parser.getBaseTokId(orig->m_nt));
+          tokens[ntclone] = sName;
+          Production *p = orig->clone();
+          p->m_nt = ntclone;
+          m_parser.addProduction(p);
+          if( verbosity > 2 ) {
+            fputs("Added production ", vout);
+            p->print(vout,tokens);
+            fputs("\n", vout);
+          }
+        }
+        if( verbosity > 2 ) {
+          fputs("Altered production ", vout);
+          clone->print(vout,tokens);
+          fputs(" => ",vout);
+        }
+        clone->m_symbols.clear();
+        clone->m_symbols.push_back(ntclone);
+        if( verbosity > 2 ) {
+          clone->print(vout,tokens);
+          fputs("\n",vout);
+        }
+      }
+      if( ntclone != -1 ) {
+        if( verbosity > 2 ) {
+          fputs("Altered production ", vout);
+          orig->print(vout,tokens);
+          fputs(" => ",vout);
+        }
+        orig->m_symbols.clear();
+        orig->m_symbols.push_back(ntclone);
+        if( verbosity > 2 ) {
+          orig->print(vout,tokens);
+          fputs("\n",vout);
         }
       }
     }
