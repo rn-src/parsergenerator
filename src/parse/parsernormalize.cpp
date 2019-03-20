@@ -168,8 +168,7 @@ public:
     addEmptyTransition(m_q0,qFirst);
   }
 
-  void expandNode(const gnode &k, Set<gnode> &nodes, const Set<gnode> &processednodes, Map<int,String> &tokens, FILE *vout, int verbosity) {
-    Map< Production*,Vector<Production*> > clonemap;
+  void expandNode(const gnode &k, Set<gnode> &nodes, const Set<gnode> &processednodes, Map<int,String> &tokens, Map< Production*,Vector<Production*> > &clonemap, FILE *vout, int verbosity) {
     if( verbosity > 2 ) {
       fputs("Considering ",vout);
       k.print(vout,tokens);
@@ -251,61 +250,6 @@ public:
             fputs("\n",vout);
           }
           nodes.insert(nextk);
-        }
-      }
-    }
-    // fix-up cloned productions
-    Map<int,int> ntcnt;
-    for( Map<Production*,Vector<Production*> >::iterator curcloneentry = clonemap.begin(), endcloneentry = clonemap.end(); curcloneentry != endcloneentry; ++curcloneentry ) {
-      Production *orig = curcloneentry->first;
-      Vector<Production*> &clones = curcloneentry->second;
-      int ntclone = -1;
-      for( Vector<Production*>::iterator curclone = clones.begin(), endclone = clones.end(); curclone != endclone; ++curclone ) {
-        Production *clone = *curclone;
-        if( orig->m_symbols != clone->m_symbols )
-          continue;
-        if( ntclone == -1 ) {
-          int idx = (ntcnt.find(orig->m_nt) == ntcnt.end()) ? 2 : ntcnt[orig->m_nt]+1;
-          ntcnt[ntclone] = idx;
-          String sName = tokens[orig->m_nt];
-          sName += "_";
-          sName += '0'+idx;
-          if( verbosity > 2 )
-            fprintf(vout, "Added symbol %s\n",sName.c_str());
-          ntclone = m_parser.addSymbolId(sName,SymbolTypeNonterminal,m_parser.getBaseTokId(orig->m_nt));
-          tokens[ntclone] = sName;
-          Production *p = orig->clone();
-          p->m_nt = ntclone;
-          m_parser.addProduction(p);
-          if( verbosity > 2 ) {
-            fputs("Added production ", vout);
-            p->print(vout,tokens);
-            fputs("\n", vout);
-          }
-        }
-        if( verbosity > 2 ) {
-          fputs("Altered production ", vout);
-          clone->print(vout,tokens);
-          fputs(" => ",vout);
-        }
-        clone->m_symbols.clear();
-        clone->m_symbols.push_back(ntclone);
-        if( verbosity > 2 ) {
-          clone->print(vout,tokens);
-          fputs("\n",vout);
-        }
-      }
-      if( ntclone != -1 ) {
-        if( verbosity > 2 ) {
-          fputs("Altered production ", vout);
-          orig->print(vout,tokens);
-          fputs(" => ",vout);
-        }
-        orig->m_symbols.clear();
-        orig->m_symbols.push_back(ntclone);
-        if( verbosity > 2 ) {
-          orig->print(vout,tokens);
-          fputs("\n",vout);
         }
       }
     }
@@ -397,12 +341,71 @@ void StringToInt_2_IntToString(const Map<String,int> &src, Map<int,String> &toke
     tokens[tok->second] = tok->first;
 }
 
+void ApplyLookaheadToClones(ParserDef &parser, Map<int,String> &tokens, Map< Production*,Vector<Production*> > &clonemap, FILE *vout, int verbosity) {
+  // fix-up cloned productions
+  Map<int,int> ntcnt;
+  for( Map<Production*,Vector<Production*> >::iterator curcloneentry = clonemap.begin(), endcloneentry = clonemap.end(); curcloneentry != endcloneentry; ++curcloneentry ) {
+    Production *orig = curcloneentry->first;
+    Vector<Production*> &clones = curcloneentry->second;
+    int ntclone = -1;
+    for( Vector<Production*>::iterator curclone = clones.begin(), endclone = clones.end(); curclone != endclone; ++curclone ) {
+      Production *clone = *curclone;
+      if( orig->m_symbols != clone->m_symbols )
+        continue;
+      if( ntclone == -1 ) {
+        int idx = (ntcnt.find(orig->m_nt) == ntcnt.end()) ? 2 : ntcnt[orig->m_nt]+1;
+        ntcnt[orig->m_nt] = idx;
+        String sName = tokens[orig->m_nt];
+        sName += "_";
+        sName += '0'+idx;
+        if( verbosity > 2 )
+          fprintf(vout, "Added symbol %s\n",sName.c_str());
+        ntclone = parser.addSymbolId(sName,SymbolTypeNonterminal,parser.getBaseTokId(orig->m_nt));
+        tokens[ntclone] = sName;
+        Production *p = orig->clone();
+        p->m_nt = ntclone;
+        parser.addProduction(p);
+        if( verbosity > 2 ) {
+          fputs("Added production ", vout);
+          p->print(vout,tokens);
+          fputs("\n", vout);
+        }
+      }
+      if( verbosity > 2 ) {
+        fputs("Altered production ", vout);
+        clone->print(vout,tokens);
+        fputs(" => ",vout);
+      }
+      clone->m_symbols.clear();
+      clone->m_symbols.push_back(ntclone);
+      if( verbosity > 2 ) {
+        clone->print(vout,tokens);
+        fputs("\n",vout);
+      }
+    }
+    if( ntclone != -1 ) {
+      if( verbosity > 2 ) {
+        fputs("Altered production ", vout);
+        orig->print(vout,tokens);
+        fputs(" => ",vout);
+      }
+      orig->m_symbols.clear();
+      orig->m_symbols.push_back(ntclone);
+      if( verbosity > 2 ) {
+        orig->print(vout,tokens);
+        fputs("\n",vout);
+      }
+    }
+  }
+}
+
 void NormalizeParser(ParserDef &parser, FILE *vout, int verbosity) {
   if( verbosity > 1 ) {
     fputs("Before normalizing:\n", vout);
     parser.print(vout);
     fputs("\n", vout);
   }
+  Map< Production*,Vector<Production*> > clonemap;
   ForbidAutomata nforbid(parser), forbid(parser);
   // Expand and combine the rules
   parser.expandAssocRules();
@@ -425,9 +428,10 @@ void NormalizeParser(ParserDef &parser, FILE *vout, int verbosity) {
     gnode k = *curgnode;
     nodes.erase(curgnode);
     processednodes.insert(k);
-    forbid.expandNode(k,nodes,processednodes,tokens,vout,verbosity);
+    forbid.expandNode(k,nodes,processednodes,tokens,clonemap,vout,verbosity);
   }
   parser.m_disallowrules.clear();
+  ApplyLookaheadToClones(parser,tokens,clonemap,vout,verbosity);
   if( verbosity > 1 ) {
     fputs("After normalizing:\n", vout);
     parser.print(vout);
