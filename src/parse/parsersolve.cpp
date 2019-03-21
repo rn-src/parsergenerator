@@ -74,9 +74,10 @@ void closure(state_t &state, const ParserDef &parser) {
     prevsize = state.size();
     newparts.clear();
     for( Set<ProductionState>::const_iterator cur = state.begin(), end = state.end(); cur != end; ++cur ) {
-      productions = parser.productionsAt(cur->m_p,cur->m_idx);
+      productions = parser.productionsAt(cur->m_p,cur->m_pos,cur->m_forbidstate);
       for( Vector<Production*>::const_iterator curp = productions.begin(), endp = productions.end(); curp != endp; ++curp ) {
-        ProductionState ps(*curp,0);
+        int nxtState = parser.m_forbid.nextState(cur->m_p,cur->m_pos,cur->m_forbidstate,*curp);
+        ProductionState ps(*curp,0,nxtState);
         newparts.insert(ps);
       }
     }
@@ -100,7 +101,7 @@ void advance(state_t &state, int tsymbol, const ParserDef &parser, state_t &next
     if( curs->symbol() != tsymbol )
       continue;
     ProductionState ps(*curs);
-    ps.m_idx++;
+    ps.m_pos++;
     nextState.insert(ps);
   }
 }
@@ -109,7 +110,7 @@ void ComputeStatesAndActions(const ParserDef &parser, ParserSolution &solution, 
   Map<state_t,int> statemap;
   state_t state, nextState;
   Set<int> nextSymbols;
-  state.insert(ProductionState(parser.getStartProduction(),0));
+  state.insert(ProductionState(parser.getStartProduction(),0,0));
   closure(state,parser);
   statemap[state] = solution.m_states.size();
   solution.m_states.push_back(state);
@@ -135,7 +136,7 @@ void ComputeStatesAndActions(const ParserDef &parser, ParserSolution &solution, 
       solution.m_shifts[stateIdx][nextStateIdx].insert(symbol);
     }
     for( state_t::const_iterator curps = state.begin(), endps = state.end(); curps != endps; ++curps ) {
-      if( curps->m_idx < curps->m_p->m_symbols.size() )
+      if( curps->m_pos < curps->m_p->m_symbols.size() )
         continue;
       const Set<int> &follows = solution.m_follows[curps->m_p->m_nt];
       solution.m_reductions[stateIdx][curps->m_p].insert(follows.begin(),follows.end());
@@ -208,10 +209,11 @@ void PrintStatesAndActions(const ParserDef &parser, const ParserSolution &soluti
 
 void StringToInt_2_IntToString(const Map<String,int> &src, Map<int,String> &tokens);
 
-void SolveParser(const ParserDef &parser, ParserSolution &solution, FILE *vout, int verbosity) {
+void SolveParser(ParserDef &parser, ParserSolution &solution, FILE *vout, int verbosity) {
   FILE *out = stderr;
   if( ! parser.getStartProduction() )
     error("The grammar definition requires a START production");
+  parser.computeForbidAutomata();
   ComputeFirsts(parser,solution,out,verbosity);
   ComputeFollows(parser,solution,out,verbosity);
   ComputeStatesAndActions(parser,solution,out,verbosity);

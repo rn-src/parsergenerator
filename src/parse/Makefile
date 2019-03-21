@@ -1,4 +1,4 @@
-OBJ=parser.o parsersolve.o parseroutput.o main.o parsernormalize.o
+OBJ=parser.o parsersolve.o parseroutput.o main.o parserforbidauto.o
 CLAGS=-I. -g -Od
 DEPS=parser.h ../tok/tinytemplates.h
 

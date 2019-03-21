@@ -143,18 +143,18 @@ int ParserDef::findSymbolId(const String &s) const {
   return iter->second;
 }
 
-int ParserDef::addSymbolId(const String &s, SymbolType stype, int basetokid) {
+int ParserDef::addSymbolId(const String &s, SymbolType stype) {
   Map<String,int>::iterator iter = m_tokens.find(s);
   if( iter != m_tokens.end() )
     return -1;
   String name(s);
   int tokid = m_nextsymbolid++;
   m_tokens[s] = tokid;
-  m_tokdefs[tokid] = SymbolDef(tokid, name, stype, basetokid);
+  m_tokdefs[tokid] = SymbolDef(tokid, name, stype);
   return tokid;
  } 
 
-int ParserDef::findOrAddSymbolId(Tokenizer &toks, const String &s, SymbolType stype, int basetokid) {
+int ParserDef::findOrAddSymbolId(Tokenizer &toks, const String &s, SymbolType stype) {
   Map<String,int>::iterator iter = m_tokens.find(s);
   if( iter != m_tokens.end() ) {
     int tokid = iter->second;
@@ -176,7 +176,7 @@ int ParserDef::findOrAddSymbolId(Tokenizer &toks, const String &s, SymbolType st
   String name(s);
   int tokid = m_nextsymbolid++;
   m_tokens[s] = tokid;
-  m_tokdefs[tokid] = SymbolDef(tokid, name, stype, basetokid);
+  m_tokdefs[tokid] = SymbolDef(tokid, name, stype);
   return tokid;
 }
 
@@ -184,29 +184,17 @@ int ParserDef::getStartNt() const {
   return pptok::START;
 }
 
-int ParserDef::getBaseTokId(int s) const {
-  Map<int,SymbolDef>::const_iterator iter = m_tokdefs.find(s);
-  while( iter != m_tokdefs.end() ) {
-    if( iter->second.m_basetokid == -1 )
-      return s;
-    s = iter->second.m_basetokid;
-    iter = m_tokdefs.find(s);
-  }
-  return -1;
-}
-
-Vector<Production*> ParserDef::productionsAt(const Production *p, int idx, const Vector<Production*> *pproductions) const {
+Vector<Production*> ParserDef::productionsAt(const Production *p, int pos, int forbidstate) const {
   Vector<Production*> productions;
-  if( ! pproductions )
-    pproductions = &m_productions;
-  if( idx < p->m_symbols.size() ) {
-    int symbol = p->m_symbols[idx];
+  const Vector<Production*> *pproductions = &m_productions;
+  if( pos >= 0 && pos < p->m_symbols.size() ) {
+    int symbol = p->m_symbols[pos];
     if( getSymbolType(symbol) == SymbolTypeNonterminal ) {
       for( Vector<Production*>::const_iterator cur = pproductions->begin(), end = pproductions->end(); cur != end; ++cur ) {
-        Production *p = *cur;
-        if( p->m_nt != symbol )
+        Production *ptest = *cur;
+        if( p->m_nt != symbol || m_forbid.isForbidden(p,pos,forbidstate,ptest) )
           continue;
-        productions.push_back(p);
+        productions.push_back(ptest);
       }
     }
   }
@@ -366,7 +354,7 @@ void ParserDef::combineRules() {
   }
 }
 
-bool ProductionDescriptor::matchesProduction(const Production *p, const ParserDef &parser, bool useBaseTokId) const {
+bool ProductionDescriptor::matchesProduction(const Production *p) const {
   // '.' is ignored for matching purposes.
   if( m_nt != p->m_nt )
     return false;
@@ -374,8 +362,6 @@ bool ProductionDescriptor::matchesProduction(const Production *p, const ParserDe
   while( curs != ends && curwc != endwc ) {
     if( *curwc == pptok::DOT )
       ++curwc;
-    if( parser.getBaseTokId(*curs) != *curwc )
-      return false;
     ++curs;
     ++curwc;
   }
@@ -384,11 +370,9 @@ bool ProductionDescriptor::matchesProduction(const Production *p, const ParserDe
   return true;
 }
 
-bool ProductionDescriptor::matchesProductionAndPosition(const Production *p, int pos, const ParserDef &parser, bool useBaseTokId) const {
+bool ProductionDescriptor::matchesProductionAndPosition(const Production *p, int pos) const {
   int matchPos = 0;
   bool matchedPos = false;
-  if( m_nt != parser.getBaseTokId(p->m_nt) )
-    return false;
   Vector<int>::const_iterator curs = p->m_symbols.begin(), ends = p->m_symbols.end(), curwc = m_symbols.begin(), endwc = m_symbols.end();
   while( curs != ends && curwc != endwc ) {
     if( *curwc == pptok::DOT ) {
@@ -396,8 +380,6 @@ bool ProductionDescriptor::matchesProductionAndPosition(const Production *p, int
       if( matchPos == pos )
         matchedPos = true;
     }
-    if( parser.getBaseTokId(*curs) != *curwc )
-      return false;
     ++curs;
     ++curwc;
     ++matchPos;
@@ -414,7 +396,7 @@ static int ParseNonterminal(Tokenizer &toks, ParserDef &parser) {
   } else if( toks.peek() == pptok::ID ) {
     String s = toks.tokstr();
     toks.discard();
-    return parser.findOrAddSymbolId(toks, s, SymbolTypeNonterminal, -1);
+    return parser.findOrAddSymbolId(toks, s, SymbolTypeNonterminal);
   }
   return -1;
 }
@@ -423,7 +405,7 @@ static int ParseSymbol(Tokenizer &toks, ParserDef &parser) {
   if( toks.peek() == pptok::ID ) {
     String s= toks.tokstr();
     toks.discard();
-    return parser.findOrAddSymbolId(toks, s, SymbolTypeUnknown, -1);
+    return parser.findOrAddSymbolId(toks, s, SymbolTypeUnknown);
   }
   return -1;
 }
@@ -781,7 +763,7 @@ static void ParseStart(Tokenizer &toks, ParserDef &parser) {
 void ParseParser(TokBuf *tokbuf, ParserDef &parser, FILE *vout, int verbosity) {
   Tokenizer toks(tokbuf,&pptok::pptokinfo);
   for( int i = 0, n = pptok::pptokinfo.m_tokenCount; i < n; ++i )
-    parser.findOrAddSymbolId(toks, pptok::pptokinfo.m_tokenstr[i], SymbolTypeTerminal, -1);
+    parser.findOrAddSymbolId(toks, pptok::pptokinfo.m_tokenstr[i], SymbolTypeTerminal);
   ParseStart(toks,parser);
   if( toks.peek() != -1 )
     error(toks,"Expected EOF");
@@ -812,17 +794,19 @@ void ParserDef::print(FILE *out) const {
   }
 }
 
-void Production::print(FILE *out, const Map<int,String> &tokens, int idx) const {
+void Production::print(FILE *out, const Map<int,String> &tokens, int pos, int forbidstate) const {
   fputs(tokens[m_nt].c_str(), out);
+  if( forbidstate != 0 )
+    fprintf(out, "{%d}", forbidstate);
   fputs(" :", out);
   for( int i = 0; i < m_symbols.size(); ++i ) {
-    if( idx == i )
+    if( pos == i )
       fputc('.',out);
     else
       fputc(' ',out);
     fputs(tokens[m_symbols[i]].c_str(),out);
   }
-  if( idx == m_symbols.size() )
+  if( pos == m_symbols.size() )
     fputc('.',out);
 }
 
@@ -967,7 +951,7 @@ void DisallowProductionDescriptors::print(FILE *out, const Map<int,String> &toke
 
 void state_t::print(FILE *out, const Map<int,String> &tokens) const {
   for( state_t::const_iterator curps = begin(), endps = end(); curps != endps; ++curps ) {
-    curps->m_p->print(out,tokens,curps->m_idx);
+    curps->m_p->print(out,tokens,curps->m_pos,curps->m_forbidstate);
     fputs("\n",out);
   
   }

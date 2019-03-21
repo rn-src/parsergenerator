@@ -22,7 +22,6 @@ int main(int argc, char *argv[]) {
     TokBuf tokbuf(stdin);
     ParseParser(&tokbuf,parser,vout,verbosity);
     ParserSolution solution;
-    NormalizeParser(parser, vout, verbosity);
     SolveParser(parser, solution, vout, verbosity);
     OutputParserSolution(stdout, parser, solution, LanguageC);
   } catch(ParserErrorWithLineCol &pe) {

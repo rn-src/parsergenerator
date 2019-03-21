@@ -7,6 +7,7 @@
 
 using namespace std;
 class ParserDef;
+class ForbidAutomata;
 
 class Production {
 public:
@@ -17,28 +18,33 @@ public:
 
   Production(bool rejectable, int nt, const Vector<int> &symbols, String action);
   Production *clone();
-  void print(FILE *out, const Map<int,String> &tokens, int idx=-1) const;
+  void print(FILE *out, const Map<int,String> &tokens, int pos=-1, int forbidstate=0) const;
 };
 
 class ProductionState {
 public:
   Production *m_p;
-  int m_idx;
-  ProductionState(Production *p, int idx) : m_p(p), m_idx(idx) {}
-  ProductionState(const ProductionState &rhs) : m_p(rhs.m_p), m_idx(rhs.m_idx) {}
+  int m_pos;
+  int m_forbidstate;
+  ProductionState(Production *p, int pos, int forbidstate) : m_p(p), m_pos(pos), m_forbidstate(forbidstate) {}
+  ProductionState(const ProductionState &rhs) : m_p(rhs.m_p), m_pos(rhs.m_pos), m_forbidstate(rhs.m_forbidstate) {}
   bool operator<(const ProductionState &rhs) const {
     if( m_p < rhs.m_p )
       return true;
     else if( rhs.m_p < m_p )
       return false;
-    if( m_idx < rhs.m_idx )
+    if( m_forbidstate < rhs.m_forbidstate )
+      return true;
+    else if( rhs.m_forbidstate < m_forbidstate )
+      return false;
+    if( m_pos < rhs.m_pos )
       return true;
     return false;
   }
   int symbol() const {
-    if( m_idx >= m_p->m_symbols.size() )
+    if( m_pos >= m_p->m_symbols.size() )
       return -1;
-    return m_p->m_symbols[m_idx];
+    return m_p->m_symbols[m_pos];
   }
 };
 
@@ -48,8 +54,8 @@ public:
   Vector<int> m_symbols;
   ProductionDescriptor() {}
   ProductionDescriptor(int nt, Vector<int> symbols);
-  bool matchesProduction(const Production *p, const ParserDef &parser, bool useBaseTokId) const;
-  bool matchesProductionAndPosition(const Production *p, int pos, const ParserDef &parser, bool useBaseTokId) const;
+  bool matchesProduction(const Production *p) const;
+  bool matchesProductionAndPosition(const Production *p, int pos) const;
   // Check if, ignoring dots, the productions are the same
   bool hasSameProductionAs(const ProductionDescriptor &rhs) const;
   // Add dots from rhs to this descriptor.  Fail if not same production.
@@ -94,15 +100,15 @@ public:
   bool operator!=(const ProductionDescriptors &rhs) const {
     return ! operator==(rhs);
   }
-  bool matchesProduction(const Production *lhs, const ParserDef &parser, bool useBaseTokId) const {
+  bool matchesProduction(const Production *lhs) const {
     for( const_iterator c = begin(), e = end(); c != e; ++c )
-     if( c->matchesProduction(lhs,parser,useBaseTokId) )
+     if( c->matchesProduction(lhs) )
        return true;
     return false;
   }
-  bool matchesProductionAndPosition(const Production *lhs, int pos, const ParserDef &parser, bool useBaseTokId) const {
+  bool matchesProductionAndPosition(const Production *lhs, int pos) const {
     for( const_iterator c = begin(), e = end(); c != e; ++c )
-     if( c->matchesProductionAndPosition(lhs,pos,parser,useBaseTokId) )
+     if( c->matchesProductionAndPosition(lhs,pos) )
        return true;
     return false;
   }
@@ -146,13 +152,12 @@ enum SymbolType {
 class SymbolDef {
 public:
   int m_tokid;
-  int m_basetokid;
   String m_name;
   SymbolType m_symboltype;
   String m_semantictype;
   Production *m_p;
-  SymbolDef() : m_tokid(-1), m_basetokid(-1), m_symboltype(SymbolTypeUnknown), m_p(0) {}
-  SymbolDef(int tokid, const String &name, SymbolType symboltype, int basetokid) : m_tokid(tokid), m_basetokid(basetokid), m_name(name), m_symboltype(symboltype), m_p(0) {}
+  SymbolDef() : m_tokid(-1), m_symboltype(SymbolTypeUnknown), m_p(0) {}
+  SymbolDef(int tokid, const String &name, SymbolType symboltype) : m_tokid(tokid), m_name(name), m_symboltype(symboltype), m_p(0) {}
 };
 
 class AssociativeRule {
@@ -161,6 +166,66 @@ public:
   ProductionDescriptors *m_pds;
   AssociativeRule(Assoc assoc, ProductionDescriptors *pds) : m_assoc(assoc), m_pds(pds) {}
   void print(FILE *out, const Map<int,String> &tokens) const;
+};
+
+class gnode {
+public:
+  Production *m_p;
+  int m_stateNo;
+  gnode(Production *p, int stateNo);
+  gnode();
+  bool operator<(const gnode &rhs) const;
+  bool operator==(const gnode &rhs) const;
+  void print(FILE *out, const Map<int,String> &tokens) const;
+};
+
+class ForbidDescriptor {
+public:
+  String m_name;
+  ProductionDescriptors *m_positions;
+  ProductionDescriptors *m_forbidden;
+
+  ForbidDescriptor();
+  ForbidDescriptor(const String &name, ProductionDescriptors *positions, ProductionDescriptors *forbidden);
+  ForbidDescriptor(const ForbidDescriptor &rhs);
+  bool forbids(const Production *positionProduction, int pos, const Production *expandProduction) const;
+  bool operator<(const ForbidDescriptor &rhs) const;
+};
+
+typedef Set<ForbidDescriptor> ForbidDescriptors;
+
+typedef Map<int,ForbidDescriptors> StateToForbids;
+
+class ForbidSub {
+public:
+  const ProductionDescriptors *m_lhs, *m_rhs;
+  ForbidSub();
+  ForbidSub(const ProductionDescriptors *lhs, const ProductionDescriptors *rhs);
+  ForbidSub(const ForbidSub &rhs);
+  bool operator<(const ForbidSub &rhs) const;
+  bool matches(const Production *lhs, int pos, const Production *rhs) const;
+};
+
+class ForbidAutomata {
+  int m_nextstate;
+  int m_nxtnameidx;
+  int m_q0;
+  StateToForbids m_statetoforbids;
+  Map< int,Set<int> > m_emptytransitions;
+  Map< int,Map< ForbidSub,Set<int> > > m_transitions;
+public:
+  ForbidAutomata();
+  int newstate();
+  void addEmptyTransition(int s0, int s1);
+  void addTransition(int s0, int s1, const ProductionDescriptors *subLhs, const ProductionDescriptors *subRhs);
+  // Find *the* state after the current state, assuming this is a deterministic automata
+  int nextState(const Production *curp, int pos, int stateno, const Production *p) const;
+  bool isForbidden(const Production *p, int pos, int forbidstate, const Production *ptest) const;
+  void addRule(const DisallowRule *rule);
+  void closure(Set<int> &multistate) const;
+  void ForbidsFromStates(const Set<int> &stateset, ForbidDescriptors &forbids) const;
+  void SymbolsFromStates(const Set<int> &stateset, Set<ForbidSub> &symbols) const;
+  void toDeterministicForbidAutomata(ForbidAutomata &out);
 };
 
 class ParserDef {
@@ -174,20 +239,22 @@ public:
   Vector<DisallowRule*> m_disallowrules;
   Vector<AssociativeRule*> m_assocrules;
   Vector<PrecedenceRule*> m_precrules;
+  ForbidAutomata m_forbid;
   void addProduction(Tokenizer &toks, Production *p);
   bool addProduction(Production *p);
   int findSymbolId(const String &s) const;
-  int addSymbolId(const String &s, SymbolType stype, int basetokid);
-  int findOrAddSymbolId(Tokenizer &toks, const String &s, SymbolType stype, int basetokid);
+  int addSymbolId(const String &s, SymbolType stype);
+  int findOrAddSymbolId(Tokenizer &toks, const String &s, SymbolType stype);
   int getStartNt() const;
-  int getBaseTokId(int s) const;
   Production *getStartProduction() const { return m_startProduction; }
-  Vector<Production*> productionsAt(const Production *p, int idx, const Vector<Production*> *pproductions = 0) const;
+  Vector<Production*> productionsAt(const Production *p, int pos, int forbidstate) const;
+  void computeForbidAutomata();
+  SymbolType getSymbolType(int tok) const;
+  void print(FILE *out) const;
+private:
   void expandAssocRules();
   void expandPrecRules();
   void combineRules();
-  SymbolType getSymbolType(int tok) const;
-  void print(FILE *out) const;
 };
 
 class ParserError {
@@ -227,8 +294,8 @@ enum OutputLanguage {
 };
 
 void ParseParser(TokBuf *tokbuf, ParserDef &parser, FILE *vout, int verbosity);
-void NormalizeParser(ParserDef &parser, FILE *vout, int verbosity);
-void SolveParser(const ParserDef &parser, ParserSolution &solution, FILE *vout, int verbosity);
+void SolveParser(ParserDef &parser, ParserSolution &solution, FILE *vout, int verbosity);
 void OutputParserSolution(FILE *out, const ParserDef &parser, const ParserSolution &solution, OutputLanguage language);
 
 #endif /* __parser_h */
+
