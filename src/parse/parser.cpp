@@ -101,7 +101,7 @@ ProductionDescriptor *ProductionDescriptor::clone() const {
   return ret;
 }
 
-Production::Production(bool rejectable, int nt, const Vector<int> &symbols, String action) : m_rejectable(rejectable), m_nt(nt), m_symbols(symbols), m_action(action) {}
+Production::Production(bool rejectable, int nt, const Vector<int> &symbols, String action) : m_rejectable(rejectable), m_nt(nt), m_symbols(symbols), m_action(action), m_pid(-1) {}
 
 Production *Production::clone() {
   return new Production(m_rejectable, m_nt, m_symbols, m_action);
@@ -118,6 +118,17 @@ void ParserDef::addProduction(Tokenizer &toks, Production *p) {
     m_startProduction = p;
   }
   m_productions.push_back(p);
+  String s;
+  s += "[";
+  s += m_tokdefs[p->m_nt].m_name;
+  s += " :";
+  for( int i = 0; i < p->m_symbols.size(); ++i ) {
+    s += " ";
+    s += m_tokdefs[p->m_symbols[i]].m_name;
+  }
+  s += "]";
+  p->m_pid = findOrAddSymbolId(toks,s,SymbolTypeNonterminalProduction);
+  m_tokdefs[p->m_pid].m_p = p;
 }
 
 bool ParserDef::addProduction(Production *p) {
@@ -127,6 +138,17 @@ bool ParserDef::addProduction(Production *p) {
     m_startProduction = p;
   }
   m_productions.push_back(p);
+  String s;
+  s += "[";
+  s += m_tokdefs[p->m_nt].m_name;
+  s += " :";
+  for( int i = 0; i < p->m_symbols.size(); ++i ) {
+    s += " ";
+    s += m_tokdefs[p->m_symbols[i]].m_name;
+  }
+  s += "]";
+  p->m_pid = addSymbolId(s,SymbolTypeNonterminalProduction);
+  m_tokdefs[p->m_pid].m_p = p;
   return true;
 }
 
@@ -154,6 +176,20 @@ int ParserDef::addSymbolId(const String &s, SymbolType stype) {
   return tokid;
  } 
 
+static const char *getSymbolTypeName(SymbolType stype) {
+  switch( stype ){
+  case SymbolTypeTerminal:
+    return "Terminal";
+  case SymbolTypeNonterminal:
+    return "Nonterminal";
+  case SymbolTypeNonterminalProduction:
+    return "Nonterminal Production";
+  default:
+    break;
+  }
+  return "?";
+}
+
 int ParserDef::findOrAddSymbolId(Tokenizer &toks, const String &s, SymbolType stype) {
   Map<String,int>::iterator iter = m_tokens.find(s);
   if( iter != m_tokens.end() ) {
@@ -165,11 +201,7 @@ int ParserDef::findOrAddSymbolId(Tokenizer &toks, const String &s, SymbolType st
       // now we know
       symboldef.m_symboltype = stype;
     } else if( symboldef.m_symboltype != stype ) {
-      if( symboldef.m_symboltype == SymbolTypeNonterminal )
-        error(toks,String("Attempted to turn Nonterminal ")+symboldef.m_name+"into a Terminal");
-      else if( symboldef.m_symboltype == SymbolTypeTerminal )
-        error(toks,String("Attempted to turn Terminal ")+symboldef.m_name+"into a NonTerminal");
-      symboldef.m_symboltype = stype;
+      error(toks,String("Attempted to turn ")+getSymbolTypeName(symboldef.m_symboltype)+" "+symboldef.m_name+" into a "+getSymbolTypeName(stype));
     }
     return tokid;
   }
@@ -184,18 +216,36 @@ int ParserDef::getStartNt() const {
   return pptok::START;
 }
 
-Vector<Production*> ParserDef::productionsAt(const Production *p, int pos, int forbidstate) const {
-  Vector<Production*> productions;
+Vector<productionandforbidstate_t> ParserDef::productionsAt(const Production *p, int pos, int forbidstate) const {
+  Vector<productionandforbidstate_t> productions;
   const Vector<Production*> *pproductions = &m_productions;
-  if( pos >= 0 && pos < p->m_symbols.size() ) {
-    int symbol = p->m_symbols[pos];
-    if( getSymbolType(symbol) == SymbolTypeNonterminal ) {
-      for( Vector<Production*>::const_iterator cur = pproductions->begin(), end = pproductions->end(); cur != end; ++cur ) {
-        Production *ptest = *cur;
-        if( p->m_nt != symbol || m_forbid.isForbidden(p,pos,forbidstate,ptest) )
-          continue;
-        productions.push_back(ptest);
+  if( pos < 0 || pos >= p->m_symbols.size() )
+    return productions;
+  int symbol = p->m_symbols[pos];
+  if( getSymbolType(symbol) != SymbolTypeNonterminal )
+    return productions;
+  if( m_verbosity > 2 ) {
+    p->print(m_vout,m_tokdefs,pos,forbidstate);
+    fputs(" has...\n", m_vout);
+  }
+  for( Vector<Production*>::const_iterator cur = pproductions->begin(), end = pproductions->end(); cur != end; ++cur ) {
+    Production *ptest = *cur;
+    if( ptest->m_nt != symbol )
+      continue;
+    if( m_verbosity > 2 ) {
+      fputs("  -> ", m_vout);
+      ptest->print(m_vout,m_tokdefs);
+    }
+    int nxtState = m_forbid.nextState(p,pos,forbidstate,ptest);
+    if( nxtState == -1 ) {
+      if( m_verbosity > 2 ) {
+        fputs(" = no\n", m_vout);
       }
+    } else {
+      if( m_verbosity > 2 ) {
+        fputs(" = yes\n", m_vout);
+      }
+      productions.push_back(productionandforbidstate_t(ptest,nxtState));
     }
   }
   return productions;
@@ -360,17 +410,25 @@ bool ProductionDescriptor::matchesProduction(const Production *p) const {
     return false;
   Vector<int>::const_iterator curs = p->m_symbols.begin(), ends = p->m_symbols.end(), curwc = m_symbols.begin(), endwc = m_symbols.end();
   while( curs != ends && curwc != endwc ) {
-    if( *curwc == pptok::DOT )
+    while( curwc != endwc && *curwc == pptok::DOT )
       ++curwc;
+    if( curwc == endwc )
+      break;
+    if( *curs != *curwc )
+      return false;
     ++curs;
     ++curwc;
   }
+  while( curwc != endwc && *curwc == pptok::DOT )
+    ++curwc;
   if( curs != ends || curwc != endwc )
     return false;
   return true;
 }
 
 bool ProductionDescriptor::matchesProductionAndPosition(const Production *p, int pos) const {
+  if( m_nt != p->m_nt )
+    return false;
   int matchPos = 0;
   bool matchedPos = false;
   Vector<int>::const_iterator curs = p->m_symbols.begin(), ends = p->m_symbols.end(), curwc = m_symbols.begin(), endwc = m_symbols.end();
@@ -380,8 +438,18 @@ bool ProductionDescriptor::matchesProductionAndPosition(const Production *p, int
       if( matchPos == pos )
         matchedPos = true;
     }
+    if( curwc == endwc )
+      break;
+    if( *curs != *curwc )
+      return false;
     ++curs;
     ++curwc;
+    ++matchPos;
+  }
+  while( curwc != endwc && *curwc == pptok::DOT ) {
+    ++curwc;
+    if( matchPos == pos )
+      matchedPos = true;
     ++matchPos;
   }
   if( curs != ends || curwc != endwc )
@@ -773,29 +841,26 @@ void ParseParser(TokBuf *tokbuf, ParserDef &parser, FILE *vout, int verbosity) {
 }
 
 void ParserDef::print(FILE *out) const {
-  Map<int,String> tokens;
-  for( Map<String,int>::const_iterator tok = m_tokens.begin(); tok != m_tokens.end(); ++tok )
-    tokens[tok->second] = tok->first;
   for( Vector<Production*>::const_iterator p = m_productions.begin(); p != m_productions.end(); ++p ) {
-    (*p)->print(out, tokens);
+    (*p)->print(out, m_tokdefs);
     fputs(" ;\n",out);
   }
   for( Vector<PrecedenceRule*>::const_iterator r = m_precrules.begin(); r != m_precrules.end(); ++r ) {
-    (*r)->print(out, tokens);
+    (*r)->print(out, m_tokdefs);
     fputs(" ;\n", out);
   }
   for( Vector<AssociativeRule*>::const_iterator r = m_assocrules.begin(); r != m_assocrules.end(); ++r ) {
-    (*r)->print(out, tokens);
+    (*r)->print(out, m_tokdefs);
     fputs(" ;\n", out);
   }
   for( Vector<DisallowRule*>::const_iterator r = m_disallowrules.begin(); r != m_disallowrules.end(); ++r ) {
-    (*r)->print(out, tokens);
+    (*r)->print(out, m_tokdefs);
     fputs(" ;\n", out);
   }
 }
 
-void Production::print(FILE *out, const Map<int,String> &tokens, int pos, int forbidstate) const {
-  fputs(tokens[m_nt].c_str(), out);
+void Production::print(FILE *out, const Map<int,SymbolDef> &tokens, int pos, int forbidstate) const {
+  fputs(tokens[m_nt].m_name.c_str(), out);
   if( forbidstate != 0 )
     fprintf(out, "{%d}", forbidstate);
   fputs(" :", out);
@@ -804,13 +869,13 @@ void Production::print(FILE *out, const Map<int,String> &tokens, int pos, int fo
       fputc('.',out);
     else
       fputc(' ',out);
-    fputs(tokens[m_symbols[i]].c_str(),out);
+    fputs(tokens[m_symbols[i]].m_name.c_str(),out);
   }
   if( pos == m_symbols.size() )
     fputc('.',out);
 }
 
-void PrecedenceRule::print(FILE *out, const Map<int,String> &tokens) const {
+void PrecedenceRule::print(FILE *out, const Map<int,SymbolDef> &tokens) const {
   bool first = true;
   fputs("PRECEDENCE ",out);
   for( const_iterator cur = begin(); cur != end(); ++cur ) {
@@ -887,14 +952,14 @@ void ProductionDescriptors::trifrucate(ProductionDescriptors &rhs, ProductionDes
   }
 }
 
-void ProductionDescriptors::print(FILE *out, const Map<int,String> &tokens) const {
+void ProductionDescriptors::print(FILE *out, const Map<int,SymbolDef> &tokens) const {
   for( const_iterator cur = begin(); cur != end(); ++cur )
     cur->print(out,tokens);
 }
 
-void ProductionDescriptor::print(FILE *out, const Map<int,String> &tokens) const {
+void ProductionDescriptor::print(FILE *out, const Map<int,SymbolDef> &tokens) const {
   fputc('[',out);
-  fputs(tokens[m_nt].c_str(), out);
+  fputs(tokens[m_nt].m_name.c_str(), out);
   fputs(" :", out);
   for( int i = 0; i < m_symbols.size(); ++i ) {
     if( m_symbols[i] == pptok::DOT ) {
@@ -903,12 +968,12 @@ void ProductionDescriptor::print(FILE *out, const Map<int,String> &tokens) const
     } else {
       fputc(' ',out);
     }
-    fputs(tokens[m_symbols[i]].c_str(),out);
+    fputs(tokens[m_symbols[i]].m_name.c_str(),out);
   }
   fputc(']',out);
 }
 
-void AssociativeRule::print(FILE *out, const Map<int,String> &tokens) const {
+void AssociativeRule::print(FILE *out, const Map<int,SymbolDef> &tokens) const {
   switch(m_assoc) {
   case AssocLeft:
     fputs("LEFT-ASSOCIATIVE ", out);
@@ -932,7 +997,7 @@ void DisallowRule::consolidateRules() {
     m_intermediates[i]->m_descriptors->consolidateRules();
 }
 
-void DisallowRule::print(FILE *out, const Map<int,String> &tokens) const {
+void DisallowRule::print(FILE *out, const Map<int,SymbolDef> &tokens) const {
   fputs("DISALLOW ",out);
   m_lead->print(out,tokens);
   for( Vector<DisallowProductionDescriptors*>::const_iterator cur = m_intermediates.begin(); cur != m_intermediates.end(); ++cur ) {
@@ -943,13 +1008,13 @@ void DisallowRule::print(FILE *out, const Map<int,String> &tokens) const {
   m_disallowed->print(out,tokens);
 }
 
-void DisallowProductionDescriptors::print(FILE *out, const Map<int,String> &tokens) const {
+void DisallowProductionDescriptors::print(FILE *out, const Map<int,SymbolDef> &tokens) const {
   m_descriptors->print(out,tokens);
   if( m_star )
     fputc('*',out);
 }
 
-void state_t::print(FILE *out, const Map<int,String> &tokens) const {
+void state_t::print(FILE *out, const Map<int,SymbolDef> &tokens) const {
   for( state_t::const_iterator curps = begin(), endps = end(); curps != endps; ++curps ) {
     curps->m_p->print(out,tokens,curps->m_pos,curps->m_forbidstate);
     fputs("\n",out);

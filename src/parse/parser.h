@@ -7,18 +7,38 @@
 
 using namespace std;
 class ParserDef;
-class ForbidAutomata;
+class Production;
+
+enum SymbolType {
+  SymbolTypeUnknown,
+  SymbolTypeTerminal,
+  SymbolTypeNonterminal,
+  SymbolTypeNonterminalProduction
+};
+
+
+class SymbolDef {
+public:
+  int m_tokid;
+  String m_name;
+  SymbolType m_symboltype;
+  String m_semantictype;
+  Production *m_p;
+  SymbolDef() : m_tokid(-1), m_symboltype(SymbolTypeUnknown), m_p(0) {}
+  SymbolDef(int tokid, const String &name, SymbolType symboltype) : m_tokid(tokid), m_name(name), m_symboltype(symboltype), m_p(0) {}
+};
 
 class Production {
 public:
   bool m_rejectable;
   int m_nt;
+  int m_pid;
   Vector<int> m_symbols;
   String m_action;
 
   Production(bool rejectable, int nt, const Vector<int> &symbols, String action);
   Production *clone();
-  void print(FILE *out, const Map<int,String> &tokens, int pos=-1, int forbidstate=0) const;
+  void print(FILE *out, const Map<int,SymbolDef> &tokens, int pos=-1, int forbidstate=0) const;
 };
 
 class ProductionState {
@@ -78,7 +98,7 @@ public:
   bool operator!=(const ProductionDescriptor &rhs) const {
     return ! operator==(rhs);
   }
-  void print(FILE *out, const Map<int,String> &tokens) const;
+  void print(FILE *out, const Map<int,SymbolDef> &tokens) const;
 };
 
 enum Assoc {
@@ -113,12 +133,12 @@ public:
     return false;
   }
   void trifrucate(ProductionDescriptors &rhs, ProductionDescriptors &overlap);
-  void print(FILE *out, const Map<int,String> &tokens) const;
+  void print(FILE *out, const Map<int,SymbolDef> &tokens) const;
 };
 
 class PrecedenceRule : public Vector<ProductionDescriptors*> {
 public:
-  void print(FILE *out, const Map<int,String> &tokens) const;
+  void print(FILE *out, const Map<int,SymbolDef> &tokens) const;
 };
 
 class DisallowProductionDescriptors {
@@ -131,7 +151,7 @@ public:
   bool operator!=(const DisallowProductionDescriptors &rhs) const {
     return ! operator==(rhs);
   }
-  void print(FILE *out, const Map<int,String> &tokens) const;
+  void print(FILE *out, const Map<int,SymbolDef> &tokens) const;
 };
 
 class DisallowRule {
@@ -140,24 +160,7 @@ public:
   Vector<DisallowProductionDescriptors*> m_intermediates;
   ProductionDescriptors *m_disallowed;
   void consolidateRules();
-  void print(FILE *out, const Map<int,String> &tokens) const;
-};
-
-enum SymbolType {
-  SymbolTypeUnknown,
-  SymbolTypeTerminal,
-  SymbolTypeNonterminal
-};
-
-class SymbolDef {
-public:
-  int m_tokid;
-  String m_name;
-  SymbolType m_symboltype;
-  String m_semantictype;
-  Production *m_p;
-  SymbolDef() : m_tokid(-1), m_symboltype(SymbolTypeUnknown), m_p(0) {}
-  SymbolDef(int tokid, const String &name, SymbolType symboltype) : m_tokid(tokid), m_name(name), m_symboltype(symboltype), m_p(0) {}
+  void print(FILE *out, const Map<int,SymbolDef> &tokens) const;
 };
 
 class AssociativeRule {
@@ -165,18 +168,7 @@ public:
   Assoc m_assoc;
   ProductionDescriptors *m_pds;
   AssociativeRule(Assoc assoc, ProductionDescriptors *pds) : m_assoc(assoc), m_pds(pds) {}
-  void print(FILE *out, const Map<int,String> &tokens) const;
-};
-
-class gnode {
-public:
-  Production *m_p;
-  int m_stateNo;
-  gnode(Production *p, int stateNo);
-  gnode();
-  bool operator<(const gnode &rhs) const;
-  bool operator==(const gnode &rhs) const;
-  void print(FILE *out, const Map<int,String> &tokens) const;
+  void print(FILE *out, const Map<int,SymbolDef> &tokens) const;
 };
 
 class ForbidDescriptor {
@@ -216,6 +208,7 @@ class ForbidAutomata {
 public:
   ForbidAutomata();
   int newstate();
+  int nstates() const;
   void addEmptyTransition(int s0, int s1);
   void addTransition(int s0, int s1, const ProductionDescriptors *subLhs, const ProductionDescriptors *subRhs);
   // Find *the* state after the current state, assuming this is a deterministic automata
@@ -228,11 +221,15 @@ public:
   void toDeterministicForbidAutomata(ForbidAutomata &out);
 };
 
+typedef  Pair<Production*,int>  productionandforbidstate_t;
+
 class ParserDef {
   int m_nextsymbolid;
   Production *m_startProduction;
+  FILE *m_vout;
+  int m_verbosity;
 public:
-  ParserDef() : m_nextsymbolid(0), m_startProduction(0) {}
+  ParserDef(FILE *vout, int verbosity) : m_nextsymbolid(0), m_startProduction(0), m_vout(vout), m_verbosity(verbosity) {}
   Map<String,int> m_tokens;
   Map<int,SymbolDef> m_tokdefs;
   Vector<Production*> m_productions;
@@ -247,7 +244,7 @@ public:
   int findOrAddSymbolId(Tokenizer &toks, const String &s, SymbolType stype);
   int getStartNt() const;
   Production *getStartProduction() const { return m_startProduction; }
-  Vector<Production*> productionsAt(const Production *p, int pos, int forbidstate) const;
+  Vector<productionandforbidstate_t> productionsAt(const Production *p, int pos, int forbidstate) const;
   void computeForbidAutomata();
   SymbolType getSymbolType(int tok) const;
   void print(FILE *out) const;
@@ -271,18 +268,19 @@ public:
 
 class state_t : public Set<ProductionState> {
 public:
-  void print(FILE *out, const Map<int,String> &tokens) const;
+  void print(FILE *out, const Map<int,SymbolDef> &tokens) const;
 };
 
 typedef Map<int,Set<int> > shifttosymbols_t;
 typedef Map<int,shifttosymbols_t> shiftmap_t;
 typedef Map<Production*,Set<int> > reducebysymbols_t;
 typedef Map<int,reducebysymbols_t> reducemap_t;
+typedef Pair<int,int> symbolandforbidstate_t;
 
 class ParserSolution {
 public:
-  Map<int, Set<int> > m_firsts;
-  Map<int, Set<int> > m_follows;
+  Map< symbolandforbidstate_t, Set<int> > m_firsts;
+  Map< symbolandforbidstate_t, Set<int> > m_follows;
   Vector<state_t> m_states;
   shiftmap_t m_shifts;
   reducemap_t m_reductions;

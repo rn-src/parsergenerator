@@ -27,7 +27,7 @@
     <ClCompile Include="parsersolve.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="parsernormalize.cpp">
+    <ClCompile Include="parserforbidauto.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
   </ItemGroup>

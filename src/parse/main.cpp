@@ -16,9 +16,9 @@ int main(int argc, char *argv[]) {
     verbosity = 2;
   else if( hasarg(argc,argv,"-v") )
     verbosity = 1;
-  ParserDef parser;
   try {
     FILE *vout = stderr;
+    ParserDef parser(vout,verbosity);
     TokBuf tokbuf(stdin);
     ParseParser(&tokbuf,parser,vout,verbosity);
     ParserSolution solution;

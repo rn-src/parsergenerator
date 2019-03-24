@@ -9,59 +9,107 @@ static void error(const String &err) {
 }
 
 void ComputeFirsts(const ParserDef &parser, ParserSolution &solution, FILE *out, int verbosity) {
+  // No need to add terminals... we just test if the symbol is a terminal in the rest of the code
+  /*
   for( Map<int,SymbolDef>::const_iterator cur = parser.m_tokdefs.begin(), end = parser.m_tokdefs.end(); cur != end; ++cur ) {
-    if( cur->second.m_symboltype == SymbolTypeTerminal )
-      solution.m_firsts[cur->second.m_tokid].insert(cur->second.m_tokid);
+    if( cur->second.m_symboltype == SymbolTypeTerminal ) {
+      int tokid = cur->second.m_tokid;
+      for( int forbidstate = 0; forbidstate < parser.m_forbid.nstates(); ++forbidstate )
+        solution.m_firsts[symbolandforbidstate_t(tokid,forbidstate)].insert(cur->second.m_tokid);
+    }
   }
+  */
   bool added = true;
   while( added ) {
     added = false;
     for( Map<int,SymbolDef>::const_iterator cur = parser.m_tokdefs.begin(), end = parser.m_tokdefs.end(); cur != end; ++cur ) {
-      if( cur->second.m_symboltype == SymbolTypeTerminal )
+      if( cur->second.m_symboltype != SymbolTypeNonterminalProduction )
         continue;
       int tokid = cur->second.m_tokid;
-      int beforecnt = solution.m_firsts[tokid].size();
-      for( Vector<Production*>::const_iterator curp = parser.m_productions.begin(), endp = parser.m_productions.end(); curp != endp; ++curp ) {
-        const Production *p = *curp;
+      for( int forbidstate = 0, nstates = parser.m_forbid.nstates(); forbidstate < nstates; ++forbidstate ) {
+        int beforecnt = (solution.m_firsts.find(symbolandforbidstate_t(tokid,forbidstate)) != solution.m_firsts.end()) ? solution.m_firsts[symbolandforbidstate_t(tokid,forbidstate)].size() : 0;
+        const Production *p = cur->second.m_p;
         int s = p->m_symbols[0];
-        if( p->m_nt != tokid || p->m_nt == s )
-          continue;
-        const Set<int> &sfirsts = solution.m_firsts[s];
-        solution.m_firsts[cur->second.m_tokid].insert(sfirsts.begin(),sfirsts.end());
+        if( parser.getSymbolType(s) == SymbolTypeTerminal ) {
+          solution.m_firsts[symbolandforbidstate_t(tokid,forbidstate)].insert(s);
+        } else {
+          Vector< Pair<Production*,int> > productions = parser.productionsAt(p,0,forbidstate);
+          for( Vector< Pair<Production*,int> >::const_iterator curp = productions.begin(), endp = productions.end(); curp != endp; ++curp ) {
+            int pid = curp->first->m_pid;
+            int pfst = curp->second;
+            if( solution.m_firsts.find(symbolandforbidstate_t(pid,pfst)) != solution.m_firsts.end() ) {
+              Set<int> &dst = solution.m_firsts[symbolandforbidstate_t(tokid,forbidstate)];
+              const Set<int> &sfirsts = solution.m_firsts[symbolandforbidstate_t(pid,pfst)];
+              dst.insert(sfirsts.begin(),sfirsts.end());
+            }
+          }
+        }
+        int aftercnt = (solution.m_firsts.find(symbolandforbidstate_t(tokid,forbidstate)) != solution.m_firsts.end()) ? solution.m_firsts[symbolandforbidstate_t(tokid,forbidstate)].size() : 0;
+        if( beforecnt != aftercnt )
+          added = true;
       }
-      int aftercnt = solution.m_firsts[tokid].size();
-      if( beforecnt != aftercnt )
-        added = true;
     }
   }
 }
 
 void ComputeFollows(const ParserDef &parser, ParserSolution &solution, FILE *out, int verbosity) {
-  solution.m_follows[parser.getStartNt()].insert(EOF_TOK);
+  solution.m_follows[symbolandforbidstate_t(parser.getStartProduction()->m_pid,0)].insert(EOF_TOK);
   bool added = true;
   while( added ) {
     added = false;
+    // compute the follows for each terminal/nonterminal-production symbol ...
     for( Map<int,SymbolDef>::const_iterator cur = parser.m_tokdefs.begin(), end = parser.m_tokdefs.end(); cur != end; ++cur ) {
+      SymbolType stype = cur->second.m_symboltype;
+      if( stype == SymbolTypeNonterminal )
+        continue; // non nonterminals
       int tokid = cur->second.m_tokid;
-      int beforecnt = 0;
-      if( solution.m_follows.find(tokid) != solution.m_follows.end() )
-        beforecnt = solution.m_follows[tokid].size();
-      for( Vector<Production*>::const_iterator curp = parser.m_productions.begin(), endp = parser.m_productions.end(); curp != endp; ++curp ) {
-        const Production *p = *curp;
-        for( Vector<int>::const_iterator curs = p->m_symbols.begin(), ends = p->m_symbols.end(); curs != ends; ++curs ) {
-          if( *curs != tokid )
-            continue;
-          Vector<int>::const_iterator nxts = curs+1;
-          int s = (nxts==ends) ? p->m_nt : *nxts;
-          const Set<int> &sfirsts = solution.m_firsts[s];
-          solution.m_follows[cur->second.m_tokid].insert(sfirsts.begin(),sfirsts.end());
+      // ... at each forbid state
+      for( int forbidstate = 0, nstates = parser.m_forbid.nstates(); forbidstate < nstates; ++forbidstate ) {
+        int beforecnt = (solution.m_follows.find(symbolandforbidstate_t(tokid,forbidstate)) != solution.m_follows.end() ) ? solution.m_follows[symbolandforbidstate_t(tokid,forbidstate)].size() : 0;
+        // ... by looking at every position of every prodution and finding where the symbol occurs
+        for( Vector<Production*>::const_iterator curp = parser.m_productions.begin(), endp = parser.m_productions.end(); curp != endp; ++curp ) {
+          const Production *p = *curp;
+          for( int pos = 0, endpos = p->m_symbols.size(); pos != endpos; ++pos ) {
+            // for terminals, we know we've found such a position if the symbol ids are the same
+            if( stype == SymbolTypeTerminal && p->m_symbols[pos] != tokid )
+              continue;
+            // otherwise for nonterminal-productions, we need to test if the production can appear at the location.
+            if( stype == SymbolTypeNonterminalProduction && parser.m_forbid.nextState(p,pos,forbidstate,cur->second.m_p) == -1 )
+              continue;
+            // If the symbol was found at the end of a production, then FOLLOW(symbol) needs to include FOLLOW(production,forbidstate)
+            if( pos+1 == endpos ) {
+              Map< symbolandforbidstate_t, Set<int> >::iterator pfollows = solution.m_follows.find(symbolandforbidstate_t(p->m_pid,forbidstate));
+              if( pfollows != solution.m_follows.end() ) {
+                Set<int> &dst = solution.m_follows[symbolandforbidstate_t(tokid,forbidstate)];                
+                const Set<int> &follows = solution.m_follows[symbolandforbidstate_t(p->m_pid,forbidstate)];
+                dst.insert(follows.begin(),follows.end());
+              }
+              continue;
+            }
+            // Otherwise FOLLOW(symbol) needs to include FIRSTS for the symbol following the matching position
+            int nxts = p->m_symbols[pos+1];
+            SymbolType nxtstype = parser.getSymbolType(nxts);
+            // When the next symbol is a terminal, FIRSTS for next symbol is just the next symbol.
+            if( nxtstype == SymbolTypeTerminal ) {
+              solution.m_follows[symbolandforbidstate_t(tokid,forbidstate)].insert(nxts);
+              continue;
+            }
+            // otherwise when the next symbol is a nonterminal, FIRST for the next symbol is the union of the FIRSTS for the productions allowed at the position
+            Vector<productionandforbidstate_t> productions = parser.productionsAt(p,pos+1,forbidstate);
+            for( Vector<productionandforbidstate_t>::iterator curpat = productions.begin(), endpat = productions.end(); curpat != endpat; ++curpat ) {
+              Map< symbolandforbidstate_t, Set<int> >::iterator pfirsts = solution.m_firsts.find(symbolandforbidstate_t(curpat->first->m_pid,curpat->second));
+              if( pfirsts != solution.m_firsts.end() ) {
+                Set<int> &dst = solution.m_follows[symbolandforbidstate_t(tokid,forbidstate)];                
+                const Set<int> &firsts = solution.m_follows[symbolandforbidstate_t(curpat->first->m_pid,curpat->second)];
+                dst.insert(firsts.begin(),firsts.end());
+              }
+            }
+          }
         }
+        int aftercnt = (solution.m_follows.find(symbolandforbidstate_t(tokid,forbidstate)) != solution.m_follows.end() ) ? solution.m_follows[symbolandforbidstate_t(tokid,forbidstate)].size() : 0;
+        if( beforecnt != aftercnt )
+          added = true;
       }
-      int aftercnt = 0;
-      if( solution.m_follows.find(tokid) != solution.m_follows.end() )
-        aftercnt = solution.m_follows[tokid].size();
-      if( beforecnt != aftercnt )
-        added = true;
     }
   }
 }
@@ -69,15 +117,14 @@ void ComputeFollows(const ParserDef &parser, ParserSolution &solution, FILE *out
 void closure(state_t &state, const ParserDef &parser) {
   int prevsize = 0;
   Set<ProductionState> newparts;
-  Vector<Production*> productions;
+  Vector<productionandforbidstate_t> productions;
   while( state.size() > prevsize ) {
     prevsize = state.size();
     newparts.clear();
     for( Set<ProductionState>::const_iterator cur = state.begin(), end = state.end(); cur != end; ++cur ) {
       productions = parser.productionsAt(cur->m_p,cur->m_pos,cur->m_forbidstate);
-      for( Vector<Production*>::const_iterator curp = productions.begin(), endp = productions.end(); curp != endp; ++curp ) {
-        int nxtState = parser.m_forbid.nextState(cur->m_p,cur->m_pos,cur->m_forbidstate,*curp);
-        ProductionState ps(*curp,0,nxtState);
+      for( Vector<productionandforbidstate_t>::const_iterator curp = productions.begin(), endp = productions.end(); curp != endp; ++curp ) {
+        ProductionState ps(curp->first,0,curp->second);
         newparts.insert(ps);
       }
     }
@@ -91,18 +138,25 @@ void nexts(const state_t &state, const ParserDef &parser, Set<int> &nextSymbols)
     int symbol = curs->symbol();
     if( symbol == -1 )
       continue;
-    nextSymbols.insert(symbol);
+    if( parser.getSymbolType(symbol) == SymbolTypeTerminal )
+      nextSymbols.insert(symbol);
+    else {
+      Vector<productionandforbidstate_t> productions = parser.productionsAt(curs->m_p,curs->m_pos,curs->m_forbidstate);
+      for( Vector<productionandforbidstate_t>::const_iterator curp = productions.begin(), endp = productions.end(); curp != endp; ++curp )
+        nextSymbols.insert(curp->first->m_pid);
+    }
   }
 }
 
 void advance(state_t &state, int tsymbol, const ParserDef &parser, state_t &nextState) {
   nextState.clear();
+  Production *p = 0;
+  if( parser.getSymbolType(tsymbol) == SymbolTypeNonterminalProduction )
+    p = parser.m_tokdefs[tsymbol].m_p;
   for( state_t::const_iterator curs = state.begin(), ends = state.end(); curs != ends; ++curs ) {
-    if( curs->symbol() != tsymbol )
-      continue;
-    ProductionState ps(*curs);
-    ps.m_pos++;
-    nextState.insert(ps);
+    int symbol = curs->symbol();
+    if( symbol == tsymbol || (p && p->m_nt == symbol && ! parser.m_forbid.isForbidden(curs->m_p, curs->m_pos, curs->m_forbidstate, p)) )
+      nextState.insert( ProductionState(curs->m_p, curs->m_pos+1, curs->m_forbidstate) );
   }
 }
 
@@ -115,6 +169,8 @@ void ComputeStatesAndActions(const ParserDef &parser, ParserSolution &solution, 
   statemap[state] = solution.m_states.size();
   solution.m_states.push_back(state);
   for( int i = 0; i < solution.m_states.size(); ++i ) {
+    if( verbosity > 2 )
+      fprintf(vout,"computing state %d\n",i);
     state = solution.m_states[i];
     int stateIdx = i;
     nexts(state,parser,nextSymbols);
@@ -130,6 +186,8 @@ void ComputeStatesAndActions(const ParserDef &parser, ParserSolution &solution, 
         nextStateIdx = solution.m_states.size();
         statemap[nextState] = nextStateIdx;
         solution.m_states.push_back(nextState);
+        if( verbosity > 2 )
+          fprintf(vout,"added state %d\n",nextStateIdx);
       } else {
         nextStateIdx = stateiter->second;
       }
@@ -138,7 +196,7 @@ void ComputeStatesAndActions(const ParserDef &parser, ParserSolution &solution, 
     for( state_t::const_iterator curps = state.begin(), endps = state.end(); curps != endps; ++curps ) {
       if( curps->m_pos < curps->m_p->m_symbols.size() )
         continue;
-      const Set<int> &follows = solution.m_follows[curps->m_p->m_nt];
+      const Set<int> &follows = solution.m_follows[symbolandforbidstate_t(curps->m_p->m_pid,curps->m_forbidstate)];
       solution.m_reductions[stateIdx][curps->m_p].insert(follows.begin(),follows.end());
     }
   }
@@ -148,7 +206,7 @@ void ComputeStatesAndActions(const ParserDef &parser, ParserSolution &solution, 
 #define REDUCE (2)
 #define REDUCE2 (4)
 
-void PrintStatesAndActions(const ParserDef &parser, const ParserSolution &solution, const Map<int,String> &tokens, FILE *out) {
+void PrintStatesAndActions(const ParserDef &parser, const ParserSolution &solution, const Map<int,SymbolDef> &tokens, FILE *out) {
   fprintf(out, "%d states\n\n", solution.m_states.size());
   for( int i = 0, n = solution.m_states.size(); i != n; ++i ) {
     Set<int> symbols;
@@ -167,7 +225,7 @@ void PrintStatesAndActions(const ParserDef &parser, const ParserSolution &soluti
             bFirst = false;
           else
             fputs(", ", out);
-          fputs(tokens[*cursym].c_str(), out);
+          fputs(tokens[*cursym].m_name.c_str(), out);
           shiftsymbols.insert(*cursym);
           symbols.insert(*cursym);
         }
@@ -177,12 +235,12 @@ void PrintStatesAndActions(const ParserDef &parser, const ParserSolution &soluti
     reducemap_t::const_iterator reduceiter = solution.m_reductions.find(i);
     if( reduceiter != solution.m_reductions.end() ) {
       for( reducebysymbols_t::const_iterator curreduce = reduceiter->second.begin(), endreduce = reduceiter->second.end(); curreduce != endreduce; ++curreduce ) {
-        fputs("reduce by production ", out);
+        fputs("reduce by production [", out);
         curreduce->first->print(out,tokens);
-        fputs(" on ", out);
+        fputs("] on ", out);
         bool bFirst = true;
         for( Set<int>::const_iterator cursym = curreduce->second.begin(), endsym = curreduce->second.end(); cursym != endsym; ++cursym ) {
-          const char *symstr = (*cursym==-1) ? "$" : tokens[*cursym].c_str();
+          const char *symstr = (*cursym==-1) ? "$" : tokens[*cursym].m_name.c_str();
           if( bFirst )
             bFirst = false;
           else
@@ -196,7 +254,7 @@ void PrintStatesAndActions(const ParserDef &parser, const ParserSolution &soluti
     }
     for( Set<int>::const_iterator cursym = symbols.begin(), endsym = symbols.end(); cursym != endsym; ++cursym ) {
       int sym = *cursym;
-      const char *symstr = (sym==-1) ? "$" : tokens[sym].c_str();
+      const char *symstr = (sym==-1) ? "$" : tokens[sym].m_name.c_str();
       if( shiftsymbols.find(sym) != shiftsymbols.end() && reductions.find(sym) != reductions.end() )
         fprintf(out, "shift/reduce conflict on %s\n", symstr);
       if( reductions.find(sym) != reductions.end() && reductions.find(sym)->second.size() > 1 )
@@ -218,8 +276,6 @@ void SolveParser(ParserDef &parser, ParserSolution &solution, FILE *vout, int ve
   ComputeFollows(parser,solution,out,verbosity);
   ComputeStatesAndActions(parser,solution,out,verbosity);
   if( verbosity >= 1 ) {
-    Map<int,String> tokens;
-    StringToInt_2_IntToString(parser.m_tokens,tokens);
-    PrintStatesAndActions(parser,solution,tokens,vout);
+    PrintStatesAndActions(parser,solution,parser.m_tokdefs,vout);
   }
 }

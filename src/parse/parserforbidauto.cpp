@@ -4,31 +4,6 @@ static void error(const String &err) {
   throw ParserError(err);
 }
 
-gnode::gnode(Production *p, int stateNo) : m_p(p), m_stateNo(stateNo) {}
-gnode::gnode() : m_p(0), m_stateNo(0) {}
-
-bool gnode::operator<(const gnode &rhs) const {
-  if( m_p < rhs.m_p )
-    return true;
-  else if( rhs.m_p < m_p )
-    return false;
-  if( m_stateNo < rhs.m_stateNo )
-    return true;
-  else if( rhs.m_stateNo < m_stateNo )
-    return false;
-  return false;
-}
-
-bool gnode::operator==(const gnode &rhs) const {
-  return m_p == rhs.m_p && m_stateNo == rhs.m_stateNo;
-}
-
-void gnode::print(FILE *out, const Map<int,String> &tokens) const {
-  fprintf(out,"{state=%d,[",m_stateNo);
-  m_p->print(out,tokens);
-  fputs("]}",out);
-}
-
 ForbidDescriptor::ForbidDescriptor() : m_positions(0), m_forbidden(0) {}
 ForbidDescriptor::ForbidDescriptor(const String &name, ProductionDescriptors *positions, ProductionDescriptors *forbidden) : m_name(name), m_positions(positions), m_forbidden(forbidden) {}
 ForbidDescriptor::ForbidDescriptor(const ForbidDescriptor &rhs) {
@@ -89,6 +64,10 @@ ForbidAutomata::ForbidAutomata() : m_nextstate(0), m_nxtnameidx(0) {
 
 int ForbidAutomata::newstate() { return m_nextstate++; }
 
+int ForbidAutomata::nstates() const {
+  return m_nextstate;
+}
+
 void ForbidAutomata::addEmptyTransition(int s0, int s1) {
   m_emptytransitions[s0].insert(s1);
 }
@@ -98,12 +77,14 @@ void ForbidAutomata::addTransition(int s0, int s1, const ProductionDescriptors *
 }
 
 // Find *the* state after the current state, assuming this is a deterministic automata
-int ForbidAutomata::nextState(const Production *curp, int pos, int stateno, const Production *p) const {
-  if( m_transitions.find(stateno) == m_transitions.end() )
+int ForbidAutomata::nextState(const Production *curp, int pos, int forbidstateno, const Production *ptest) const {
+  if( isForbidden(curp,pos,forbidstateno,ptest) )
+    return -1;
+  if( m_transitions.find(forbidstateno) == m_transitions.end() )
     return 0; // "other" -> 0
-  const Map< ForbidSub,Set<int> > &t = m_transitions[stateno];
+  const Map< ForbidSub,Set<int> > &t = m_transitions[forbidstateno];
   for( Map<ForbidSub,Set<int> >::const_iterator cursub = t.begin(), endsub = t.end(); cursub != endsub; ++cursub ) {
-    if( cursub->first.matches(curp,pos,p) ) {
+    if( cursub->first.matches(curp,pos,ptest) ) {
       if( cursub->second.size() == 0 )
         return 0; // "other" -> 0
       return *cursub->second.begin();
@@ -112,14 +93,16 @@ int ForbidAutomata::nextState(const Production *curp, int pos, int stateno, cons
   return 0; // "other" -> 0
 }
 
-bool ForbidAutomata::isForbidden(const Production *p, int pos, int forbidstate, const Production *ptest) const {
-  if( pos < 0 || pos >= p->m_symbols.size() || ptest->m_nt != p->m_symbols[pos] )
+bool ForbidAutomata::isForbidden(const Production *curp, int pos, int forbidstateno, const Production *ptest) const {
+  if( pos < 0 || pos >= curp->m_symbols.size() || ptest->m_nt != curp->m_symbols[pos] )
     return true;
-  StateToForbids::const_iterator iter = m_statetoforbids.find(forbidstate);
+  if( forbidstateno < 0 || forbidstateno >= m_nextstate )
+    return true;
+  StateToForbids::const_iterator iter = m_statetoforbids.find(forbidstateno);
   if( iter == m_statetoforbids.end() )
-    return true;
+    return false;
   for( Set<ForbidDescriptor>::const_iterator curfb = iter->second.begin(), endfb = iter->second.end(); curfb != endfb; ++curfb )
-    if( curfb->forbids(p,pos,ptest) )
+    if( curfb->forbids(curp,pos,ptest) )
       return true;
   return false;
 }

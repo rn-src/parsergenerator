@@ -21,7 +21,7 @@
   <ItemGroup>
     <ClCompile Include="main.cpp" />
     <ClCompile Include="parser.cpp" />
-    <ClCompile Include="parsernormalize.cpp" />
+    <ClCompile Include="parserforbidauto.cpp" />
     <ClCompile Include="parseroutput.cpp" />
     <ClCompile Include="parsersolve.cpp" />
   </ItemGroup>
