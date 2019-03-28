@@ -4,7 +4,7 @@ DEPS=parser.h ../tok/tinytemplates.h
 
 all: calculator
 
-parser: $(OBJ)
+calculator: $(OBJ)
 	g++ -o $@ $^ $(CPPFLAGS) $(CFLAGS)
 
 %.o: %.cpp $(DEPS)
@@ -12,5 +12,5 @@ parser: $(OBJ)
 
 clean:
 	rm *.o
-	rm parser
+	rm calculator
 
