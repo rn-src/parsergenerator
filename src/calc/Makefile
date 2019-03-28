@@ -2,7 +2,7 @@ OBJ=calculator.o
 CLAGS=-I. -g -Od
 DEPS=parser.h ../tok/tinytemplates.h
 
-all: parser
+all: calculator
 
 parser: $(OBJ)
 	g++ -o $@ $^ $(CPPFLAGS) $(CFLAGS)
