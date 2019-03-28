@@ -101,7 +101,7 @@ ProductionDescriptor *ProductionDescriptor::clone() const {
   return ret;
 }
 
-Production::Production(bool rejectable, int nt, const Vector<int> &symbols, String action) : m_rejectable(rejectable), m_nt(nt), m_symbols(symbols), m_action(action), m_pid(-1) {}
+Production::Production(bool rejectable, int nt, const Vector<int> &symbols, const Vector<ActionItem> &action) : m_rejectable(rejectable), m_nt(nt), m_symbols(symbols), m_action(action), m_pid(-1) {}
 
 Production *Production::clone() {
   return new Production(m_rejectable, m_nt, m_symbols, m_action);
@@ -112,9 +112,9 @@ static void error(Tokenizer &toks, const String &err) {
 }
 
 void ParserDef::addProduction(Tokenizer &toks, Production *p) {
-  if( p->m_nt == pptok::START ) {
+  if( p->m_nt == getStartNt() ) {
     if( m_startProduction )
-      error(toks,"<start> production can be defined only once");
+      error(toks,"START production can be defined only once");
     m_startProduction = p;
   }
   m_productions.push_back(p);
@@ -132,7 +132,7 @@ void ParserDef::addProduction(Tokenizer &toks, Production *p) {
 }
 
 bool ParserDef::addProduction(Production *p) {
-  if( p->m_nt == pptok::START ) {
+  if( p->m_nt == getStartNt() ) {
     if( m_startProduction )
       return false;
     m_startProduction = p;
@@ -213,7 +213,7 @@ int ParserDef::findOrAddSymbolId(Tokenizer &toks, const String &s, SymbolType st
 }
 
 int ParserDef::getStartNt() const {
-  return pptok::START;
+  return 0;
 }
 
 Vector<productionandforbidstate_t> ParserDef::productionsAt(const Production *p, int pos, int forbidstate) const {
@@ -460,7 +460,7 @@ bool ProductionDescriptor::matchesProductionAndPosition(const Production *p, int
 static int ParseNonterminal(Tokenizer &toks, ParserDef &parser) {
   if( toks.peek() == pptok::START ) {
     toks.discard();
-    return pptok::START;
+    return parser.getStartNt();
   } else if( toks.peek() == pptok::ID ) {
     String s = toks.tokstr();
     toks.discard();
@@ -489,21 +489,45 @@ static Vector<int> ParseSymbols(Tokenizer &toks, ParserDef &parser) {
   return symbols;
 }
 
-static String ParseAction(Tokenizer &toks, ParserDef &parser) {
-  String s;
+static void ParseAction(Tokenizer &toks, ParserDef &parser, Vector<ActionItem> &action) {
   if( toks.peek() != pptok::LBRACE )
-    return s;
-  toks.discard();
+    return;
+  else {
+    ActionItem item;
+    item.m_actiontype = ActionTypeSrc;
+    item.m_str = toks.tokstr();
+    action.push_back(item);
+    toks.discard();
+  }
   while( toks.peek() != -1 && toks.peek() != pptok::RBRACE ) {
     if( toks.peek() == pptok::LBRACE )
-      s += ParseAction(toks,parser);
-    s += toks.tokstr();
+      ParseAction(toks,parser,action);
+    if( toks.peek() == pptok::DOLLARDOLLAR ) {
+      ActionItem item;
+      item.m_actiontype = ActionTypeDollarDollar;
+      action.push_back(item);
+    } else if( toks.peek() == pptok::DOLLARNUMBER ) {
+      ActionItem item;
+      item.m_actiontype = ActionTypeDollarNumber;
+      item.m_dollarnum = atoi(toks.tokstr()+1);
+      action.push_back(item);
+    } else {
+      ActionItem item;
+      item.m_actiontype = ActionTypeSrc;
+      item.m_str = toks.tokstr();
+      action.push_back(item);
+    }
     toks.discard();
   }
   if( toks.peek() != pptok::RBRACE )
     error(toks,"Missing '}'");
-  toks.discard();
-  return s;
+  else {
+    ActionItem item;
+    item.m_actiontype = ActionTypeSrc;
+    item.m_str = toks.tokstr();
+    action.push_back(item);
+    toks.discard();
+  }
 }
 
 static Vector<Production*> ParseProduction(Tokenizer &toks, ParserDef &parser) {
@@ -521,9 +545,9 @@ static Vector<Production*> ParseProduction(Tokenizer &toks, ParserDef &parser) {
   Vector<Production*> productions;
   while(true) {
     Vector<int> symbols = ParseSymbols(toks,parser);
-    String action;
+    Vector<ActionItem> action;
     if( toks.peek() == pptok::LBRACE )
-      action = ParseAction(toks,parser);
+      ParseAction(toks,parser,action);
     char buf[64];
     sprintf(buf,"Production-%d",parser.m_productions.size()+1);
     String productionName = buf;
@@ -830,8 +854,7 @@ static void ParseStart(Tokenizer &toks, ParserDef &parser) {
 
 void ParseParser(TokBuf *tokbuf, ParserDef &parser, FILE *vout, int verbosity) {
   Tokenizer toks(tokbuf,&pptok::pptokinfo);
-  for( int i = 0, n = pptok::pptokinfo.m_tokenCount; i < n; ++i )
-    parser.findOrAddSymbolId(toks, pptok::pptokinfo.m_tokenstr[i], SymbolTypeTerminal);
+  parser.findOrAddSymbolId(toks,"START",SymbolTypeNonterminal);
   ParseStart(toks,parser);
   if( toks.peek() != -1 )
     error(toks,"Expected EOF");

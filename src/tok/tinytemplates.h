@@ -288,6 +288,7 @@ public:
 template<class T, class T2>
 class Pair {
 public:
+  Pair() {}
   Pair(const T &f, const T2 &s) : first(f), second(s) {}
   T  first;
   T2 second;
@@ -426,6 +427,7 @@ private:
     return low-begin();
   }
 public:
+  int size() const { return m_entries.size(); }
   iterator find(const T &key) {
     bool found = false;
     int idx = findIdx(key,found);

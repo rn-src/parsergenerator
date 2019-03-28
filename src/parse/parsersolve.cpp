@@ -275,7 +275,6 @@ void SolveParser(ParserDef &parser, ParserSolution &solution, FILE *vout, int ve
   ComputeFirsts(parser,solution,out,verbosity);
   ComputeFollows(parser,solution,out,verbosity);
   ComputeStatesAndActions(parser,solution,out,verbosity);
-  if( verbosity >= 1 ) {
+  if( verbosity >= 1 )
     PrintStatesAndActions(parser,solution,parser.m_tokdefs,vout);
-  }
 }

@@ -28,15 +28,27 @@ public:
   SymbolDef(int tokid, const String &name, SymbolType symboltype) : m_tokid(tokid), m_name(name), m_symboltype(symboltype), m_p(0) {}
 };
 
+enum ActionType {
+  ActionTypeSrc,
+  ActionTypeDollarDollar,
+  ActionTypeDollarNumber
+};
+ 
+struct ActionItem {
+  ActionType m_actiontype;
+  String m_str;
+  int m_dollarnum;
+};
+
 class Production {
 public:
   bool m_rejectable;
   int m_nt;
   int m_pid;
   Vector<int> m_symbols;
-  String m_action;
+  Vector<ActionItem> m_action;
 
-  Production(bool rejectable, int nt, const Vector<int> &symbols, String action);
+  Production(bool rejectable, int nt, const Vector<int> &symbols, const Vector<ActionItem> &action);
   Production *clone();
   void print(FILE *out, const Map<int,SymbolDef> &tokens, int pos=-1, int forbidstate=0) const;
 };

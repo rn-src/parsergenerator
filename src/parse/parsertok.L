@@ -25,9 +25,11 @@ push b  LBRACE     /\{/
 		VSEP       /|/
 
 - section b
-      = SQSTR   /'([^']|\\.|\\x[[:xdigit:]]+)*'/
-      = DQSTR   /"([^"]|\\.|\\x[[:xdigit:]]+)*"/
-        SRC     /[^\{\}\"\']+|{SQSTR}|{DQSTR}/
-push b  LBRACE  /\{/
-pop     RBRACE  /\}/
+      = SQSTR    /'([^']|\\.|\\x[[:xdigit:]]+)*'/
+      = DQSTR    /"([^"]|\\.|\\x[[:xdigit:]]+)*"/
+        DOLLARDOLLAR /\$\$/
+        DOLLARNUMBER /\$[[:digit:]]+/
+        SRC      /[^\{\}\"\'\$]+|{SQSTR}|{DQSTR}|\$/
+push b  LBRACE   /\{/
+pop     RBRACE   /\}/
 

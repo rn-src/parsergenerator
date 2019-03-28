@@ -14,6 +14,5 @@ e : LPAREN e RPAREN { $$ = $2; }
   | e DIV e         { $$ = $1 / $3; }
   | e PLUS e        { $$ = $1 + $3; }
   | e MINUS e       { $$ = $1 - $3; }
-  | NUMBER          { $$ = atof($1); }
+  | NUMBER          { $$ = atof($1.c_str()); }
   ;
-
