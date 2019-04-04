@@ -54,7 +54,7 @@ public:
       if( s && *s) {
         m_p = new strkernel();
         m_p->m_len = strlen(s);
-        m_p->m_s = (char*)malloc(m_p->m_len);
+        m_p->m_s = (char*)malloc(m_p->m_len+1);
         strcpy(m_p->m_s,s);
         m_p->m_refs = 1;
       }
