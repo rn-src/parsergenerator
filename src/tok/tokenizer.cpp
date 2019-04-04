@@ -993,10 +993,10 @@ static String ParseSymbol(TokStream &s) {
   String symbol;
   int n = 0;
   int c = s.peekc(n);
-  if( ! isalpha(c) )
+  if( ! isalpha(c) && c != '_' )
     return symbol;
   c = s.peekc(++n);
-  while( isalnum(c) )
+  while( isalnum(c) || c == '_' )
     c = s.peekc(++n);
   char *str = (char*)malloc(n+1);
   for( int i = 0; i < n; ++i )

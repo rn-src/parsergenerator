@@ -540,7 +540,7 @@ static Vector<Production*> ParseProduction(Tokenizer &toks, ParserDef &parser) {
   if( nt == -1 )
     error(toks,"Expected nonterminal");
   if( toks.peek() != pptok::COLON )
-    error(toks,"Exptected ':'");
+    error(toks,"Expected ':'");
   toks.discard();
   Vector<Production*> productions;
   while(true) {
@@ -845,7 +845,7 @@ static bool ParseParsePart(Tokenizer &toks, ParserDef &parser) {
 
 static void ParseStart(Tokenizer &toks, ParserDef &parser) {
   if( ! ParseParsePart(toks,parser) )
-    error(toks,"expected productin, precedence rule, or disallow rule");
+    error(toks,"expected production, precedence rule, or disallow rule");
   while( true ) {
     if( ! ParseParsePart(toks,parser) )
       break;

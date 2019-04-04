@@ -18,7 +18,7 @@ int main(int argc, char *argv[])
     Nfa *dfa = ParseTokenizerFile(s);
     OutputTokenizerSource(stdout,*dfa,language);
   } catch(ParseException pe) {
-    fprintf(stdout, "Parse Error <stdin>(%d:%d( : %s\n", pe.m_line, pe.m_col, pe.m_err);
+    fprintf(stderr, "Parse Error <stdin>(%d:%d) : %s\n", pe.m_line, pe.m_col, pe.m_err);
   }
   return 0;
 }
