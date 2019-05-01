@@ -600,13 +600,17 @@ static ProductionDescriptor *ParseProductionDescriptor(Tokenizer &toks, ParserDe
 }
 
 static void ParseTypedefRule(Tokenizer &toks, ParserDef &parser) {
-  if( toks.peek() != pptok::TYPEDEF )
+  if( toks.peek() != pptok::TYPEDEFTOK )
     return;
   toks.discard();
   if( toks.peek() != pptok::ID )
-    error(toks,"expected typedef");
+    error(toks,"expected id after typedef");
   String toktype = toks.tokstr();
   toks.discard();
+  while( toks.peek() == pptok::STAR ) {
+    toktype += toks.tokstr();
+    toks.discard();
+  }
   int nt = ParseNonterminal(toks,parser);
   while( nt != -1 ) {
     SymbolDef &symboldef = parser.m_tokdefs[nt];
@@ -820,7 +824,7 @@ static DisallowRule *ParseDisallowRule(Tokenizer &toks, ParserDef &parser) {
 }
 
 static bool ParseParsePart(Tokenizer &toks, ParserDef &parser) {
-  if( toks.peek() == pptok::TYPEDEF ) {
+  if( toks.peek() == pptok::TYPEDEFTOK ) {
     ParseTypedefRule(toks,parser);
   } else if( toks.peek() == pptok::LEFTASSOC || toks.peek() == pptok::RIGHTASSOC || toks.peek() == pptok::NONASSOC ) {
     AssociativeRule *ar = ParseAssociativeRule(toks,parser);

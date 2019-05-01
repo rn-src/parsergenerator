@@ -113,7 +113,7 @@ void TokStream::discard(int n) {
 int TokStream::line() { return m_line; }
 int TokStream::col() { return m_col; }
 
-static void error(TokStream &s, const char *err) {
+static void error(TokStream &s, String err) {
   throw ParseException(s.line(),s.col(),err);
 }
 
@@ -859,7 +859,7 @@ static Rx *ParseRxSimple(TokStream &s, Map<String,Rx*> &subs) {
     if( ! ParseSub(s,sub)  )
       return 0;
     if( subs.find(sub) == subs.end() )
-      error(s,"unknown substitution");
+      error(s,String("unknown substitution ")+sub);
     return subs[sub]->clone();
   }
   else if( c == '.' ) {
@@ -1130,6 +1130,8 @@ Nfa *ParseTokenizerFile(TokStream &s) {
         delete subs[symbol];
         subs.erase(symbol);
       }
+      //fprintf(stderr, "Adding substitution %s %d\n", symbol.c_str(), s.line());
+      //fflush(stderr);
       subs[symbol] = rx;
     } else {
       int tokid = -1;

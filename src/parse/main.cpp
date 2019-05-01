@@ -25,7 +25,7 @@ int main(int argc, char *argv[]) {
     SolveParser(parser, solution, vout, verbosity);
     OutputParserSolution(stdout, parser, solution, LanguageC);
   } catch(ParserErrorWithLineCol &pe) {
-    fprintf(stderr, "<stdin>(%d:%d) : %s", pe.m_line, pe.m_col, pe.m_err.c_str());
+    fprintf(stderr, "<stdin>(%d:%d) : %s\n", pe.m_line, pe.m_col, pe.m_err.c_str());
   } catch(ParserError &pe) {
     fputs(pe.m_err.c_str(),stderr);
   }

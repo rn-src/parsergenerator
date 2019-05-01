@@ -26,9 +26,9 @@ class ParseException
 {
 public:
   int m_line, m_col;
-  const char *m_err;
+  String m_err;
 
-  ParseException(int line, int col, const char *err) : m_line(line), m_col(col), m_err(err) {}
+  ParseException(int line, int col, String err) : m_line(line), m_col(col), m_err(err) {}
 };
 
 class CharRange {
