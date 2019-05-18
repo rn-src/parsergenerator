@@ -1,14 +1,15 @@
 const int START = 17;
-const int e = 18;
-const int PROD_0 = 19;
-const int PROD_1 = 20;
-const int PROD_2 = 21;
-const int PROD_3 = 22;
-const int PROD_4 = 23;
-const int PROD_5 = 24;
-const int PROD_6 = 25;
-const int PROD_7 = 26;
-const int PROD_8 = 27;
+const int EXTRA = 18;
+const int e = 19;
+const int PROD_0 = 20;
+const int PROD_1 = 21;
+const int PROD_2 = 22;
+const int PROD_3 = 23;
+const int PROD_4 = 24;
+const int PROD_5 = 25;
+const int PROD_6 = 26;
+const int PROD_7 = 27;
+const int PROD_8 = 28;
 const int nstates = 20;
 static const int actions[] = {
 /* state 0 */ ACTION_SHIFT,1,1,MINUS,ACTION_SHIFT,2,1,PLUS,ACTION_SHIFT,3,1,LPAREN,ACTION_SHIFT,4,1,NUMBER,ACTION_SHIFT,5,6,PROD_1,PROD_2,PROD_3,PROD_4,PROD_5,PROD_8,ACTION_SHIFT,6,2,PROD_6,PROD_7
@@ -32,29 +33,49 @@ static const int actions[] = {
 /* state 18 */ ,ACTION_SHIFT,11,1,TIMES,ACTION_SHIFT,12,1,DIV,ACTION_REDUCE,PROD_7,3,4,-1,MINUS,PLUS,RPAREN
 /* state 19 */ ,ACTION_SHIFT,11,1,TIMES,ACTION_SHIFT,12,1,DIV,ACTION_REDUCE,PROD_6,3,4,-1,MINUS,PLUS,RPAREN};
 static const int actionstart[] = {0,30,53,76,106,116,137,150,160,170,190,202,225,248,273,298,308,318,328,344,360};
+typedef double extra_t;
 struct stack_t {
-String str;
-double tdouble;
+stack_t() {}
+Token tok;
+double b;
 };
-static bool reduce(int productionidx, stack_t* inputs, stack_t& output){
+static bool reduce(extra_t& extra, int productionidx, stack_t* inputs, stack_t& output){
 switch(productionidx) {
-case PROD_0:{ fprintf(stdout, "%f",inputs[0].tdouble); }
+case PROD_0:
+#line 7 "calculator.G"
+{ extra = inputs[0].b; }
 break;
-case PROD_1:{ output.tdouble = inputs[1].tdouble; }
+case PROD_1:
+#line 10 "calculator.G"
+{ output.b = inputs[1].b; }
 break;
-case PROD_2:{ output.tdouble = inputs[1].tdouble; }
+case PROD_2:
+#line 11 "calculator.G"
+{ output.b = inputs[1].b; }
 break;
-case PROD_3:{ output.tdouble = -inputs[1].tdouble; }
+case PROD_3:
+#line 12 "calculator.G"
+{ output.b = -inputs[1].b; }
 break;
-case PROD_4:{ output.tdouble = inputs[0].tdouble * inputs[2].tdouble; }
+case PROD_4:
+#line 13 "calculator.G"
+{ output.b = inputs[0].b * inputs[2].b; }
 break;
-case PROD_5:{ output.tdouble = inputs[0].tdouble / inputs[2].tdouble; }
+case PROD_5:
+#line 14 "calculator.G"
+{ output.b = inputs[0].b / inputs[2].b; }
 break;
-case PROD_6:{ output.tdouble = inputs[0].tdouble + inputs[2].tdouble; }
+case PROD_6:
+#line 15 "calculator.G"
+{ output.b = inputs[0].b + inputs[2].b; }
 break;
-case PROD_7:{ output.tdouble = inputs[0].tdouble - inputs[2].tdouble; }
+case PROD_7:
+#line 16 "calculator.G"
+{ output.b = inputs[0].b - inputs[2].b; }
 break;
-case PROD_8:{ output.tdouble = atof(inputs[0].str.c_str()); }
+case PROD_8:
+#line 17 "calculator.G"
+{ output.b = atof(inputs[0].tok.c_str()); }
 break;
 default:
   break;

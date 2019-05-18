@@ -1,10 +1,10 @@
-TYPEDEF double e ;
+TYPEDEFTOK double e <extra>;
 
 LEFT-ASSOCIATIVE [e : e TIMES e][e : e DIV  e] ;
 LEFT-ASSOCIATIVE [e : e MINUS e][e : e PLUS  e] ;
 PRECEDENCE [e : PLUS e][e : MINUS e] > [e : e TIMES e][e : e DIV  e] > [e : e MINUS e][e : e PLUS e] ;
 
-<start> : e { fprintf(stdout, "%f",$1); }
+<start> : e { extra = $1; }
         ;
 
 e : LPAREN e RPAREN { $$ = $2; }
