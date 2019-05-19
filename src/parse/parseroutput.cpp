@@ -300,21 +300,38 @@ static void OutputParser(FILE *out, const ParserDef &parser, const ParserSolutio
   lang.outEndStmt(out);
   fputc('\n',out);
 
-  fputs("struct stack_t {\n", out);
-  lang.outDecl(out,"String","str");
+  if( parser.m_tokdefs.find(parser.getExtraNt()) == parser.m_tokdefs.end() )
+    fputs("typedef int extra_t;\n", out);
+  else
+    fprintf(out, "typedef %s extra_t;\n", parser.m_tokdefs[parser.getExtraNt()].m_semantictype.c_str());
+
+  Map<String,String> tfields;
+  tfields["Token"] = "tok";
+  fputs("struct stack_t {\nstack_t() {}\n", out);
+  lang.outDecl(out,"Token","tok");
   fputs(";\n",out);
   for( Map<int,SymbolDef>::const_iterator cursymbol = parser.m_tokdefs.begin(), endsymbol = parser.m_tokdefs.end(); cursymbol != endsymbol; ++cursymbol ) {
     const SymbolDef &s = cursymbol->second;
-    if( ! s.m_semantictype.length() )
+    if( ! s.m_semantictype.length() || s.m_tokid == parser.getStartNt() || s.m_tokid == parser.getExtraNt() )
       continue;
-    String t = String("t")+s.m_semantictype;
-    lang.outDecl(out,s.m_semantictype.c_str(),t.c_str());
-    fputs(";\n",out);
+    if( tfields.find(s.m_semantictype) == tfields.end() ) {
+      String fld;
+      int i = tfields.size();
+      while( i > 0 ) {
+        fld += 'a'+(i%26);
+        i /= 26;
+      } 
+      tfields[s.m_semantictype] = fld;
+      lang.outDecl(out,s.m_semantictype.c_str(),fld.c_str());
+      fputs(";\n",out);
+    }
   }
   fputs("};\n",out);
 
   lang.outFunctionStart(out,"static bool", "reduce");
   lang.outStartParameters(out);
+  lang.outDecl(out, "extra_t&", "extra");
+  fputs(", ", out);
   lang.outDecl(out, "int", "productionidx");
   fputs(", ", out);
   lang.outDecl(out, "stack_t*", "inputs");
@@ -328,22 +345,25 @@ static void OutputParser(FILE *out, const ParserDef &parser, const ParserSolutio
     const Production *p = *curp;
     if( p->m_action.size() == 0 )
       continue;
-    fprintf(out,"case PROD_%d:", pid2idx[p->m_pid]);
+    fprintf(out,"case PROD_%d:\n", pid2idx[p->m_pid]);
+    fprintf(out, "#line %d \"%s\"\n", p->m_lineno, p->m_filename.c_str());
     for( Vector<ActionItem>::const_iterator curaction = p->m_action.begin(), endaction = p->m_action.end(); curaction != endaction; ++curaction ) {
       const ActionItem &item = *curaction;
       if( item.m_actiontype == ActionTypeSrc )
         fputs(item.m_str.c_str(), out);
       else if( item.m_actiontype == ActionTypeDollarDollar ) {
-        const String &stype = parser.m_tokdefs[p->m_nt].m_semantictype;
-        fprintf(out,"output.t%s",stype.c_str());
+        const String &semtype = parser.m_tokdefs[p->m_nt].m_semantictype;
+        String fld = tfields[semtype];
+        fprintf(out,"output.%s",fld.c_str());
       } else if( item.m_actiontype == ActionTypeDollarNumber ) {
         SymbolType stype = parser.getSymbolType(p->m_symbols[item.m_dollarnum-1]);
+        String semtype;
         if( stype == SymbolTypeTerminal )
-          fprintf(out, "inputs[%d].str",item.m_dollarnum-1);
-        else if( stype == SymbolTypeNonterminal ) {
-          const String &stype = parser.m_tokdefs[p->m_symbols[item.m_dollarnum-1]].m_semantictype;
-          fprintf(out, "inputs[%d].t%s",item.m_dollarnum-1,stype.c_str());
-        }
+          semtype = "Token";
+        else if( stype == SymbolTypeNonterminal )
+          semtype = parser.m_tokdefs[p->m_symbols[item.m_dollarnum-1]].m_semantictype;
+        String fld = tfields[semtype];
+        fprintf(out, "inputs[%d].%s",item.m_dollarnum-1,fld.c_str());
       }
     }
     fputs("\nbreak;\n", out);

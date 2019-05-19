@@ -13,15 +13,15 @@ struct ParseInfo {
   const int *actionstart;
 };
 
-template<class T>
+template<class E, class T>
 class Parser {
 public:
-  TokenInfo *m_tokinfo;
   ParseInfo *m_parseinfo;
-  typedef bool (*reducefnct)(int productionidx, T *inputs, T &ntout);
+  E m_extra;
+  typedef bool (*reducefnct)(E &extra, int productionidx, T *inputs, T &ntout);
   reducefnct reduce;
 
-  Parser(TokenInfo *tokinfo, ParseInfo *parseinfo, reducefnct rfnct) : m_tokinfo(tokinfo), m_parseinfo(parseinfo), reduce(rfnct) {}
+  Parser(ParseInfo *parseinfo, reducefnct rfnct) : m_parseinfo(parseinfo), reduce(rfnct) {}
 
   bool findsymbol(int tok, const int *symbols, int nsymbols) {
     for( int i = 0; i < nsymbols; ++i )
@@ -30,8 +30,8 @@ public:
     return false;
   }
 
-  bool parse(TokBuf *tokbuf) {
-    Tokenizer toks(tokbuf,m_tokinfo);
+  bool parse(Tokenizer *ptoks) {
+    Tokenizer &toks = *ptoks;
     Vector<int> states;
     Vector<T> values;
     Vector< Pair<int,T> > inputqueue;
@@ -62,7 +62,7 @@ public:
             } else {
               states.push_back(shiftto);
               T t;
-              t.str = toks.tokstr();
+              t.tok.set(toks.tokstr(),toks.filename(),toks.wslines(),toks.wscols(),toks.wslen(),toks.line(),toks.col(),tok);
               values.push_back(t);
               toks.discard();
             }
@@ -76,7 +76,7 @@ public:
           if( findsymbol(tok,firstaction+4,nsymbols) ) {
             T output;
             T *inputs = values.begin()+(values.size()-reducecount);
-            if( reduce(reduceby,inputs,output) ) {
+            if( reduce(m_extra,reduceby,inputs,output) ) {
               states.resize(states.size()-reducecount);
               values.resize(values.size()-reducecount);
               inputqueue.push_back( Pair<int,T>(reduceby,output) );

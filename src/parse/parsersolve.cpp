@@ -265,6 +265,56 @@ void PrintStatesAndActions(const ParserDef &parser, const ParserSolution &soluti
   fputs("\n",out);
 }
 
+void PrintConflicts(const ParserDef &parser, const ParserSolution &solution, const Map<int,SymbolDef> &tokens, FILE *pout) {
+  fprintf(pout, "%d states\n\n", solution.m_states.size());
+  for( int i = 0, n = solution.m_states.size(); i != n; ++i ) {
+    Set<int> symbols;
+    Set<int> shiftsymbols;
+    Map<int,Set<const Production*> > reductions;
+    const state_t &state = solution.m_states[i];
+    shiftmap_t::const_iterator shiftiter = solution.m_shifts.find(i);
+    if( shiftiter != solution.m_shifts.end() ) {
+      for( shifttosymbols_t::const_iterator curshift = shiftiter->second.begin(), endshift = shiftiter->second.end(); curshift != endshift; ++curshift ) {
+        for( Set<int>::const_iterator cursym = curshift->second.begin(), endsym = curshift->second.end(); cursym != endsym; ++cursym ) {
+          shiftsymbols.insert(*cursym);
+          symbols.insert(*cursym);
+        }
+      }
+    }
+    reducemap_t::const_iterator reduceiter = solution.m_reductions.find(i);
+    if( reduceiter != solution.m_reductions.end() ) {
+      for( reducebysymbols_t::const_iterator curreduce = reduceiter->second.begin(), endreduce = reduceiter->second.end(); curreduce != endreduce; ++curreduce ) {
+        for( Set<int>::const_iterator cursym = curreduce->second.begin(), endsym = curreduce->second.end(); cursym != endsym; ++cursym ) {
+          const char *symstr = (*cursym==-1) ? "$" : tokens[*cursym].m_name.c_str();
+          reductions[*cursym].insert(curreduce->first);
+          symbols.insert(*cursym);
+        }
+      }
+    }
+    bool bFirst = true;
+    for( Set<int>::const_iterator cursym = symbols.begin(), endsym = symbols.end(); cursym != endsym; ++cursym ) {
+      int sym = *cursym;
+      const char *symstr = (sym==-1) ? "$" : tokens[sym].m_name.c_str();
+      if( shiftsymbols.find(sym) != shiftsymbols.end() && reductions.find(sym) != reductions.end() ) {
+        if( bFirst ) {
+          bFirst = false;
+          fprintf(pout, "State %d:\n", i);
+        }
+        fprintf(pout, "shift/reduce conflict on %s\n", symstr);
+      }
+      if( reductions.find(sym) != reductions.end() && reductions.find(sym)->second.size() > 1 ) {
+        if( bFirst ) {
+          bFirst = false;
+          fprintf(pout, "State %d:\n", i);
+        }
+        fprintf(pout, "reduce/reduce conflict on %s\n", symstr);
+      }
+    }
+    if( ! bFirst )
+      fputs("\n",pout);
+  }
+}
+
 void StringToInt_2_IntToString(const Map<String,int> &src, Map<int,String> &tokens);
 
 void SolveParser(ParserDef &parser, ParserSolution &solution, FILE *vout, int verbosity) {
@@ -277,4 +327,6 @@ void SolveParser(ParserDef &parser, ParserSolution &solution, FILE *vout, int ve
   ComputeStatesAndActions(parser,solution,out,verbosity);
   if( verbosity >= 1 )
     PrintStatesAndActions(parser,solution,parser.m_tokdefs,vout);
+  else
+    PrintConflicts(parser,solution,parser.m_tokdefs,vout);
 }

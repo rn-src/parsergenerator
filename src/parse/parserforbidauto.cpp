@@ -227,6 +227,13 @@ void ParserDef::computeForbidAutomata() {
   expandAssocRules();
   expandPrecRules();
   combineRules();
+  if( m_verbosity > 2 ) {
+    fputs("final disallow rules:\n", m_vout);
+    for( int i = 0; i < m_disallowrules.size(); ++i ) {
+      m_disallowrules[i]->print(m_vout,m_tokdefs);
+      fputs("\n",m_vout);
+    }
+  }
   // Turn the rules into a nondeterministic forbid automata
   for( Vector<DisallowRule*>::const_iterator cur = m_disallowrules.begin(), end = m_disallowrules.end(); cur != end; ++cur )
     nforbid.addRule(*cur);

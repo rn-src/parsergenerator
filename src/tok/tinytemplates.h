@@ -5,6 +5,8 @@
 #include <new>
 #include <string.h>
 #include <stdlib.h>
+#include <stdarg.h>
+#include <stdio.h>
 
 class String {
 protected:
@@ -21,12 +23,15 @@ protected:
   }
 public:
   String() : m_p(0) {}
-  String(const char *s) : m_p(0) {
+  String(const char *s, int len=-1) : m_p(0) {
     if( s && *s ) {
       m_p = new strkernel();
-      m_p->m_len = strlen(s);
+      if( len < 0 || len > strlen(s) )
+        len = strlen(s);
+      m_p->m_len = len;
       m_p->m_s = (char*)malloc(m_p->m_len+1);
-      strcpy(m_p->m_s,s);
+      strncpy(m_p->m_s,s,len);
+      m_p->m_s[len] = 0;
       m_p->m_refs = 1;
     }
   }
@@ -123,6 +128,25 @@ public:
       return m_p->m_s;
     return 0;
   }
+  bool operator==(const String &rhs) const {
+    if( length() != rhs.length() )
+      return false;
+    if( length() == 0 )
+      return true;
+    const char *s1 = m_p->m_s, *s2 = rhs.m_p->m_s;
+    while( *s1 && *s2 ) {
+      if( *s1 != *s2 )
+        return false;
+      ++s1;
+      ++s2;
+    }
+    if( *s1 != *s2 )
+      return false;
+    return true;
+  }
+  bool operator!=(const String &rhs) const {
+    return ! operator==(rhs);
+  }
   bool operator<(const String &rhs) const {
     if( ! m_p || ! rhs.m_p ) {
       if( ! m_p && rhs.m_p != 0 )
@@ -143,6 +167,62 @@ public:
     else if( ! *s1 )
       return true;
     return false;
+  }
+  String substr(int first, int cnt) {
+    size_t len = length();
+    if( first >= len || cnt <= 0 )
+      return String("");
+    if( cnt > len )
+      cnt = len;
+    return String(c_str()+first,cnt);
+  }
+  String slice(int first, int last) {
+    size_t len = length();
+    if( first < 0 )
+      first += len;
+    if( last < 0 )
+      last += len;
+    return substr(first,last-first);
+  }
+  String &ReplaceAt(int at, int len, const char *with) {
+    if( at < 0 )
+      at = length()+at;
+    if( at < 0 || at > length() )
+      return *this;
+    int finallen = at+strlen(with)+(length()-len-at);
+    char *buf = (char*)malloc(finallen+1);
+    char *dst = buf;
+    if( at > 0 ) {
+      strncpy(dst,c_str(),at);
+      dst += at;
+    }
+    if( strlen(with) > 0 ) {
+      strncpy(dst,with,strlen(with));
+      dst += strlen(with);
+    }
+    int taillen = length()-len-at;
+    if( taillen > 0 ) {
+      strncpy(dst,c_str()+at+len,taillen);
+      dst += taillen;
+    }
+    *dst = 0;
+    *this = buf;
+    free(buf);
+    return *this;
+  }
+  static String vFormatString(const char *fmt, va_list args) {
+    // TODO : premeasure length instead of a fixed length
+    char buf[3200];
+    vsprintf(buf,fmt,args);
+    return String(buf);
+  }
+  static String FormatString(const char *fmt, ...) {
+    String s;
+    va_list args;
+    va_start(args,fmt);
+    s = vFormatString(fmt, args);
+    va_end(args);
+    return s;
   }
 };
 
@@ -177,6 +257,7 @@ public:
   }
   typedef const T *const_iterator;
   typedef T *iterator;
+  T &front() { return *m_p; }
   iterator begin() { return m_p; }
   iterator end() { return m_p+m_size; }
   const_iterator begin() const { return m_p; }
@@ -232,6 +313,17 @@ public:
       memmove(at,at+1,following*sizeof(T));
     --m_size;
     return at;
+  }
+  iterator erase(iterator first, iterator last) {
+    // DEBUG ME!
+    int cnt = last-first;
+    for( iterator cur = first; cur != last; ++cur )
+      cur->~T();
+    int following = end()-last;
+    if( following > 0 )
+      memmove(first,last,following*sizeof(T));
+    m_size -= cnt;
+    return first;
   }
   iterator insert(iterator at, const T &value) {
     int idx = at-m_p;
@@ -366,6 +458,9 @@ public:
   }
   iterator erase(iterator iter) {
     return m_values.erase(iter);
+  }
+  iterator erase(const T &value) {
+    return m_values.erase(find(value));
   }
   template<class Iter>
   void insert(Iter first, Iter last) {

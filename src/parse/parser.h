@@ -4,6 +4,7 @@
 #include "../tok/tok.h"
 #include "../tok/tinytemplates.h"
 #define EOF_TOK (-1)
+#define MARKER_DOT (999999)
 
 using namespace std;
 class ParserDef;
@@ -47,8 +48,10 @@ public:
   int m_pid;
   Vector<int> m_symbols;
   Vector<ActionItem> m_action;
+  int m_lineno;
+  String m_filename;
 
-  Production(bool rejectable, int nt, const Vector<int> &symbols, const Vector<ActionItem> &action);
+  Production(bool rejectable, int nt, const Vector<int> &symbols, const Vector<ActionItem> &action, int lineno, String filename);
   Production *clone();
   void print(FILE *out, const Map<int,SymbolDef> &tokens, int pos=-1, int forbidstate=0) const;
 };
@@ -255,11 +258,13 @@ public:
   int addSymbolId(const String &s, SymbolType stype);
   int findOrAddSymbolId(Tokenizer &toks, const String &s, SymbolType stype);
   int getStartNt() const;
+  int getExtraNt() const;
   Production *getStartProduction() const { return m_startProduction; }
   Vector<productionandforbidstate_t> productionsAt(const Production *p, int pos, int forbidstate) const;
   void computeForbidAutomata();
   SymbolType getSymbolType(int tok) const;
   void print(FILE *out) const;
+  void addDisallowRule(DisallowRule *rule);
 private:
   void expandAssocRules();
   void expandPrecRules();
@@ -275,7 +280,8 @@ public:
 class ParserErrorWithLineCol : public ParserError {
 public:
   int m_line, m_col;
-  ParserErrorWithLineCol(int line, int col, const String &err) : ParserError(err), m_line(line), m_col(col) {}
+  String m_filename;
+  ParserErrorWithLineCol(int line, int col, String filename, const String &err) : ParserError(err), m_line(line), m_col(col), m_filename(filename) {}
 };
 
 class state_t : public Set<ProductionState> {

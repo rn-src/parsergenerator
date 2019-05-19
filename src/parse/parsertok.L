@@ -2,6 +2,7 @@
       = WS2        /#[^\n]*\n/
       ~ WS         /({WS1}|{WS2})+/
         START      /<start>/
+        EXTRA      /<extra>/
         ERROR      /<error>/
 		DISALLOW   /DISALLOW/
 		PRECEDENCE /PRECEDENCE/
