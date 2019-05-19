@@ -4,13 +4,13 @@
         START      /<start>/
         EXTRA      /<extra>/
         ERROR      /<error>/
-		DISALLOW   /DISALLOW/
-		PRECEDENCE /PRECEDENCE/
-		REJECTABLE /REJECTABLE/
-		TYPEDEFTOK /TYPEDEFTOK/
-		LEFTASSOC  /LEFT-ASSOCIATIVE/
-		RIGHTASSOC /RIGHT-ASSOCIATIVE/
-		NONASSOC   /NON-ASSOCIATIVE/
+        DISALLOW   /DISALLOW/
+        PRECEDENCE /PRECEDENCE/
+        REJECTABLE /REJECTABLE/
+        TYPEDEFTOK /TYPEDEFTOK/
+        LEFTASSOC  /LEFT-ASSOCIATIVE/
+        RIGHTASSOC /RIGHT-ASSOCIATIVE/
+        NONASSOC   /NON-ASSOCIATIVE/
         ID         /[[:alpha:]_][[:alnum:]_]*/
         COLON      /:/
         SEMI       /;/
@@ -18,12 +18,12 @@ push b  LBRACE     /\{/
         RBRACE     /\}/
         LBRKT      /\[/
         RBRKT      /\]/
-		ARROW      /-+>/
-		NOTARROW   /-+\/-+>/
-		GT         />/
-		DOT        /\./
-		STAR       /\*/
-		VSEP       /|/
+        ARROW      /-+>/
+        NOTARROW   /-+\/-+>/
+        GT         />/
+        DOT        /\./
+        STAR       /\*/
+        VSEP       /|/
 
 - section b
       = SQSTR    /'([^']|\\.|\\x[[:xdigit:]]+)*'/
