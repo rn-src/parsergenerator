@@ -26,6 +26,7 @@ int main(int argc, char *argv[]) {
       continue;
     }
     
+    FILE *fout = 0;
     char *foutname = (char*)malloc(strlen(fname)+3);
     strcpy(foutname,fname);
     char *lastdot = strrchr(foutname,'.');
@@ -34,12 +35,7 @@ int main(int argc, char *argv[]) {
       ++lastdot;
     }
     strcat(foutname,".h");
-    FILE *fout = fopen(foutname,"w");
-    if( !fin ) {
-      fprintf(stderr, "Unable to open %s for writing\n", foutname);
-      fclose(fin);
-      continue;
-    }
+
     try {
       FILE *vout = stderr;
       ParserDef parser(vout,verbosity);
@@ -47,6 +43,12 @@ int main(int argc, char *argv[]) {
       ParseParser(&tokbuf,parser,vout,verbosity);
       ParserSolution solution;
       SolveParser(parser, solution, vout, verbosity);
+      fout = fopen(foutname,"w");
+      if( !fout ) {
+        fprintf(stderr, "Unable to open %s for writing\n", foutname);
+        fclose(fin);
+        continue;
+      }
       OutputParserSolution(fout, parser, solution, LanguageC);
     } catch(ParserErrorWithLineCol &pe) {
       fprintf(stderr, "%s(%d:%d) : %s\n", pe.m_filename.c_str(), pe.m_line, pe.m_col, pe.m_err.c_str());
@@ -54,7 +56,8 @@ int main(int argc, char *argv[]) {
       fputs(pe.m_err.c_str(),stderr);
     }
     fclose(fin);
-    fclose(fout);
+    if( fout )
+      fclose(fout);
   }
   return 0;
 }
