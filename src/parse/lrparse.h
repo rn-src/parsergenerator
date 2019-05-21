@@ -11,6 +11,7 @@ struct ParseInfo {
   const int nstates;
   const int *actions;
   const int *actionstart;
+  const int prod0;
 };
 
 template<class E, class T>
@@ -20,8 +21,11 @@ public:
   E m_extra;
   typedef bool (*reducefnct)(E &extra, int productionidx, T *inputs, T &ntout);
   reducefnct reduce;
+  int m_verbosity;
+  FILE *m_vpout;
 
-  Parser(ParseInfo *parseinfo, reducefnct rfnct) : m_parseinfo(parseinfo), reduce(rfnct) {}
+  Parser(ParseInfo *parseinfo, reducefnct rfnct, int verbosity, FILE *vpout)
+    : m_parseinfo(parseinfo), reduce(rfnct), m_verbosity(verbosity), m_vpout(vpout) {}
 
   bool findsymbol(int tok, const int *symbols, int nsymbols) {
     for( int i = 0; i < nsymbols; ++i )
@@ -38,12 +42,26 @@ public:
     states.push_back(0);
     values.push_back(T());
     int tok = -1;
+    int inputnum = 0;
     while( states.size() > 0 ) {
+      if( m_verbosity ) {
+        fputs("lrstates = { ", m_vpout);
+        for( int i = 0; i < states.size(); ++i )
+          fprintf(m_vpout, "%d ", states[i]);
+        fputs("}\n", m_vpout);
+      }
       int stateno = states.back();
-      if( inputqueue.size() )
-        tok = inputqueue.back().first;
-      else
-        tok = toks.peek();
+      if( ! inputqueue.size() ) {
+        inputnum += 1;
+        int nxt = toks.peek();
+        T t;
+        t.tok.set(toks.tokstr(),toks.filename(),toks.wslines(),toks.wscols(),toks.wslen(),toks.line(),toks.col(),nxt);
+        toks.discard();
+        inputqueue.push_back(Pair<int,T>(nxt,t));
+      }
+      tok = inputqueue.back().first;
+      if( m_verbosity )
+        fprintf(m_vpout, "input (# %d) = %d %s = \"%s\"\n", inputnum, tok, ptoks->tokstr(tok), inputqueue.back().second.tok.m_s.c_str());
       const int *firstaction = m_parseinfo->actions+m_parseinfo->actionstart[stateno];
       const int *lastaction = m_parseinfo->actions+m_parseinfo->actionstart[stateno+1];
       while( firstaction != lastaction ) {
@@ -55,17 +73,11 @@ public:
           int nsymbols = firstaction[2];
           nextaction = firstaction+3+nsymbols;
           if( findsymbol(tok,firstaction+3,nsymbols) ) {
-            if( inputqueue.size() ) {
-              states.push_back(shiftto);
-              values.push_back(inputqueue.back().second);
-              inputqueue.pop_back();
-            } else {
-              states.push_back(shiftto);
-              T t;
-              t.tok.set(toks.tokstr(),toks.filename(),toks.wslines(),toks.wscols(),toks.wslen(),toks.line(),toks.col(),tok);
-              values.push_back(t);
-              toks.discard();
-            }
+            if( m_verbosity )
+              fprintf(m_vpout, "shift to %d\n", shiftto);
+            states.push_back(shiftto);
+            values.push_back(inputqueue.back().second);
+            inputqueue.pop_back();
             didaction = true;
           }
         } else if( action == ACTION_REDUCE || action == ACTION_STOP ) {
@@ -76,22 +88,35 @@ public:
           if( findsymbol(tok,firstaction+4,nsymbols) ) {
             T output;
             T *inputs = values.begin()+(values.size()-reducecount);
+            if( m_verbosity )
+              fprintf(m_vpout, "reduce %d states by rule %d?... ", reducecount, reduceby-m_parseinfo->prod0+1);
             if( reduce(m_extra,reduceby,inputs,output) ) {
+              if( m_verbosity )
+                fputs("YES\n", m_vpout);
               states.resize(states.size()-reducecount);
               values.resize(values.size()-reducecount);
               inputqueue.push_back( Pair<int,T>(reduceby,output) );
               didaction = true;
+            } else {
+              if( m_verbosity )
+                fputs("NO\n", m_vpout);
             }
           }
-          if( action == ACTION_STOP && didaction )
+          if( action == ACTION_STOP && didaction ) {
+            if( m_verbosity )
+              fputs("ACCEPT\n", m_vpout);
             return true;
+          }
         }
         if( didaction )
           break;
         firstaction = nextaction;
       }
-      if( firstaction == lastaction )
+      if( firstaction == lastaction ) {
+        if( m_verbosity )
+          fputs("NO ACTION AVAILABLE, FAIL\n", m_vpout);
         return false;
+      }
     }
     return true;
   }

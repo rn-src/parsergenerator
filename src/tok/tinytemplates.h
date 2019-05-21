@@ -263,8 +263,16 @@ public:
   const_iterator begin() const { return m_p; }
   const_iterator end() const { return m_p+m_size; }
   bool empty() const { return m_size == 0; }
-  T &operator[](size_t i) { return m_p[i]; }
-  const T &operator[](size_t i) const { return m_p[i]; }
+  T &operator[](int i) {
+    if( i < 0 )
+      i+= m_size;
+    return m_p[i];
+  }
+  const T &operator[](int i) const {
+    if( i < 0 )
+      i+= m_size;
+    return m_p[i];
+  }
   void clear() {
     for( int i = 0; i < m_size; ++i )
       m_p[i].~T();
@@ -460,7 +468,10 @@ public:
     return m_values.erase(iter);
   }
   iterator erase(const T &value) {
-    return m_values.erase(find(value));
+    iterator iter = find(value);
+    if( iter == end() )
+      return iter;
+    return m_values.erase(iter);
   }
   template<class Iter>
   void insert(Iter first, Iter last) {

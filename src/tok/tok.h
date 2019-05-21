@@ -35,47 +35,53 @@ public:
   }
   virtual int peekc(int n) {
     while( m_stack.size() ) {
-      int tok = m_stack.back().tokbuf->peekc(n);
-      if( tok != -1 )
-        return tok;
-      TokBuf *tokbuf = m_stack.back().tokbuf;
-      m_stack.pop_back();
-      delete tokbuf;
+      StackTokBufItem &item = m_stack.back();
+      return item.tokbuf->peekc(n);
     }
     return -1;
   }
   virtual void discard(int n) {
     if( m_stack.size() ) {
-      m_stack.back().tokbuf->discard(n);
+      StackTokBufItem &item = m_stack.back();
+      item.tokbuf->discard(n);
+      if( item.tokbuf->peekc(0) == -1 ) {
+        TokBuf *tokbuf = m_stack.back().tokbuf;
+        m_stack.pop_back();
+        delete tokbuf;
+      }
     }
   }
   virtual int line() {
     if( m_stack.size() ) {
+      StackTokBufItem &item = m_stack.back();
       if( m_stack.back().lineno > 0 )
-        return m_stack.back().lineno + (m_stack.back().tokbuf->line()-m_stack.back().startline);
-      return m_stack.back().tokbuf->line();
+        return item.lineno + (item.tokbuf->line()-item.startline);
+      return item.tokbuf->line();
     }
     return -1;
   }
   virtual int col() {
     if( m_stack.size() ) {
-      return m_stack.back().tokbuf->col();
+      StackTokBufItem &item = m_stack.back();
+      return item.tokbuf->col();
     }
     return -1;
   }
   virtual String filename() {
     if( m_stack.size() ) {
-      if( m_stack.back().filename.length() )
-        return m_stack.back().filename;
-      return m_stack.back().tokbuf->filename();
+      StackTokBufItem &item = m_stack.back();
+      if( item.filename.length() )
+        return item.filename;
+      return item.tokbuf->filename();
     }
     return String();
   }
   void setline(int lineno, String filename) {
     if( m_stack.size() ) {
-      m_stack.back().startline = m_stack.back().tokbuf->line();
-      m_stack.back().lineno = lineno;
-      m_stack.back().filename = filename;
+      StackTokBufItem &item = m_stack.back();
+      item.startline = item.tokbuf->line();
+      item.lineno = lineno;
+      item.filename = filename;
     }
   }
 };
@@ -205,6 +211,7 @@ public:
   virtual int line() = 0;
   virtual int col() = 0;
   virtual String filename() = 0;
+  virtual const char *tokstr(int tok) = 0;
 };
 
 class TokBufTokenizer : public Tokenizer {
@@ -364,6 +371,11 @@ public:
   }
   String filename() {
     return m_tokbuf->filename();
+  }
+  const char *tokstr(int tok) {
+    if( tok < 0 || tok >= m_tokinfo->m_tokenCount )
+      return  "?";
+    return m_tokinfo->m_tokenstr[tok];
   }
 };
 
