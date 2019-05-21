@@ -22,8 +22,32 @@ struct StackTokBufItem {
   String filename;
 };
 
+class Token {
+public:
+  String m_s;
+  String m_filename;
+  int m_wslines, m_wscols, m_wslen;
+  int m_line, m_col;
+  int m_sym;
+
+  Token() : m_wslines(0), m_wscols(0), m_wslen(0), m_line(-1), m_col(-1), m_sym(-1) {}
+
+  void set(String s, String filename, int wslines, int wscols, int wslen, int line, int col, int sym) {
+    m_s = s;
+    m_filename = filename;
+    m_wslines = wslines;
+    m_wscols = wscols;
+    m_wslen = wslen;
+    m_line = line;
+    m_col = col;
+    m_sym = sym;
+  }
+  const char *c_str() const { return m_s.c_str(); }
+};
+
 class StackTokBuf : public TokBuf {
   Vector<StackTokBufItem> m_stack;
+  Token m_endtok;
 public:
   StackTokBuf() {}
   void push(TokBuf *tokbuf) {
@@ -47,6 +71,11 @@ public:
       if( item.tokbuf->peekc(0) == -1 ) {
         TokBuf *tokbuf = m_stack.back().tokbuf;
         m_stack.pop_back();
+        if( m_stack.size() == 0 ) {
+          m_endtok.m_filename = tokbuf->filename();
+          m_endtok.m_line = tokbuf->line();
+          m_endtok.m_col = tokbuf->col();
+        }
         delete tokbuf;
       }
     }
@@ -58,14 +87,14 @@ public:
         return item.lineno + (item.tokbuf->line()-item.startline);
       return item.tokbuf->line();
     }
-    return -1;
+    return m_endtok.m_line;
   }
   virtual int col() {
     if( m_stack.size() ) {
       StackTokBufItem &item = m_stack.back();
       return item.tokbuf->col();
     }
-    return -1;
+    return m_endtok.m_col;
   }
   virtual String filename() {
     if( m_stack.size() ) {
@@ -74,7 +103,7 @@ public:
         return item.filename;
       return item.tokbuf->filename();
     }
-    return String();
+    return m_endtok.m_filename;
   }
   void setline(int lineno, String filename) {
     if( m_stack.size() ) {
@@ -177,27 +206,6 @@ struct TokenInfo {
   const int *m_tokens;
 };
 
-class Token {
-public:
-  String m_s;
-  String m_filename;
-  int m_wslines, m_wscols, m_wslen;
-  int m_line, m_col;
-  int m_sym;
-
-  void set(String s, String filename, int wslines, int wscols, int wslen, int line, int col, int sym) {
-    m_s = s;
-    m_filename = filename;
-    m_wslines = wslines;
-    m_wscols = wscols;
-    m_wslen = wslen;
-    m_line = line;
-    m_col = col;
-    m_sym = sym;
-  }
-  const char *c_str() const { return m_s.c_str(); }
-};
-
 class Tokenizer {
 public:
   virtual ~Tokenizer() {};
@@ -280,7 +288,7 @@ public:
           int tokendcol = m_tokbuf->col();
           if( tokendline > tokstartline ) {
             m_wslines += (tokendline - tokstartline);
-            m_wscols = tokendcol;
+            m_wscols = tokendcol-1;
           } else {
             m_wscols += (tokendcol - tokstartcol);
           }
