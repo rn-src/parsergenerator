@@ -1,7 +1,8 @@
 all: tokenizer
+CFLAGS=-g -O0
 
 tokenizer: tokenizer.o main.o
-	g++ tokenizer.o main.o -otokenizer
+	g++ $(CPPFLAGS) $(CFLAGS) tokenizer.o main.o -otokenizer
 
 tokenizer.o: tokenizer.cpp tokenizer.h
 	g++ -g -c tokenizer.cpp -otokenizer.o
