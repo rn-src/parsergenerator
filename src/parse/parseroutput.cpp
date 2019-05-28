@@ -346,7 +346,9 @@ static void OutputParser(FILE *out, const ParserDef &parser, const ParserSolutio
     if( p->m_action.size() == 0 )
       continue;
     fprintf(out,"case PROD_%d:\n", pid2idx[p->m_pid]);
-    fprintf(out, "#line %d \"%s\"\n", p->m_lineno, p->m_filename.c_str());
+    String s = p->m_filename;
+    s.ReplaceAll("\\","\\\\");
+    fprintf(out, "#line %d \"%s\"\n", p->m_lineno, s.c_str());
     for( Vector<ActionItem>::const_iterator curaction = p->m_action.begin(), endaction = p->m_action.end(); curaction != endaction; ++curaction ) {
       const ActionItem &item = *curaction;
       if( item.m_actiontype == ActionTypeSrc )

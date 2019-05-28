@@ -843,20 +843,16 @@ static DisallowRule *ParseDisallowRule(Tokenizer &toks, ParserDef &parser) {
   rule->m_lead = pd;
   if( toks.peek() != pptok::ARROW && toks.peek() != pptok::NOTARROW )
     error(toks,"expected -> or -/-> in disallow rule");
-  toks.discard();
-  DisallowProductionDescriptors *dpd = ParseDisallowProductionDescriptors(toks,parser);
-  lastnt = checkProductionDescriptorsSameNonterminalAndDotsAgree(toks,dpd->m_descriptors,lastnt,"disallow rule group");
-  // when using stars, dots must be self consistent
-  if( dpd->m_star && dpd->m_descriptors->begin()->m_nt != lastnt )
-    error(toks,"When using '*' with a disallow group, the productions must dot their own nonterminals");
-  rule->m_intermediates.push_back(dpd);
+  DisallowProductionDescriptors *dpd = 0;
   while( toks.peek() == pptok::ARROW ) {
     toks.discard();
     dpd = ParseDisallowProductionDescriptors(toks,parser);
     lastnt = checkProductionDescriptorsSameNonterminalAndDotsAgree(toks,dpd->m_descriptors,lastnt,"disallow rule group");
     // when using stars, dots must be self consistent
-    if( dpd->m_star && dpd->m_descriptors->begin()->m_nt != lastnt )
-      error(toks,"When using '*' with a disallow group, the productions must dot their own nonterminals");
+    if (dpd->m_star) {
+      if (dpd->m_descriptors->begin()->m_nt != lastnt)
+        error(toks,"When using '*' with a disallow group, the productions must dot their own nonterminals");
+    }
     rule->m_intermediates.push_back(dpd);
   }
   if( toks.peek() != pptok::NOTARROW )

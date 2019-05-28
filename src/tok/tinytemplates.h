@@ -184,6 +184,43 @@ public:
       last += len;
     return substr(first,last-first);
   }
+  String &ReplaceAll(const char *s, const char *with) {
+    if( ! s || ! *s )
+      return String("");
+    int len0 = strlen(s);
+    int len1 = strlen(with);
+    const char *src = c_str();
+    const char *nxt = 0;
+    int finallen = 0;
+    while( (nxt = strstr(src,s)) != 0) {
+      finallen += nxt-src;
+      finallen += len1;
+      src = nxt+len0;
+    }
+    finallen += strlen(src);
+    char *buf = (char*)malloc(finallen+1);
+    char *dst = buf;
+    src = c_str();
+    while( (nxt = strstr(src,s)) != 0) {
+      int leadlen = nxt-src;
+      strncpy(dst,src,leadlen);
+      dst += leadlen;
+      if( len1 ) {
+        strncpy(dst,with,len1);
+        dst += len1;
+      }
+      src = nxt+len0;
+    }
+    int taillen = strlen(src);
+    if( taillen ) {
+      strncpy(dst,src,taillen);
+      dst += taillen;
+    }
+    *dst = 0;
+    *this = buf;
+    free(buf);
+    return *this;
+  }
   String &ReplaceAt(int at, int len, const char *with) {
     if( at < 0 )
       at = length()+at;
