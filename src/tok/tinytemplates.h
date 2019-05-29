@@ -186,7 +186,7 @@ public:
   }
   String &ReplaceAll(const char *s, const char *with) {
     if( ! s || ! *s )
-      return String("");
+      return *this;
     int len0 = strlen(s);
     int len1 = strlen(with);
     const char *src = c_str();
