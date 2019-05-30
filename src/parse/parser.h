@@ -83,30 +83,38 @@ public:
   }
 };
 
+enum Assoc {
+  AssocLeft,
+  AssocRight,
+  AssocNon
+};
+
+
 class ProductionDescriptor {
+protected:
+  Vector<int> m_symbols;
+  int m_dots;
+  int m_dotcnt;
+  ProductionDescriptor(int nt, const Vector<int> &symbols, int dots, int dotcnt);
+  bool hasDotAt(int pos) const;
 public:
   int m_nt;
-  Vector<int> m_symbols;
   ProductionDescriptor() {}
-  ProductionDescriptor(int nt, Vector<int> symbols);
+  ProductionDescriptor(int nt, const Vector<int> &symbols);
   bool matchesProduction(const Production *p) const;
   bool matchesProductionAndPosition(const Production *p, int pos) const;
   // Check if, ignoring dots, the productions are the same
   bool hasSameProductionAs(const ProductionDescriptor &rhs) const;
   // Add dots from rhs to this descriptor.  Fail if not same production.
   bool addDotsFrom(const ProductionDescriptor &rhs);
-  bool dotIntersection(const ProductionDescriptor &rhs, Vector<int> &lhsdot, Vector<int> &rhsdot, Vector<int> &dots) const;
-  void insert(const Vector<int> &dots, int sym);
-  void remove(const Vector<int> &dots);
-  int countOf(int sym) const {
-    int cnt = 0;
-    for( Vector<int>::const_iterator c = m_symbols.begin(), e = m_symbols.end(); c != e; ++c )
-      if( *c == sym )
-        ++cnt;
-    return cnt;
-  }
+  void addDots(int dots);
+  void removeDots(int dots);
+  int appearancesOf(int sym, int &at) const;
   bool operator<(const ProductionDescriptor &rhs) const;
   ProductionDescriptor *clone() const;
+  ProductionDescriptor UnDottedProductionDescriptor() const;
+  ProductionDescriptor DottedProductionDescriptor(int nt, Assoc assoc) const;
+  Vector<int> symbolsAtDots() const;
   bool operator==(const ProductionDescriptor &rhs) const {
     return m_nt == rhs.m_nt && m_symbols == rhs.m_symbols;
   }
@@ -114,12 +122,6 @@ public:
     return ! operator==(rhs);
   }
   void print(FILE *out, const Map<int,SymbolDef> &tokens) const;
-};
-
-enum Assoc {
-  AssocLeft,
-  AssocRight,
-  AssocNon
 };
 
 class ProductionDescriptors : public Set<ProductionDescriptor> {

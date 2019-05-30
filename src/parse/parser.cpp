@@ -31,57 +31,70 @@ TokenInfo pptokinfo = {
 // productions : ('[' nonterminal COLON (symbol)+ ']')+
 // disallowrule : DISALLOW productiondescriptors (ARROW productiondescriptors '*'?)+ NOTARROW productions
 
-ProductionDescriptor::ProductionDescriptor(int nt, Vector<int> symbols) : m_nt(nt), m_symbols(symbols) {}
+ProductionDescriptor::ProductionDescriptor(int nt, const Vector<int> &symbols, int dots, int dotcnt) : m_nt(nt), m_symbols(symbols), m_dots(dots), m_dotcnt(dotcnt) {}
+
+ProductionDescriptor::ProductionDescriptor(int nt, const Vector<int> &symbols) : m_nt(nt), m_dots(0), m_dotcnt(0)
+{
+	int j = 0;
+    for( int i = 0, n = symbols.size(); i < n; ++i ) {
+		int sym = symbols[i];
+		if( sym == MARKER_DOT ) {
+			if( (m_dots&(1<<j)) == 0 ) {
+			  m_dots |= (1<<j);
+			  ++m_dotcnt;
+			}
+		} else {
+			m_symbols.push_back(sym);
+			++j;
+		}
+    }
+}
 
 bool ProductionDescriptor::hasSameProductionAs(const ProductionDescriptor &rhs) const {
-  if( m_nt != rhs.m_nt )
-    return false;
-  Vector<int>::const_iterator curlhs = m_symbols.begin(), endlhs = m_symbols.end(), currhs = rhs.m_symbols.begin(), endrhs = rhs.m_symbols.end();
-  while( curlhs != endlhs && currhs != endrhs ) {
-    if( *curlhs == MARKER_DOT )
-      ++curlhs;
-    if( *currhs == MARKER_DOT )
-      ++currhs;
-    if( *curlhs != *currhs )
-      return false;
-    ++curlhs;
-    ++currhs;
-  }
-  if( curlhs != endlhs || currhs != endrhs )
-    return false;
-  return true;
+  return m_nt == rhs.m_nt && m_symbols == rhs.m_symbols;
+}
+
+int ProductionDescriptor::appearancesOf(int sym, int &at) const {
+	if( sym == MARKER_DOT ) {
+		at = m_dots;
+		return m_dotcnt;
+	}
+	at = 0;
+	int cnt = 0;
+	for( int i = 0, n = m_symbols.size(); i < n; ++i ) {
+		if( m_symbols[i] == sym ) {
+		at |= (1<<i);
+		++cnt;
+		}
+	}
+	return cnt;
+}
+
+bool ProductionDescriptor::hasDotAt(int pos) const {
+	return (m_dots&(1<<pos)) != 0;
 }
 
 bool ProductionDescriptor::addDotsFrom(const ProductionDescriptor &rhs) {
   if( ! hasSameProductionAs(rhs) )
     return false;
-  Vector<int>::iterator curlhs = m_symbols.begin(), endlhs = m_symbols.end();
-  Vector<int>::const_iterator currhs = rhs.m_symbols.begin(), endrhs = rhs.m_symbols.end();
-  while( curlhs != endlhs && currhs != endrhs ) {
-    if( *curlhs == MARKER_DOT && *currhs == MARKER_DOT ) {
-      ++curlhs;
-      ++curlhs;
-      ++currhs;
-      ++currhs;
-    }
-    else if( *curlhs == MARKER_DOT ) {
-      ++curlhs;
-      ++curlhs;
-      ++currhs;
-    }
-    else if( *currhs == MARKER_DOT ) {
-      curlhs = m_symbols.insert(curlhs,MARKER_DOT);
-      endlhs = m_symbols.end();
-      ++curlhs;
-      ++curlhs;
-      ++currhs;
-      ++currhs;
-    } else {
-      ++curlhs;
-      ++currhs;
-    }
-  }
+  addDots(rhs.m_dots);
   return true;
+}
+
+void ProductionDescriptor::addDots(int dots) {
+  m_dots |= dots;
+  m_dotcnt = 0;
+  for( int i = 0, n = m_symbols.size(); i < n; ++i )
+	  if( (m_dots & (1<<i)) != 0 )
+		  ++m_dotcnt;
+}
+
+void ProductionDescriptor::removeDots(int dots) {
+  m_dots &= ~dots;
+  m_dotcnt = 0;
+  for( int i = 0, n = m_symbols.size(); i < n; ++i )
+	  if( (m_dots & (1<<i)) != 0 )
+		  ++m_dotcnt;
 }
 
 bool ProductionDescriptor::operator<(const ProductionDescriptor &rhs) const {
@@ -258,53 +271,59 @@ Vector<productionandforbidstate_t> ParserDef::productionsAt(const Production *p,
   return productions;
 }
 
-ProductionDescriptor UnDottedProductionDescriptor(const ProductionDescriptor &pd) {
-  ProductionDescriptor pdundotted;
-  pdundotted.m_nt = pd.m_nt;
-  for( int i = 0; i < pd.m_symbols.size(); ++i ) {
-    int sym = pd.m_symbols[i];
-    if( sym == MARKER_DOT )
-      continue;
-    pdundotted.m_symbols.push_back(sym);
-  }
-  return pdundotted;
+ProductionDescriptor ProductionDescriptor::UnDottedProductionDescriptor() const {
+  return ProductionDescriptor(m_nt, m_symbols);
 }
 
 ProductionDescriptors *ProductionDescriptors::UnDottedProductionDescriptors() const {
   ProductionDescriptors *pdsundotted = new ProductionDescriptors();
   for( ProductionDescriptors::const_iterator cur = begin(), enditer = end(); cur != enditer; ++cur ) {
-    ProductionDescriptor pd = UnDottedProductionDescriptor(*cur);
+    ProductionDescriptor pd = cur->UnDottedProductionDescriptor();
     pdsundotted->insert(pd);
   }
   return pdsundotted;
 }
 
-ProductionDescriptor DottedProductionDescriptor(const ProductionDescriptor &pd, int nt, Assoc assoc) {
-  ProductionDescriptor pddotted;
-  pddotted.m_nt = pd.m_nt;
-  int firstnt = -1;
-  int lastnt = -1;
-  for( int i = 0; i < pd.m_symbols.size(); ++i ) {
-    int sym = pd.m_symbols[i];
-    if( sym == nt ) {
-      if( firstnt == -1 )
-        firstnt = i;
-      lastnt = i;
-    }
+ProductionDescriptor ProductionDescriptor::DottedProductionDescriptor(int nt, Assoc assoc) const {
+  int ntat=0, ntcnt=0;
+  int dots=0, dotcnt=0;
+  ntcnt = appearancesOf(nt,ntat);
+  if( assoc == AssocNon ) {
+	  dots = ntat;
+	  dotcnt = ntcnt;
+  } else if( assoc == AssocLeft ) {
+	  if( ntcnt ) {
+		  int firstnt = 0;
+		  while( (ntat&(1<<firstnt)) == 0 )
+			  ++firstnt;
+		  dots = ntat&(~(1<<firstnt));
+		  dotcnt = ntcnt-1;
+	  }
+  } else if( assoc == AssocRight ) {
+	  if( ntcnt ) {
+		  int lastnt = 0;
+		  while( (ntat>>lastnt) != 1 )
+			  ++lastnt;
+		  dots = ntat&(~(1<<lastnt));
+		  dotcnt = ntcnt-1;
+	  }
   }
-  for( int i = 0; i < pd.m_symbols.size(); ++i ) {
-    int sym = pd.m_symbols[i];
-    if( sym == nt && ( assoc == AssocNon || (assoc == AssocLeft && i != firstnt) || (assoc == AssocRight && i != lastnt) ) )
-      pddotted.m_symbols.push_back(MARKER_DOT);
-    pddotted.m_symbols.push_back(sym);
-  }
-  return pddotted;
+  return ProductionDescriptor(m_nt,m_symbols,dots,dotcnt);
+}
+
+Vector<int> ProductionDescriptor::symbolsAtDots() const {
+	Vector<int> symbols;
+	for( int i = 0, n = m_symbols.size(); i < n; ++i ) {
+		if( hasDotAt(i) )
+			symbols.push_back(m_symbols[i]);
+	}
+	return symbols;
 }
 
 ProductionDescriptors *ProductionDescriptors::DottedProductionDescriptors(int nt, Assoc assoc) const {
   ProductionDescriptors *pdsdotted = new ProductionDescriptors();
   for( ProductionDescriptors::const_iterator cur = begin(), enditer = end(); cur != enditer; ++cur ) {
-    ProductionDescriptor pd = DottedProductionDescriptor(*cur,nt,assoc);
+    ProductionDescriptor pd = cur->DottedProductionDescriptor(nt,assoc);
     pdsdotted->insert(pd);
   }
   return pdsdotted;
@@ -433,55 +452,11 @@ void ParserDef::combineRules() {
 
 bool ProductionDescriptor::matchesProduction(const Production *p) const {
   // '.' is ignored for matching purposes.
-  if( m_nt != p->m_nt )
-    return false;
-  Vector<int>::const_iterator curs = p->m_symbols.begin(), ends = p->m_symbols.end(), curwc = m_symbols.begin(), endwc = m_symbols.end();
-  while( curs != ends && curwc != endwc ) {
-    while( curwc != endwc && *curwc == MARKER_DOT )
-      ++curwc;
-    if( curwc == endwc )
-      break;
-    if( *curs != *curwc )
-      return false;
-    ++curs;
-    ++curwc;
-  }
-  while( curwc != endwc && *curwc == MARKER_DOT )
-    ++curwc;
-  if( curs != ends || curwc != endwc )
-    return false;
-  return true;
+  return m_nt == p->m_nt && m_symbols == p->m_symbols;
 }
 
 bool ProductionDescriptor::matchesProductionAndPosition(const Production *p, int pos) const {
-  if( m_nt != p->m_nt )
-    return false;
-  int matchPos = 0;
-  bool matchedPos = false;
-  Vector<int>::const_iterator curs = p->m_symbols.begin(), ends = p->m_symbols.end(), curwc = m_symbols.begin(), endwc = m_symbols.end();
-  while( curs != ends && curwc != endwc ) {
-    if( *curwc == MARKER_DOT ) {
-      ++curwc;
-      if( matchPos == pos )
-        matchedPos = true;
-    }
-    if( curwc == endwc )
-      break;
-    if( *curs != *curwc )
-      return false;
-    ++curs;
-    ++curwc;
-    ++matchPos;
-  }
-  while( curwc != endwc && *curwc == MARKER_DOT ) {
-    ++curwc;
-    if( matchPos == pos )
-      matchedPos = true;
-    ++matchPos;
-  }
-  if( curs != ends || curwc != endwc )
-    return false;
-  return matchedPos;
+  return matchesProduction(p) && hasDotAt(pos);
 }
 
 static int ParseNonterminal(Tokenizer &toks, ParserDef &parser) {
@@ -732,20 +707,17 @@ static int checkProductionDescriptorsSameNonterminalAndDotsAgree(Tokenizer &toks
   for( ProductionDescriptors::iterator cur = p->begin(), end = p->end(); cur != end; ++cur ) {
     const ProductionDescriptor &pd = *cur;
     // Check that all dotted nonterminals are the same (and that there is at least 1)
-    int dotcnt = 0;
-    for( Vector<int>::const_iterator cursym = pd.m_symbols.begin(), endsym = pd.m_symbols.end(); cursym != endsym; ++cursym ) {
-      if( *cursym == MARKER_DOT ) {
-        ++dotcnt;
-        ++cursym;
-        if( dottednt == -1 ) {
-          dottednt = *cursym;
-        } else if( *cursym != dottednt ) {
-          String err = "All dots in a ";
-          err += name;
-          err += " must have the same nonterminal";
-          error(toks,err);
-        }
-      }
+	Vector<int> symbolsAtDots = pd.symbolsAtDots();
+	int dotcnt = symbolsAtDots.size();
+    for( Vector<int>::const_iterator cursym = symbolsAtDots.begin(), endsym = symbolsAtDots.end(); cursym != endsym; ++cursym ) {
+		if( dottednt == -1 )
+			dottednt = *cursym;
+		else if( *cursym != dottednt ) {
+			String err = "All dots in a ";
+			err += name;
+			err += " must have the same nonterminal";
+			error(toks,err);
+		}
     }
     if( dotcnt == 0 ) {
       String err = "Each part of a ";
@@ -956,66 +928,29 @@ void PrecedenceRule::print(FILE *out, const Map<int,SymbolDef> &tokens) const {
   }
 }
 
-bool ProductionDescriptor::dotIntersection(const ProductionDescriptor &rhs, Vector<int> &lhsdot, Vector<int> &rhsdot, Vector<int> &dots) const {
-  Vector<int>::const_iterator beginlhs = m_symbols.begin(), curlhs = m_symbols.begin(), endlhs = m_symbols.end();
-  Vector<int>::const_iterator beginrhs = rhs.m_symbols.begin(), currhs = rhs.m_symbols.begin(), endrhs = rhs.m_symbols.end();
-  int symidx = 0;
-  while( curlhs != endlhs && currhs != endrhs ) {
-    if( *curlhs == MARKER_DOT && *currhs == MARKER_DOT ) {
-      lhsdot.push_back(curlhs-beginlhs);
-      rhsdot.push_back(currhs-beginrhs);
-      dots.push_back(symidx);
-      ++curlhs;
-      ++currhs;
-      ++symidx;
-    }
-    else if( *curlhs == MARKER_DOT ) {
-      ++curlhs;
-    }
-    else if( *currhs == MARKER_DOT ) {
-      ++currhs;
-    } else if( *curlhs == *currhs ) {
-      ++curlhs;
-      ++currhs;
-      ++symidx;
-    } else {
-      lhsdot.clear();
-      rhsdot.clear();
-      dots.clear();
-      return false;
-    }
-  }
-  return dots.size() != 0;
-}
-
-void ProductionDescriptor::insert(const Vector<int> &dots, int sym) {
-  for( int i = dots.size()-1; i >= 0; --i )
-    m_symbols.insert(m_symbols.begin()+dots[i],sym);
-}
-
-void ProductionDescriptor::remove(const Vector<int> &dots) {
-  for( int i = dots.size()-1; i >= 0; --i )
-    m_symbols.erase(m_symbols.begin()+dots[i]);
-}
-
 void ProductionDescriptors::trifrucate(ProductionDescriptors &rhs, ProductionDescriptors &overlap) {
-  Vector<int> dots;
   for( iterator c = begin(); c != end(); ++c ) {
     for( iterator c2 = rhs.begin(); c != end() && c2 != rhs.end(); ++c2 ) {
-      Vector<int> lhsdots, rhsdots, dots;
-      c->dotIntersection(*c2,lhsdots,rhsdots,dots);
-      if( ! dots.size() )
+	  if( ! c->hasSameProductionAs(*c2) )
+	    continue;
+	  // Find the overlap, remove the overlap from lhs and rhs, remove lhs or rhs if they are empty.
+      int lhsdots=0,lhsdotcnt=0,rhsdots=0,rhsdotcnt=0;
+	  int dots=0;
+	  lhsdotcnt = c->appearancesOf(MARKER_DOT,lhsdots);
+	  rhsdotcnt = c2->appearancesOf(MARKER_DOT,rhsdots);
+	  dots = lhsdots&rhsdots;
+      if( dots == 0 )
         continue;
-      ProductionDescriptor pd = UnDottedProductionDescriptor(*c);
-      pd.insert(dots,MARKER_DOT);
+      ProductionDescriptor pd = c->UnDottedProductionDescriptor();
+	  pd.addDots(dots);
       overlap.insert(pd);
-      c2->remove(rhsdots);
-      if( c2->countOf(MARKER_DOT) == 0 ) {
+      c2->removeDots(dots);
+	  if( c2->appearancesOf(MARKER_DOT,rhsdots) == 0 ) {
         c2 = rhs.erase(c2); 
         --c2;
       }
-      c->remove(lhsdots);
-      if( c->countOf(MARKER_DOT) == 0  ) {
+      c->removeDots(dots);
+      if( c->appearancesOf(MARKER_DOT,lhsdots) == 0 ) {
         c = erase(c);
         --c;
         c2 = rhs.end()-1;
@@ -1034,9 +969,8 @@ void ProductionDescriptor::print(FILE *out, const Map<int,SymbolDef> &tokens) co
   fputs(tokens[m_nt].m_name.c_str(), out);
   fputs(" :", out);
   for( int i = 0; i < m_symbols.size(); ++i ) {
-    if( m_symbols[i] == MARKER_DOT ) {
+    if( hasDotAt(i) ) {
       fputc('.',out);
-      ++i;
     } else {
       fputc(' ',out);
     }
