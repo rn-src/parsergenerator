@@ -246,18 +246,23 @@ int ParserDef::getExtraNt() const {
   return 1;
 }
 
-Vector<productionandforbidstate_t> ParserDef::productionsAt(const Production *p, int pos, int forbidstate,  Map< ProductionsAtKey,Vector<productionandforbidstate_t> > &productionsAtResults) const {
-  Vector<productionandforbidstate_t> productions;
-  const Vector<Production*> *pproductions = &m_productions;
+const Vector<productionandforbidstate_t> &ParserDef::productionsAt(const Production *p, int pos, int forbidstate,  Map< ProductionsAtKey,Vector<productionandforbidstate_t> > &productionsAtResults) const {
+  ProductionsAtKey badkey;
+  badkey.m_p = 0;
+  badkey.m_pos = -1;
+  badkey.m_forbidstate = -1;
+  if( productionsAtResults.find(badkey) == productionsAtResults.end() )
+    productionsAtResults[badkey] = Vector<productionandforbidstate_t>();
   if( pos < 0 || pos >= p->m_symbols.size() )
-    return productions;
+    return productionsAtResults[badkey];
   int symbol = p->m_symbols[pos];
   if( getSymbolType(symbol) != SymbolTypeNonterminal )
-    return productions;
+    return productionsAtResults[badkey];
   ProductionsAtKey key;
   key.m_p = p;
   key.m_pos = pos;
   key.m_forbidstate = forbidstate;
+  Vector<productionandforbidstate_t> productions;
   Map< ProductionsAtKey,Vector<productionandforbidstate_t> >::iterator iter = productionsAtResults.find(key);
   if( iter != productionsAtResults.end() )
     return iter->second;
@@ -267,7 +272,7 @@ Vector<productionandforbidstate_t> ParserDef::productionsAt(const Production *p,
     fprintf(m_vout," has... (%d)\n",nout);
     nout += 1;
   }
-  for( Vector<Production*>::const_iterator cur = pproductions->begin(), end = pproductions->end(); cur != end; ++cur ) {
+  for( Vector<Production*>::const_iterator cur = m_productions.begin(), end = m_productions.end(); cur != end; ++cur ) {
     Production *ptest = *cur;
     if( ptest->m_nt != symbol )
       continue;
@@ -288,7 +293,7 @@ Vector<productionandforbidstate_t> ParserDef::productionsAt(const Production *p,
     }
   }
   productionsAtResults[key] = productions;
-  return productions;
+  return productionsAtResults[key];
 }
 
 ProductionDescriptor ProductionDescriptor::UnDottedProductionDescriptor() const {

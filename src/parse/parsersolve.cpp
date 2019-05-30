@@ -37,8 +37,8 @@ void ComputeFirsts(const ParserDef &parser, ParserSolution &solution, FILE *out,
           }
           solution.m_firsts[symbolandforbidstate_t(tokid,forbidstate)].insert(s);
         } else {
-          Vector< Pair<Production*,int> > productions = parser.productionsAt(p,0,forbidstate,productionsAtResults);
-          for( Vector< Pair<Production*,int> >::const_iterator curp = productions.begin(), endp = productions.end(); curp != endp; ++curp ) {
+          const Vector<productionandforbidstate_t> &productions = parser.productionsAt(p,0,forbidstate,productionsAtResults);
+          for( Vector<productionandforbidstate_t>::const_iterator curp = productions.begin(), endp = productions.end(); curp != endp; ++curp ) {
             int pid = curp->first->m_pid;
             int pfst = curp->second;
             if( solution.m_firsts.find(symbolandforbidstate_t(pid,pfst)) != solution.m_firsts.end() ) {
@@ -126,8 +126,8 @@ void ComputeFollows(const ParserDef &parser, ParserSolution &solution, FILE *out
               continue;
             }
             // otherwise when the next symbol is a nonterminal, FIRST for the next symbol is the union of the FIRSTS for the productions allowed at the position
-            Vector<productionandforbidstate_t> productions = parser.productionsAt(p,pos+1,forbidstate,productionsAtResults);
-            for( Vector<productionandforbidstate_t>::iterator curpat = productions.begin(), endpat = productions.end(); curpat != endpat; ++curpat ) {
+            const Vector<productionandforbidstate_t> &productions = parser.productionsAt(p,pos+1,forbidstate,productionsAtResults);
+            for( Vector<productionandforbidstate_t>::const_iterator curpat = productions.begin(), endpat = productions.end(); curpat != endpat; ++curpat ) {
               Map< symbolandforbidstate_t, Set<int> >::iterator pfirsts = solution.m_firsts.find(symbolandforbidstate_t(curpat->first->m_pid,curpat->second));
               if( pfirsts != solution.m_firsts.end() ) {
                 Set<int> &dst = solution.m_follows[symbolandforbidstate_t(tokid,forbidstate)];                
@@ -160,12 +160,11 @@ void ComputeFollows(const ParserDef &parser, ParserSolution &solution, FILE *out
 void closure(state_t &state, ParserDef &parser, Map< ProductionsAtKey,Vector<productionandforbidstate_t> > &productionsAtResults) {
   int prevsize = 0;
   Set<ProductionState> newparts;
-  Vector<productionandforbidstate_t> productions;
   while( state.size() > prevsize ) {
     prevsize = state.size();
     newparts.clear();
     for( Set<ProductionState>::const_iterator cur = state.begin(), end = state.end(); cur != end; ++cur ) {
-      productions = parser.productionsAt(cur->m_p,cur->m_pos,cur->m_forbidstate,productionsAtResults);
+      const Vector<productionandforbidstate_t> &productions = parser.productionsAt(cur->m_p,cur->m_pos,cur->m_forbidstate,productionsAtResults);
       for( Vector<productionandforbidstate_t>::const_iterator curp = productions.begin(), endp = productions.end(); curp != endp; ++curp ) {
         ProductionState ps(curp->first,0,curp->second);
         newparts.insert(ps);

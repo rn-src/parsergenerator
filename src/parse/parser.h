@@ -285,7 +285,7 @@ public:
   int getStartNt() const;
   int getExtraNt() const;
   Production *getStartProduction() const { return m_startProduction; }
-  Vector<productionandforbidstate_t> productionsAt(const Production *p, int pos, int forbidstate, Map< ProductionsAtKey,Vector<productionandforbidstate_t> > &productionsAtResults) const;
+  const Vector<productionandforbidstate_t> &productionsAt(const Production *p, int pos, int forbidstate, Map< ProductionsAtKey,Vector<productionandforbidstate_t> > &productionsAtResults) const;
   void computeForbidAutomata();
   SymbolType getSymbolType(int tok) const;
   void print(FILE *out) const;
