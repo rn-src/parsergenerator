@@ -116,7 +116,7 @@ public:
   ProductionDescriptor DottedProductionDescriptor(int nt, Assoc assoc) const;
   Vector<int> symbolsAtDots() const;
   bool operator==(const ProductionDescriptor &rhs) const {
-    return m_nt == rhs.m_nt && m_symbols == rhs.m_symbols;
+    return m_nt == rhs.m_nt && m_dots == rhs.m_dots && m_dotcnt == rhs.m_dotcnt && m_symbols == rhs.m_symbols;
   }
   bool operator!=(const ProductionDescriptor &rhs) const {
     return ! operator==(rhs);
@@ -240,6 +240,29 @@ public:
 
 typedef  Pair<Production*,int>  productionandforbidstate_t;
 
+class ProductionsAtKey {
+public:
+  const Production *m_p;
+  int m_pos;
+  int m_forbidstate;
+  bool operator<(const ProductionsAtKey &rhs) const {
+    if( m_p < rhs.m_p )
+      return true;
+    else if( m_p > rhs.m_p )
+      return false;
+    if( m_pos < rhs.m_pos )
+      return true;
+    else if( m_pos > rhs.m_pos )
+      return false;
+    if( m_forbidstate < rhs.m_forbidstate )
+      return true;
+     return false;
+  }
+  bool operator==(const ProductionsAtKey &rhs) const {
+    return m_p == rhs.m_p && m_pos == rhs.m_pos && m_forbidstate == rhs.m_forbidstate;
+  }
+};
+
 class ParserDef {
   int m_nextsymbolid;
   Production *m_startProduction;
@@ -262,7 +285,7 @@ public:
   int getStartNt() const;
   int getExtraNt() const;
   Production *getStartProduction() const { return m_startProduction; }
-  Vector<productionandforbidstate_t> productionsAt(const Production *p, int pos, int forbidstate) const;
+  Vector<productionandforbidstate_t> productionsAt(const Production *p, int pos, int forbidstate, Map< ProductionsAtKey,Vector<productionandforbidstate_t> > &productionsAtResults) const;
   void computeForbidAutomata();
   SymbolType getSymbolType(int tok) const;
   void print(FILE *out) const;

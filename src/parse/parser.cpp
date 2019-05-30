@@ -102,6 +102,14 @@ bool ProductionDescriptor::operator<(const ProductionDescriptor &rhs) const {
     return true;
   else if( rhs.m_nt < m_nt )
     return false;
+  if( m_dots < rhs.m_dots )
+    return true;
+  else if( m_dots > rhs.m_dots )
+    return false;
+  if( m_dotcnt < rhs.m_dotcnt )
+    return true;
+  else if( m_dotcnt > rhs.m_dotcnt )
+    return false;
   if( m_symbols < rhs.m_symbols )
     return true;
   return false;
@@ -111,6 +119,8 @@ ProductionDescriptor *ProductionDescriptor::clone() const {
   ProductionDescriptor *ret = new ProductionDescriptor();
   ret->m_nt = m_nt;
   ret->m_symbols = m_symbols;
+  ret->m_dots = m_dots;
+  ret->m_dotcnt = m_dotcnt;
   return ret;
 }
 
@@ -236,7 +246,7 @@ int ParserDef::getExtraNt() const {
   return 1;
 }
 
-Vector<productionandforbidstate_t> ParserDef::productionsAt(const Production *p, int pos, int forbidstate) const {
+Vector<productionandforbidstate_t> ParserDef::productionsAt(const Production *p, int pos, int forbidstate,  Map< ProductionsAtKey,Vector<productionandforbidstate_t> > &productionsAtResults) const {
   Vector<productionandforbidstate_t> productions;
   const Vector<Production*> *pproductions = &m_productions;
   if( pos < 0 || pos >= p->m_symbols.size() )
@@ -244,9 +254,18 @@ Vector<productionandforbidstate_t> ParserDef::productionsAt(const Production *p,
   int symbol = p->m_symbols[pos];
   if( getSymbolType(symbol) != SymbolTypeNonterminal )
     return productions;
+  ProductionsAtKey key;
+  key.m_p = p;
+  key.m_pos = pos;
+  key.m_forbidstate = forbidstate;
+  Map< ProductionsAtKey,Vector<productionandforbidstate_t> >::iterator iter = productionsAtResults.find(key);
+  if( iter != productionsAtResults.end() )
+    return iter->second;
   if( m_verbosity > 2 ) {
+    static int nout = 1;
     p->print(m_vout,m_tokdefs,pos,forbidstate);
-    fputs(" has...\n", m_vout);
+    fprintf(m_vout," has... (%d)\n",nout);
+    nout += 1;
   }
   for( Vector<Production*>::const_iterator cur = pproductions->begin(), end = pproductions->end(); cur != end; ++cur ) {
     Production *ptest = *cur;
@@ -268,6 +287,7 @@ Vector<productionandforbidstate_t> ParserDef::productionsAt(const Production *p,
       fputs("\n", m_vout);
     }
   }
+  productionsAtResults[key] = productions;
   return productions;
 }
 

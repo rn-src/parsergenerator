@@ -8,7 +8,7 @@ static void error(const String &err) {
   throw ParserError(err);
 }
 
-void ComputeFirsts(const ParserDef &parser, ParserSolution &solution, FILE *out, int verbosity) {
+void ComputeFirsts(const ParserDef &parser, ParserSolution &solution, FILE *out, int verbosity, Map< ProductionsAtKey,Vector<productionandforbidstate_t> > &productionsAtResults) {
   // No need to add terminals... we just test if the symbol is a terminal in the rest of the code
   /*
   for( Map<int,SymbolDef>::const_iterator cur = parser.m_tokdefs.begin(), end = parser.m_tokdefs.end(); cur != end; ++cur ) {
@@ -37,7 +37,7 @@ void ComputeFirsts(const ParserDef &parser, ParserSolution &solution, FILE *out,
           }
           solution.m_firsts[symbolandforbidstate_t(tokid,forbidstate)].insert(s);
         } else {
-          Vector< Pair<Production*,int> > productions = parser.productionsAt(p,0,forbidstate);
+          Vector< Pair<Production*,int> > productions = parser.productionsAt(p,0,forbidstate,productionsAtResults);
           for( Vector< Pair<Production*,int> >::const_iterator curp = productions.begin(), endp = productions.end(); curp != endp; ++curp ) {
             int pid = curp->first->m_pid;
             int pfst = curp->second;
@@ -66,7 +66,7 @@ void ComputeFirsts(const ParserDef &parser, ParserSolution &solution, FILE *out,
   }
 }
 
-void ComputeFollows(const ParserDef &parser, ParserSolution &solution, FILE *out, int verbosity) {
+void ComputeFollows(const ParserDef &parser, ParserSolution &solution, FILE *out, int verbosity, Map< ProductionsAtKey,Vector<productionandforbidstate_t> > &productionsAtResults) {
   solution.m_follows[symbolandforbidstate_t(parser.getStartProduction()->m_pid,0)].insert(EOF_TOK);
   bool added = true;
   while( added ) {
@@ -126,7 +126,7 @@ void ComputeFollows(const ParserDef &parser, ParserSolution &solution, FILE *out
               continue;
             }
             // otherwise when the next symbol is a nonterminal, FIRST for the next symbol is the union of the FIRSTS for the productions allowed at the position
-            Vector<productionandforbidstate_t> productions = parser.productionsAt(p,pos+1,forbidstate);
+            Vector<productionandforbidstate_t> productions = parser.productionsAt(p,pos+1,forbidstate,productionsAtResults);
             for( Vector<productionandforbidstate_t>::iterator curpat = productions.begin(), endpat = productions.end(); curpat != endpat; ++curpat ) {
               Map< symbolandforbidstate_t, Set<int> >::iterator pfirsts = solution.m_firsts.find(symbolandforbidstate_t(curpat->first->m_pid,curpat->second));
               if( pfirsts != solution.m_firsts.end() ) {
@@ -157,7 +157,7 @@ void ComputeFollows(const ParserDef &parser, ParserSolution &solution, FILE *out
   }
 }
 
-void closure(state_t &state, const ParserDef &parser) {
+void closure(state_t &state, ParserDef &parser, Map< ProductionsAtKey,Vector<productionandforbidstate_t> > &productionsAtResults) {
   int prevsize = 0;
   Set<ProductionState> newparts;
   Vector<productionandforbidstate_t> productions;
@@ -165,7 +165,7 @@ void closure(state_t &state, const ParserDef &parser) {
     prevsize = state.size();
     newparts.clear();
     for( Set<ProductionState>::const_iterator cur = state.begin(), end = state.end(); cur != end; ++cur ) {
-      productions = parser.productionsAt(cur->m_p,cur->m_pos,cur->m_forbidstate);
+      productions = parser.productionsAt(cur->m_p,cur->m_pos,cur->m_forbidstate,productionsAtResults);
       for( Vector<productionandforbidstate_t>::const_iterator curp = productions.begin(), endp = productions.end(); curp != endp; ++curp ) {
         ProductionState ps(curp->first,0,curp->second);
         newparts.insert(ps);
@@ -176,7 +176,7 @@ void closure(state_t &state, const ParserDef &parser) {
   }
 }
 
-void nexts(const state_t &state, const ParserDef &parser, Set<int> &nextSymbols) {
+void nexts(const state_t &state, ParserDef &parser, Set<int> &nextSymbols, Map< ProductionsAtKey,Vector<productionandforbidstate_t> > &productionsAtResults) {
   for( state_t::const_iterator curs = state.begin(), ends = state.end(); curs != ends; ++curs ) {
     int symbol = curs->symbol();
     if( symbol == -1 )
@@ -184,7 +184,7 @@ void nexts(const state_t &state, const ParserDef &parser, Set<int> &nextSymbols)
     if( parser.getSymbolType(symbol) == SymbolTypeTerminal )
       nextSymbols.insert(symbol);
     else {
-      Vector<productionandforbidstate_t> productions = parser.productionsAt(curs->m_p,curs->m_pos,curs->m_forbidstate);
+      Vector<productionandforbidstate_t> productions = parser.productionsAt(curs->m_p,curs->m_pos,curs->m_forbidstate,productionsAtResults);
       for( Vector<productionandforbidstate_t>::const_iterator curp = productions.begin(), endp = productions.end(); curp != endp; ++curp )
         nextSymbols.insert(curp->first->m_pid);
     }
@@ -203,12 +203,12 @@ void advance(state_t &state, int tsymbol, const ParserDef &parser, state_t &next
   }
 }
 
-void ComputeStatesAndActions(const ParserDef &parser, ParserSolution &solution, FILE *vout, int verbosity) {
+void ComputeStatesAndActions(ParserDef &parser, ParserSolution &solution, FILE *vout, int verbosity, Map< ProductionsAtKey,Vector<productionandforbidstate_t> > &productionsAtResults) {
   Map<state_t,int> statemap;
   state_t state, nextState;
   Set<int> nextSymbols;
   state.insert(ProductionState(parser.getStartProduction(),0,0));
-  closure(state,parser);
+  closure(state,parser,productionsAtResults);
   statemap[state] = solution.m_states.size();
   solution.m_states.push_back(state);
   for( int i = 0; i < solution.m_states.size(); ++i ) {
@@ -216,11 +216,11 @@ void ComputeStatesAndActions(const ParserDef &parser, ParserSolution &solution, 
       fprintf(vout,"computing state %d\n",i);
     state = solution.m_states[i];
     int stateIdx = i;
-    nexts(state,parser,nextSymbols);
+    nexts(state,parser,nextSymbols,productionsAtResults);
     for( Set<int>::iterator cur = nextSymbols.begin(), end = nextSymbols.end(); cur != end; ++cur ) {
       int symbol = *cur;
       advance(state,symbol,parser,nextState);
-      closure(nextState,parser);
+      closure(nextState,parser,productionsAtResults);
       if( nextState.empty() )
         continue;
       Map<state_t,int>::iterator stateiter = statemap.find(nextState);
@@ -375,9 +375,10 @@ void SolveParser(ParserDef &parser, ParserSolution &solution, FILE *vout, int ve
   if( ! parser.getStartProduction() )
     error("The grammar definition requires a START production");
   parser.computeForbidAutomata();
-  ComputeFirsts(parser,solution,out,verbosity);
-  ComputeFollows(parser,solution,out,verbosity);
-  ComputeStatesAndActions(parser,solution,out,verbosity);
+  Map< ProductionsAtKey,Vector<productionandforbidstate_t> > productionsAtResults;
+  ComputeFirsts(parser,solution,out,verbosity,productionsAtResults);
+  ComputeFollows(parser,solution,out,verbosity,productionsAtResults);
+  ComputeStatesAndActions(parser,solution,out,verbosity,productionsAtResults);
   if( verbosity >= 1 ) {
     PrintRules(parser,vout);
     PrintStatesAndActions(parser,solution,parser.m_tokdefs,vout);
