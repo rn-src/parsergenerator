@@ -119,6 +119,9 @@ void ComputeFollows(const ParserDef &parser, ParserSolution &solution, FILE *out
             if( nxtstype == SymbolTypeTerminal ) {
               if( ! solution.m_follows[symbolandforbidstate_t(tokid,forbidstate)].contains(nxts) ) {
                 if( verbosity > 2 ) {
+                  fputs("From ", out);
+                  p->print(out,parser.m_tokdefs,pos+1,forbidstate);
+                  fputs("\n",out);
                   fprintf(out,"Adding %s to FOLLOW(%s,%d)\n",parser.m_tokdefs[nxts].m_name.c_str(),parser.m_tokdefs[tokid].m_name.c_str(),forbidstate);
                 }
                 solution.m_follows[symbolandforbidstate_t(tokid,forbidstate)].insert(nxts);

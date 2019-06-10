@@ -199,6 +199,7 @@ public:
   ForbidDescriptor(const ForbidDescriptor &rhs);
   bool forbids(const Production *positionProduction, int pos, const Production *expandProduction) const;
   bool operator<(const ForbidDescriptor &rhs) const;
+  void print(FILE *out, const Map<int,SymbolDef> &tokens) const;
 };
 
 typedef Set<ForbidDescriptor> ForbidDescriptors;
@@ -213,6 +214,7 @@ public:
   ForbidSub(const ForbidSub &rhs);
   bool operator<(const ForbidSub &rhs) const;
   bool matches(const Production *lhs, int pos, const Production *rhs) const;
+  void print(FILE *out, const Map<int,SymbolDef> &tokens) const;
 };
 
 class ForbidAutomata {
@@ -235,7 +237,8 @@ public:
   void closure(Set<int> &multistate) const;
   void ForbidsFromStates(const Set<int> &stateset, ForbidDescriptors &forbids) const;
   void SymbolsFromStates(const Set<int> &stateset, Set<ForbidSub> &symbols) const;
-  void toDeterministicForbidAutomata(ForbidAutomata &out);
+  void toDeterministicForbidAutomata(ForbidAutomata &out) const;
+  void print(FILE *out, const Map<int,SymbolDef> &tokens) const;
 };
 
 typedef  Pair<Production*,int>  productionandforbidstate_t;

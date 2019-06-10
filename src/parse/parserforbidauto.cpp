@@ -80,17 +80,14 @@ void ForbidAutomata::addTransition(int s0, int s1, const ProductionDescriptors *
 int ForbidAutomata::nextState(const Production *curp, int pos, int forbidstateno, const Production *ptest) const {
   if( isForbidden(curp,pos,forbidstateno,ptest) )
     return -1;
-  if( m_transitions.find(forbidstateno) == m_transitions.end() )
-    return 0; // "other" -> 0
-  const Map< ForbidSub,Set<int> > &t = m_transitions[forbidstateno];
-  for( Map<ForbidSub,Set<int> >::const_iterator cursub = t.begin(), endsub = t.end(); cursub != endsub; ++cursub ) {
-    if( cursub->first.matches(curp,pos,ptest) ) {
-      if( cursub->second.size() == 0 )
-        return 0; // "other" -> 0
-      return *cursub->second.begin();
-    }
+  if( m_transitions.find(forbidstateno) != m_transitions.end() ) {
+    const Map< ForbidSub,Set<int> > &t = m_transitions[forbidstateno];
+    for( Map<ForbidSub,Set<int> >::const_iterator cursub = t.begin(), endsub = t.end(); cursub != endsub; ++cursub )
+      if( cursub->first.matches(curp,pos,ptest) && cursub->second.size() )
+        return *cursub->second.begin();
   }
-  return 0; // "other" -> 0
+  // Every other transition goes to 0.
+  return 0;
 }
 
 bool ForbidAutomata::isForbidden(const Production *curp, int pos, int forbidstateno, const Production *ptest) const {
@@ -172,7 +169,7 @@ void ForbidAutomata::SymbolsFromStates(const Set<int> &stateset, Set<ForbidSub> 
   }
 }
 
-void ForbidAutomata::toDeterministicForbidAutomata(ForbidAutomata &out) {
+void ForbidAutomata::toDeterministicForbidAutomata(ForbidAutomata &out) const {
   Vector< Set<int> > statesets;
   Map< Set<int>, int > stateset2state;
   Set<int> initstate;
@@ -201,6 +198,7 @@ void ForbidAutomata::toDeterministicForbidAutomata(ForbidAutomata &out) {
           }
         }
       }
+      nextstate.insert(m_q0); // all states should also transition to the initial state
       closure(nextstate);
       int nextStateNo = -1;
       if( ! stateset2state.contains(nextstate) ) {
@@ -213,6 +211,52 @@ void ForbidAutomata::toDeterministicForbidAutomata(ForbidAutomata &out) {
       if( nextStateNo != 0 )
         out.addTransition(i,nextStateNo,sub.m_lhs,sub.m_rhs);
     } 
+  }
+}
+
+void ForbidDescriptor::print(FILE *out, const Map<int,SymbolDef> &tokens) const {
+  fputs(m_name.c_str(),out);
+  fputs(": ", out);
+  m_positions->print(out,tokens);
+  fputs(" -/-> ",out);
+  m_forbidden->print(out,tokens);
+}
+
+void ForbidSub::print(FILE *out, const Map<int,SymbolDef> &tokens) const {
+  m_lhs->print(out,tokens);
+  fputs(" --> ", out);
+  m_rhs->print(out,tokens);
+}
+
+void ForbidAutomata::print(FILE *out, const Map<int,SymbolDef> &tokens) const {
+  fprintf(out, "%d states\n", m_nextstate);
+  fprintf(out, "start state is %d\n", m_q0);
+  for( int i = 0; i < m_nextstate; ++i ) {
+    fprintf(out, "Forbid State %d:\n", i);
+    if( m_statetoforbids.find(i) != m_statetoforbids.end() ) {
+      const ForbidDescriptors &forbid = m_statetoforbids[i];
+      fputs("  Forbids:\n", out);
+      for( Set<ForbidDescriptor>::const_iterator cur = forbid.begin(), end = forbid.end(); cur != end; ++cur ) {
+        fputs("    ", out);
+        cur->print(out,tokens);
+        fputs("\n",out);
+      }
+    }
+    if( m_emptytransitions.find(i) != m_emptytransitions.end() ) {
+      const Set<int> &empties = m_emptytransitions[i];
+      for( Set<int>::const_iterator cur = empties.begin(), end = empties.end(); cur != end; ++cur )
+        fprintf(out, "epsilon transition to %d\n", *cur);
+    }
+    if( m_transitions.find(i) != m_transitions.end() ) {
+      const Map< ForbidSub, Set<int> > &trans = m_transitions[i];
+      for( Map<ForbidSub,Set<int> >::const_iterator cur = trans.begin(), end = trans.end(); cur != end; ++cur ) {
+        fputs("  on input ", out);
+        cur->first.print(out,tokens);
+        fputs("\n", out);
+        for( Set<int>::const_iterator cur2 = cur->second.begin(), end2 = cur->second.end(); cur2 != end2; ++cur2 )
+          fprintf(out, "    -> move to state %d\n", *cur2);
+      }
+    }
   }
 }
 
@@ -237,8 +281,16 @@ void ParserDef::computeForbidAutomata() {
   // Turn the rules into a nondeterministic forbid automata
   for( Vector<DisallowRule*>::const_iterator cur = m_disallowrules.begin(), end = m_disallowrules.end(); cur != end; ++cur )
     nforbid.addRule(*cur);
+  if( m_verbosity > 2 ) {
+    fputs("final non-deterministic forbid automata:\n", m_vout);
+      nforbid.print(m_vout,m_tokdefs);
+  }
   // Make the automata deterministic.
   nforbid.toDeterministicForbidAutomata(forbid);
   m_forbid = forbid;
+  if( m_verbosity > 2 ) {
+    fputs("final deterministic forbid automata:\n", m_vout);
+      m_forbid.print(m_vout,m_tokdefs);
+  }
 }
 
