@@ -328,6 +328,8 @@ void PrintStatesAndActions() {
     reducemap_t::const_iterator reduceiter = solution.m_reductions.find(i);
     if( reduceiter != solution.m_reductions.end() ) {
       for( reducebysymbols_t::const_iterator curreduce = reduceiter->second.begin(), endreduce = reduceiter->second.end(); curreduce != endreduce; ++curreduce ) {
+        if( curreduce->first->m_rejectable )
+          fputs("(rejectable) ", out);
         fputs("reduce by production [", out);
         curreduce->first->print(out,tokens);
         fputs("] on ", out);
@@ -350,8 +352,15 @@ void PrintStatesAndActions() {
       const char *symstr = (sym==-1) ? "$" : tokens[sym].m_name.c_str();
       if( shiftsymbols.find(sym) != shiftsymbols.end() && reductions.find(sym) != reductions.end() )
         fprintf(out, "shift/reduce conflict on %s\n", symstr);
-      if( reductions.find(sym) != reductions.end() && reductions.find(sym)->second.size() > 1 )
-        fprintf(out, "reduce/reduce conflict on %s\n", symstr);
+      if( reductions.find(sym) != reductions.end() && reductions.find(sym)->second.size() > 1 ) {
+        const Set<const Production*> &reduces = reductions[sym];
+        int nonrejectablecnt = 0;
+        for( Set<const Production*>::const_iterator cr = reduces.begin(), er = reduces.end(); cr != er; ++cr )
+          if( ! (*cr)->m_rejectable )
+            ++nonrejectablecnt;
+        if( nonrejectablecnt > 0 )
+          fprintf(out, "reduce/reduce conflict on %s\n", symstr);
+      }
     }
     fputs("\n",out);
   }
@@ -397,11 +406,18 @@ void PrintConflicts() {
         fprintf(out, "shift/reduce conflict on %s\n", symstr);
       }
       if( reductions.find(sym) != reductions.end() && reductions.find(sym)->second.size() > 1 ) {
-        if( bFirst ) {
-          bFirst = false;
-          fprintf(out, "State %d:\n", i);
+        const Set<const Production*> &reduces = reductions[sym];
+        int nonrejectablecnt = 0;
+        for( Set<const Production*>::const_iterator cr = reduces.begin(), er = reduces.end(); cr != er; ++cr )
+          if( ! (*cr)->m_rejectable )
+            ++nonrejectablecnt;
+        if( nonrejectablecnt > 0 ) {
+          if( bFirst ) {
+            bFirst = false;
+            fprintf(out, "State %d:\n", i);
+          }
+          fprintf(out, "reduce/reduce conflict on %s\n", symstr);
         }
-        fprintf(out, "reduce/reduce conflict on %s\n", symstr);
       }
     }
     if( ! bFirst )
