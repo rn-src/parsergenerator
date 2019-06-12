@@ -288,7 +288,7 @@ const Vector<productionandforbidstate_t> &ParserDef::productionsAt(const Product
       productions.push_back(productionandforbidstate_t(ptest,nxtState));
     }
     if( m_verbosity > 2 ) {
-      ptest->print(m_vout,m_tokdefs);
+      ptest->print(m_vout,m_tokdefs,-1,nxtState==-1?0:nxtState);
       fputs("\n", m_vout);
     }
   }

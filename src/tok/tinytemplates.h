@@ -502,7 +502,14 @@ public:
     return m_values.insert(begin()+idx,value);
   }
   iterator erase(iterator iter) {
-    return m_values.erase(iter);
+    return erase(*iter);
+  }
+  template <class Iter>
+  void erase(Iter first, Iter last) {
+    while( first != last ) {
+      erase(*first);
+      ++first;
+    }
   }
   iterator erase(const T &value) {
     iterator iter = find(value);
