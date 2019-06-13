@@ -349,18 +349,17 @@ void PrintStatesAndActions() {
     }
     for( Set<int>::const_iterator cursym = symbols.begin(), endsym = symbols.end(); cursym != endsym; ++cursym ) {
       int sym = *cursym;
+      if( reductions.find(sym) == reductions.end() )
+        continue; // there can be no conflicts if there are no reductions
       const char *symstr = (sym==-1) ? "$" : tokens[sym].m_name.c_str();
-      if( shiftsymbols.find(sym) != shiftsymbols.end() && reductions.find(sym) != reductions.end() )
+      if( shiftsymbols.find(sym) != shiftsymbols.end() )
         fprintf(out, "shift/reduce conflict on %s\n", symstr);
-      if( reductions.find(sym) != reductions.end() && reductions.find(sym)->second.size() > 1 ) {
-        const Set<const Production*> &reduces = reductions[sym];
-        int nonrejectablecnt = 0;
-        for( Set<const Production*>::const_iterator cr = reduces.begin(), er = reduces.end(); cr != er; ++cr )
-          if( ! (*cr)->m_rejectable )
-            ++nonrejectablecnt;
-        if( nonrejectablecnt > 0 )
-          fprintf(out, "reduce/reduce conflict on %s\n", symstr);
-      }
+      Vector<const Production*> symreductions;
+      symreductions.insert(symreductions.end(), reductions[sym].begin(), reductions[sym].end());
+      for( int r0 = 0; r0 < symreductions.size(); ++r0 )
+        for( int r1 = r0+1; r1 < symreductions.size(); ++r1 )
+          if( !symreductions[r0]->m_rejectable && ! symreductions[r1]->m_rejectable )
+            fprintf(out, "reduce/reduce conflict on %s\n", symstr);
     }
     fputs("\n",out);
   }
@@ -369,7 +368,6 @@ void PrintStatesAndActions() {
 
 void PrintConflicts() {
   const Map<int,SymbolDef> &tokens = parser.m_tokdefs;
-  fprintf(out, "%d states\n\n", solution.m_states.size());
   for( int i = 0, n = solution.m_states.size(); i != n; ++i ) {
     Set<int> symbols;
     Set<int> shiftsymbols;
@@ -397,28 +395,27 @@ void PrintConflicts() {
     bool bFirst = true;
     for( Set<int>::const_iterator cursym = symbols.begin(), endsym = symbols.end(); cursym != endsym; ++cursym ) {
       int sym = *cursym;
+      if( reductions.find(sym) == reductions.end() )
+        continue; // there can be no conflicts if there are no reductions
       const char *symstr = (sym==-1) ? "$" : tokens[sym].m_name.c_str();
-      if( shiftsymbols.find(sym) != shiftsymbols.end() && reductions.find(sym) != reductions.end() ) {
+      if( shiftsymbols.find(sym) != shiftsymbols.end() ) {
         if( bFirst ) {
           bFirst = false;
           fprintf(out, "State %d:\n", i);
         }
         fprintf(out, "shift/reduce conflict on %s\n", symstr);
       }
-      if( reductions.find(sym) != reductions.end() && reductions.find(sym)->second.size() > 1 ) {
-        const Set<const Production*> &reduces = reductions[sym];
-        int nonrejectablecnt = 0;
-        for( Set<const Production*>::const_iterator cr = reduces.begin(), er = reduces.end(); cr != er; ++cr )
-          if( ! (*cr)->m_rejectable )
-            ++nonrejectablecnt;
-        if( nonrejectablecnt > 0 ) {
-          if( bFirst ) {
-            bFirst = false;
-            fprintf(out, "State %d:\n", i);
+      Vector<const Production*> symreductions;
+      symreductions.insert(symreductions.end(), reductions[sym].begin(), reductions[sym].end());
+      for( int r0 = 0; r0 < symreductions.size(); ++r0 )
+        for( int r1 = r0+1; r1 < symreductions.size(); ++r1 )
+          if( !symreductions[r0]->m_rejectable && ! symreductions[r1]->m_rejectable ) {
+            if( bFirst ) {
+              bFirst = false;
+              fprintf(out, "State %d:\n", i);
+            }
+            fprintf(out, "reduce/reduce conflict on %s\n", symstr);
           }
-          fprintf(out, "reduce/reduce conflict on %s\n", symstr);
-        }
-      }
     }
     if( ! bFirst )
       fputs("\n",out);
