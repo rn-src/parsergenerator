@@ -115,6 +115,13 @@ public:
       if( firstaction == lastaction ) {
         if( m_verbosity )
           fputs("NO ACTION AVAILABLE, FAIL\n", m_vpout);
+        if( m_vpout ) {
+          Vector<ParsePos> posstack;
+          ptoks->getParsePos(posstack);
+          fputs("Parse error:\n", m_vpout);
+          for( auto pos = posstack.begin(), endPos = posstack.end(); pos != endPos; ++pos )
+            fprintf(m_vpout, "  at %s(%d:%d)\n", pos->filename.c_str(), pos->line, pos->col);
+        }
         return false;
       }
     }

@@ -5,6 +5,11 @@
 #include <string.h>
 #include "tinytemplates.h"
 
+struct ParsePos {
+  String filename;
+  int line, col;
+};
+
 class TokBuf {
 public:
   virtual ~TokBuf() {}
@@ -13,6 +18,7 @@ public:
   virtual int line() = 0;
   virtual int col()  = 0;
   virtual String filename() = 0;
+  virtual void getParsePos(Vector<ParsePos> &fNames) = 0;
 };
 
 struct StackTokBufItem {
@@ -113,6 +119,11 @@ public:
       item.filename = filename;
     }
   }
+  virtual void getParsePos(Vector<ParsePos> &fPos) {
+    for( int i = m_stack.size()-1; i >= 0; --i ) {
+      m_stack[i].tokbuf->getParsePos(fPos);
+    }
+  }
 };
 
 class FileTokBuf : public TokBuf {
@@ -192,6 +203,13 @@ public:
   virtual int line() { return m_line; }
   virtual int col()  { return m_col; }
   virtual String filename() { return m_filename; }
+  virtual void getParsePos(Vector<ParsePos> &fNames) {
+    ParsePos pos;
+    pos.filename = m_filename;
+    pos.line = m_line;
+    pos.col = m_col;
+    fNames.push_back(pos);
+  }
 };
 
 struct TokenInfo {
@@ -220,6 +238,7 @@ public:
   virtual int col() = 0;
   virtual String filename() = 0;
   virtual const char *tokstr(int tok) = 0;
+  virtual void getParsePos(Vector<ParsePos> &parsepos) = 0;
 };
 
 class TokBufTokenizer : public Tokenizer {
@@ -384,6 +403,9 @@ public:
     if( tok < 0 || tok >= m_tokinfo->m_tokenCount )
       return  "?";
     return m_tokinfo->m_tokenstr[tok];
+  }
+  void getParsePos(Vector<ParsePos> &posstack) {
+    m_tokbuf->getParsePos(posstack);
   }
 };
 
