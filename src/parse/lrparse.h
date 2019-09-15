@@ -60,8 +60,10 @@ public:
         inputqueue.push_back(Pair<int,T>(nxt,t));
       }
       tok = inputqueue.back().first;
-      if( m_verbosity )
-        fprintf(m_vpout, "input (# %d) = %d %s = \"%s\"\n", inputnum, tok, ptoks->tokstr(tok), inputqueue.back().second.tok.m_s.c_str());
+      if( m_verbosity ) {
+        const T &t = inputqueue.back().second;
+        fprintf(m_vpout, "input (# %d) = %d %s = \"%s\" - %s(%d:%d)\n", inputnum, tok, ptoks->tokstr(tok), t.tok.m_s.c_str(), t.tok.m_filename.c_str(), t.tok.m_line, t.tok.m_col);
+      }
       const int *firstaction = m_parseinfo->actions+m_parseinfo->actionstart[stateno];
       const int *lastaction = m_parseinfo->actions+m_parseinfo->actionstart[stateno+1];
       while( firstaction != lastaction ) {
@@ -121,6 +123,12 @@ public:
           fputs("Parse error:\n", m_vpout);
           for( auto pos = posstack.begin(), endPos = posstack.end(); pos != endPos; ++pos )
             fprintf(m_vpout, "  at %s(%d:%d)\n", pos->filename.c_str(), pos->line, pos->col);
+          fputs("lrstates = { ", m_vpout);
+          for( int i = 0; i < states.size(); ++i )
+            fprintf(m_vpout, "%d ", states[i]);
+          fputs("}\n", m_vpout);
+          const T &t = inputqueue.back().second;
+          fprintf(m_vpout, "input (# %d) = %d %s = \"%s\" - %s(%d:%d)\n", inputnum, tok, ptoks->tokstr(tok), t.tok.m_s.c_str(), t.tok.m_filename.c_str(), t.tok.m_line, t.tok.m_col);
         }
         return false;
       }

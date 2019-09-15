@@ -397,6 +397,7 @@ public:
   }
   int size() const { return m_size; }
   T &back() { return m_p[m_size-1]; }
+  const T &back() const { return m_p[m_size-1]; }
   bool operator!=(const Vector<T> &rhs) const {
     if( size() != rhs.size() )
       return true;

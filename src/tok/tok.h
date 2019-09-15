@@ -54,6 +54,9 @@ public:
 class StackTokBuf : public TokBuf {
   Vector<StackTokBufItem> m_stack;
   Token m_endtok;
+protected:
+  virtual void startBuf(TokBuf *tokBuf) {}
+  virtual void endBuf(TokBuf *tokBuf) {}
 public:
   StackTokBuf() {}
   void push(TokBuf *tokbuf) {
@@ -62,6 +65,7 @@ public:
     item.startline = -1;
     item.lineno = -1;
     m_stack.push_back(item);
+    startBuf(tokbuf);
   }
   virtual int peekc(int n) {
     while( m_stack.size() ) {
@@ -77,6 +81,7 @@ public:
       if( item.tokbuf->peekc(0) == -1 ) {
         TokBuf *tokbuf = m_stack.back().tokbuf;
         m_stack.pop_back();
+        endBuf(tokbuf);
         if( m_stack.size() == 0 ) {
           m_endtok.m_filename = tokbuf->filename();
           m_endtok.m_line = tokbuf->line();
