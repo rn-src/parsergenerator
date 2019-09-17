@@ -54,6 +54,21 @@ public:
   Production(bool rejectable, int nt, const Vector<int> &symbols, const Vector<ActionItem> &action, int lineno, String filename);
   Production *clone();
   void print(FILE *out, const Map<int,SymbolDef> &tokens, int pos=-1, int forbidstate=0) const;
+  bool operator<(const Production &rhs) const {
+    if( m_pid < rhs.m_pid )
+      return true;
+    if( m_pid > rhs.m_pid )
+      return false;
+    if( m_pid != -1 && m_pid == rhs.m_pid )
+      return false;
+    if( m_nt < rhs.m_nt )
+      return true;
+    if( m_nt > rhs.m_nt )
+      return false;
+    if( m_symbols < rhs.m_symbols )
+      return true;
+    return false;
+  }  
 };
 
 class ProductionState {
@@ -64,9 +79,9 @@ public:
   ProductionState(Production *p, int pos, int forbidstate) : m_p(p), m_pos(pos), m_forbidstate(forbidstate) {}
   ProductionState(const ProductionState &rhs) : m_p(rhs.m_p), m_pos(rhs.m_pos), m_forbidstate(rhs.m_forbidstate) {}
   bool operator<(const ProductionState &rhs) const {
-    if( m_p < rhs.m_p )
+    if( *m_p < *rhs.m_p )
       return true;
-    else if( rhs.m_p < m_p )
+    else if( *rhs.m_p < *m_p )
       return false;
     if( m_forbidstate < rhs.m_forbidstate )
       return true;

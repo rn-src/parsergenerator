@@ -327,21 +327,27 @@ void PrintStatesAndActions() {
     }
     reducemap_t::const_iterator reduceiter = solution.m_reductions.find(i);
     if( reduceiter != solution.m_reductions.end() ) {
+      Map< int,Pair<Production*,Set<int> > > reduces;
       for( reducebysymbols_t::const_iterator curreduce = reduceiter->second.begin(), endreduce = reduceiter->second.end(); curreduce != endreduce; ++curreduce ) {
-        if( curreduce->first->m_rejectable )
+        reduces[curreduce->first->m_pid] = Pair<Production*,Set<int> >(curreduce->first,curreduce->second);
+      }
+      for( Map< int,Pair<Production*,Set<int> > >::const_iterator reduceiter = reduces.begin(), endreduce = reduces.end(); reduceiter != endreduce; ++reduceiter ) {
+        Production *p = reduceiter->second.first;
+        Set<int> syms = reduceiter->second.second;
+        if( p->m_rejectable )
           fputs("(rejectable) ", out);
         fputs("reduce by production [", out);
-        curreduce->first->print(out,tokens);
+        p->print(out,tokens);
         fputs("] on ", out);
         bool bFirst = true;
-        for( Set<int>::const_iterator cursym = curreduce->second.begin(), endsym = curreduce->second.end(); cursym != endsym; ++cursym ) {
+        for( Set<int>::const_iterator cursym = syms.begin(), endsym = syms.end(); cursym != endsym; ++cursym ) {
           const char *symstr = (*cursym==-1) ? "$" : tokens[*cursym].m_name.c_str();
           if( bFirst )
             bFirst = false;
           else
             fputs(", ", out);
           fputs(symstr, out);
-          reductions[*cursym].insert(curreduce->first);
+          reductions[*cursym].insert(p);
           symbols.insert(*cursym);
         }
         fputs("\n",out);

@@ -337,6 +337,8 @@ static void OutputParser(FILE *out, const ParserDef &parser, const ParserSolutio
   lang.outDecl(out, "stack_t*", "inputs");
   fputs(", ", out);
   lang.outDecl(out, "stack_t&", "output");
+  fputs(", ", out);
+  lang.outDecl(out, "const char**", "err");
   lang.outEndParameters(out);
   lang.outStartFunctionCode(out);
   fputc('\n',out);

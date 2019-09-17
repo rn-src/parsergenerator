@@ -19,7 +19,7 @@ class Parser {
 public:
   ParseInfo *m_parseinfo;
   E m_extra;
-  typedef bool (*reducefnct)(E &extra, int productionidx, T *inputs, T &ntout);
+  typedef bool (*reducefnct)(E &extra, int productionidx, T *inputs, T &ntout, const char **err);
   reducefnct reduce;
   int m_verbosity;
   FILE *m_vpout;
@@ -43,6 +43,7 @@ public:
     values.push_back(T());
     int tok = -1;
     int inputnum = 0;
+    const char *err = 0;
     while( states.size() > 0 ) {
       if( m_verbosity ) {
         fputs("lrstates = { ", m_vpout);
@@ -92,7 +93,8 @@ public:
             T *inputs = values.begin()+(values.size()-reducecount);
             if( m_verbosity )
               fprintf(m_vpout, "reduce %d states by rule %d?... ", reducecount, reduceby-m_parseinfo->prod0+1);
-            if( reduce(m_extra,reduceby,inputs,output) ) {
+            err = 0;
+            if( reduce(m_extra,reduceby,inputs,output,&err) ) {
               if( m_verbosity )
                 fputs("YES\n", m_vpout);
               states.resize(states.size()-reducecount);
@@ -120,15 +122,18 @@ public:
         if( m_vpout ) {
           Vector<ParsePos> posstack;
           ptoks->getParsePos(posstack);
-          fputs("Parse error:\n", m_vpout);
-          for( auto pos = posstack.begin(), endPos = posstack.end(); pos != endPos; ++pos )
-            fprintf(m_vpout, "  at %s(%d:%d)\n", pos->filename.c_str(), pos->line, pos->col);
-          fputs("lrstates = { ", m_vpout);
-          for( int i = 0; i < states.size(); ++i )
-            fprintf(m_vpout, "%d ", states[i]);
-          fputs("}\n", m_vpout);
           const T &t = inputqueue.back().second;
-          fprintf(m_vpout, "input (# %d) = %d %s = \"%s\" - %s(%d:%d)\n", inputnum, tok, ptoks->tokstr(tok), t.tok.m_s.c_str(), t.tok.m_filename.c_str(), t.tok.m_line, t.tok.m_col);
+          if( err ) {
+            fprintf(m_vpout, "%s(%d:%d) : error : %s\n", t.tok.m_filename.c_str(), t.tok.m_line, t.tok.m_col, err);
+          } else {
+            fprintf(m_vpout, "%s(%d:%d) : parse error : input (# %d) = %d %s = \"%s\" - \n", t.tok.m_filename.c_str(), t.tok.m_line, t.tok.m_col, inputnum, tok, ptoks->tokstr(tok), t.tok.m_s.c_str());
+            for( auto pos = posstack.begin(), endPos = posstack.end(); pos != endPos; ++pos )
+              fprintf(m_vpout, "  at %s(%d:%d)\n", pos->filename.c_str(), pos->line, pos->col);
+            fputs("lrstates = { ", m_vpout);
+            for( int i = 0; i < states.size(); ++i )
+              fprintf(m_vpout, "%d ", states[i]);
+            fputs("}\n", m_vpout);
+          }
         }
         return false;
       }
