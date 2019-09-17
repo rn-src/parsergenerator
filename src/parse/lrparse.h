@@ -63,7 +63,8 @@ public:
       tok = inputqueue.back().first;
       if( m_verbosity ) {
         const T &t = inputqueue.back().second;
-        fprintf(m_vpout, "input (# %d) = %d %s = \"%s\" - %s(%d:%d)\n", inputnum, tok, ptoks->tokstr(tok), t.tok.m_s.c_str(), t.tok.m_filename.c_str(), t.tok.m_line, t.tok.m_col);
+        if( t.tok.m_s.c_str() )
+          fprintf(m_vpout, "input (# %d) = %d %s = \"%s\" - %s(%d:%d)\n", inputnum, tok, ptoks->tokstr(tok), t.tok.m_s.c_str(), t.tok.m_filename.c_str(), t.tok.m_line, t.tok.m_col);
       }
       const int *firstaction = m_parseinfo->actions+m_parseinfo->actionstart[stateno];
       const int *lastaction = m_parseinfo->actions+m_parseinfo->actionstart[stateno+1];
