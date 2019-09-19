@@ -69,6 +69,9 @@ public:
       return true;
     return false;
   }  
+
+  // for use in qsort
+  static int cmpprdid(const void *lhs, const void *rhs);
 };
 
 class ProductionState {

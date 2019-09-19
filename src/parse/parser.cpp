@@ -130,6 +130,11 @@ Production *Production::clone() {
   return new Production(m_rejectable, m_nt, m_symbols, m_action, m_lineno, m_filename);
 }
 
+int Production::cmpprdid(const void *lhs, const void *rhs) {
+  const Production *l = *(const Production**)lhs, *r = *(const Production**)rhs;
+  return l->m_pid - r->m_pid;
+}
+
 static void error(Tokenizer &toks, const String &err) {
   throw ParserErrorWithLineCol(toks.line(),toks.col(),toks.filename(),err);
 }

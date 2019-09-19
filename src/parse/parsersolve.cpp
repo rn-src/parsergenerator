@@ -297,7 +297,6 @@ void PrintRules() {
   fputs("\n",out);
 }
 
-
 void PrintStatesAndActions() {
   const Map<int,SymbolDef> &tokens = parser.m_tokdefs;
   fprintf(out, "%d states\n\n", solution.m_states.size());
@@ -327,13 +326,14 @@ void PrintStatesAndActions() {
     }
     reducemap_t::const_iterator reduceiter = solution.m_reductions.find(i);
     if( reduceiter != solution.m_reductions.end() ) {
-      Map< int,Pair<Production*,Set<int> > > reduces;
-      for( reducebysymbols_t::const_iterator curreduce = reduceiter->second.begin(), endreduce = reduceiter->second.end(); curreduce != endreduce; ++curreduce ) {
-        reduces[curreduce->first->m_pid] = Pair<Production*,Set<int> >(curreduce->first,curreduce->second);
-      }
-      for( Map< int,Pair<Production*,Set<int> > >::const_iterator reduceiter = reduces.begin(), endreduce = reduces.end(); reduceiter != endreduce; ++reduceiter ) {
-        Production *p = reduceiter->second.first;
-        Set<int> syms = reduceiter->second.second;
+      Vector<Production*> reduces;
+      for( reducebysymbols_t::const_iterator curreduce = reduceiter->second.begin(), endreduce = reduceiter->second.end(); curreduce != endreduce; ++curreduce )
+        reduces.push_back(curreduce->first);
+      if( reduces.size() > 1 )
+        qsort(reduces.begin(),reduces.size(),sizeof(int),Production::cmpprdid);
+      for( Vector<Production*>::const_iterator curp = reduces.begin(), endp = reduces.end(); curp != endp; ++curp ) {
+        Production *p = *curp;
+        const Set<int> &syms = (reduceiter->second)[p];
         if( p->m_rejectable )
           fputs("(rejectable) ", out);
         fputs("reduce by production [", out);

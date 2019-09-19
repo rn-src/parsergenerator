@@ -244,28 +244,35 @@ static void OutputParser(FILE *out, const ParserDef &parser, const ParserSolutio
     }
     reducemap_t::const_iterator reduce = solution.m_reductions.find(i);
     if( reduce != solution.m_reductions.end() ) {
-      for( reducebysymbols_t::const_iterator curreduce = reduce->second.begin(), endreduce = reduce->second.end(); curreduce != endreduce; ++curreduce) {
-        if( curreduce->second.size() == 0 )
+      Vector<Production*> reduces;
+      for( reducebysymbols_t::const_iterator curreduce = reduce->second.begin(), endreduce = reduce->second.end(); curreduce != endreduce; ++curreduce )
+        reduces.push_back(curreduce->first);
+      if( reduces.size() > 1 )
+        qsort(reduces.begin(),reduces.size(),sizeof(int),Production::cmpprdid);
+      for( Vector<Production*>::const_iterator curp = reduces.begin(), endp = reduces.end(); curp != endp; ++curp ) {
+        Production *p = *curp;
+        const Set<int> &syms = (reduce->second)[p];
+        if( syms.size() == 0 )
           continue;
         if( first )
           first = false;
         else
           fputc(',',out);
         // action=reduce
-        if( curreduce->first->m_nt == parser.getStartNt() )
+        if( p->m_nt == parser.getStartNt() )
           fputs("ACTION_STOP",out);
         else
           fputs("ACTION_REDUCE",out);
         // reduce by
         fputc(',',out);
-        fprintf(out,"PROD_%d",pid2idx[curreduce->first->m_pid]);
+        fprintf(out,"PROD_%d",pid2idx[p->m_pid]);
         // reduce count
         fputc(',',out);
-        lang.outInt(out,curreduce->first->m_symbols.size());
+        lang.outInt(out,p->m_symbols.size());
         // symbols
         fputc(',',out);
-        lang.outInt(out,curreduce->second.size());
-        for( Set<int>::const_iterator curs = curreduce->second.begin(), ends = curreduce->second.end(); curs != ends; ++curs ) {
+        lang.outInt(out,syms.size());
+        for( Set<int>::const_iterator curs = syms.begin(), ends = syms.end(); curs != ends; ++curs ) {
           int s = *curs;
           fputc(',',out);
           if( s == -1 )
@@ -275,7 +282,7 @@ static void OutputParser(FILE *out, const ParserDef &parser, const ParserSolutio
           else
             fprintf(out,"PROD_%d",pid2idx[s]);
         }
-        actionidx += curreduce->second.size()+4;
+        actionidx += syms.size()+4;
       }
     }
   }
