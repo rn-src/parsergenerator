@@ -52,6 +52,8 @@ void ComputeFirsts() {
       for( int forbidstate = 0, nstates = parser.m_forbid.nstates(); forbidstate < nstates; ++forbidstate ) {
         int beforecnt = (solution.m_firsts.find(symbolandforbidstate_t(tokid,forbidstate)) != solution.m_firsts.end()) ? solution.m_firsts[symbolandforbidstate_t(tokid,forbidstate)].size() : 0;
         const Production *p = cur->second.m_p;
+        if( p->m_symbols.size() == 0 )
+          continue;
         int s = p->m_symbols[0];
         if( parser.getSymbolType(s) == SymbolTypeTerminal ) {          
           if( verbosity > 2 ) {

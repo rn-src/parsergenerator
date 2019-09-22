@@ -592,8 +592,10 @@ static Vector<Production*> ParseProduction(Tokenizer &toks, ParserDef &parser) {
   toks.discard();
   Vector<Production*> productions;
   while(true) {
-    Vector<int> symbols = ParseSymbols(toks,parser);
+    Vector<int> symbols;
     Vector<ActionItem> action;
+    if( toks.peek() == pptok::ID )
+      symbols = ParseSymbols(toks,parser);
     int lineno = toks.line();
     String filename = toks.filename();
     if( toks.peek() == pptok::LBRACE )

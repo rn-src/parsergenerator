@@ -66,9 +66,12 @@ public:
     item.lineno = -1;
     m_stack.push_back(item);
     startBuf(tokbuf);
+    // if empty file, pop immediately
+    if( tokbuf->peekc(0) == -1 )
+      discard(0);
   }
   virtual int peekc(int n) {
-    while( m_stack.size() ) {
+    if( m_stack.size() ) {
       StackTokBufItem &item = m_stack.back();
       return item.tokbuf->peekc(n);
     }
