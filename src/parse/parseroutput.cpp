@@ -5,6 +5,8 @@ namespace pptok {
 #include "parsertok.h"
 }
 
+#define FIRST_NT_OFFSET 50
+
 class LanguageOutputter {
 public:
   virtual ~LanguageOutputter() {}
@@ -131,8 +133,8 @@ static void OutputParser(FILE *out, const ParserDef &parser, const ParserSolutio
       ++nonterminals;
     }
   }
-  int firstnt = terminals+10;
-  int firstproduction = terminals+nonterminals+10;
+  int firstnt = terminals+FIRST_NT_OFFSET;
+  int firstproduction = terminals+nonterminals+FIRST_NT_OFFSET;
   for( Map<int,SymbolDef>::const_iterator curtok = parser.m_tokdefs.begin(), endtok = parser.m_tokdefs.end(); curtok != endtok; ++curtok ) {
     if( curtok->second.m_symboltype == SymbolTypeNonterminal ) {
       lang.outDecl(out,"const int",curtok->second.m_name.c_str());
@@ -153,52 +155,6 @@ static void OutputParser(FILE *out, const ParserDef &parser, const ParserSolutio
     lang.outEndStmt(out);
     fputc('\n',out);
   }
-
-#if 0
-  lang.outDecl(out,"const int","nproductions");
-  fputs(" = ",out);
-  lang.outInt(out,parser.m_productions.size());
-  lang.outEndStmt(out);
-  fputc('\n',out);
-
-  lang.outArrayDecl(out,"static const int", "productions");
-  fputs(" = ",out);
-  lang.outStartArray(out);
-  first = true;
-  for( int i = 0; i < parser.m_productions.size(); ++i ) {
-    Production *p = parser.m_productions[i];
-    pidxtopoffset.push_back(poffset);
-    if( first )
-      first = false;
-    else
-      fputc(',',out);
-    fputs(parser.m_tokdefs[p->m_nt].m_name.c_str(),out);
-    for( int sidx = 0; sidx < p->m_symbols.size(); ++sidx ) {
-      fputc(',',out);
-      fputs(parser.m_tokdefs[p->m_symbols[sidx]].m_name.c_str(),out);
-    }
-    poffset += p->m_symbols.size()+1;
-  }
-  pidxtopoffset.push_back(poffset);
-  lang.outEndArray(out);
-  lang.outEndStmt(out);
-  fputc('\n',out);
-
-  lang.outArrayDecl(out,"static const int", "productionstart");
-  fputs(" = ",out);
-  lang.outStartArray(out);
-  first = true;
-  for( int i = 0; i < pidxtopoffset.size(); ++i ) {
-    if( first )
-      first = false;
-    else
-      fputc(',',out);
-    lang.outInt(out,pidxtopoffset[i]);
-  }
-  lang.outEndArray(out);
-  lang.outEndStmt(out);
-  fputc('\n',out);
-#endif
 
   lang.outDecl(out,"const int","nstates");
   fputs(" = ",out);
@@ -302,6 +258,67 @@ static void OutputParser(FILE *out, const ParserDef &parser, const ParserSolutio
     else
       fputc(',',out);
     lang.outInt(out,sidxtoaoffset[i]);
+  }
+  lang.outEndArray(out);
+  lang.outEndStmt(out);
+  fputc('\n',out);
+
+  lang.outDecl(out,"const int","nproductions");
+  fputs(" = ",out);
+  lang.outInt(out,parser.m_productions.size());
+  lang.outEndStmt(out);
+  fputc('\n',out);
+
+
+  lang.outArrayDecl(out,"static const int", "productions");
+  fputs(" = ",out);
+  lang.outStartArray(out);
+  first = true;
+  for( int i = 0; i < parser.m_productions.size(); ++i ) {
+    Production *p = parser.m_productions[i];
+    pidxtopoffset.push_back(poffset);
+    if( first )
+      first = false;
+    else
+      fputc(',',out);
+    fputs(parser.m_tokdefs[p->m_nt].m_name.c_str(),out);
+    for( int sidx = 0; sidx < p->m_symbols.size(); ++sidx ) {
+      fputc(',',out);
+      fputs(parser.m_tokdefs[p->m_symbols[sidx]].m_name.c_str(),out);
+    }
+    poffset += p->m_symbols.size()+1;
+  }
+  pidxtopoffset.push_back(poffset);
+  lang.outEndArray(out);
+  lang.outEndStmt(out);
+  fputc('\n',out);
+  lang.outArrayDecl(out,"static const int", "productionstart");
+  fputs(" = ",out);
+  lang.outStartArray(out);
+  first = true;
+  for( int i = 0; i < pidxtopoffset.size(); ++i ) {
+    if( first )
+      first = false;
+    else
+      fputc(',',out);
+    lang.outInt(out,pidxtopoffset[i]);
+  }
+  lang.outEndArray(out);
+  lang.outEndStmt(out);
+  fputc('\n',out);
+
+  lang.outArrayDecl(out,"static const char*", "nonterminals");
+  fputs(" = ",out);
+  lang.outStartArray(out);
+  first = true;
+  for( Map<int,SymbolDef>::const_iterator curtok = parser.m_tokdefs.begin(), endtok = parser.m_tokdefs.end(); curtok != endtok; ++curtok ) {
+    if( curtok->second.m_symboltype != SymbolTypeNonterminal )
+      continue;
+    if( first )
+      first = false;
+    else
+      fputc(',',out);
+    lang.outStr(out,curtok->second.m_name.c_str());
   }
   lang.outEndArray(out);
   lang.outEndStmt(out);

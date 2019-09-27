@@ -12,6 +12,11 @@ struct ParseInfo {
   const int *actions;
   const int *actionstart;
   const int prod0;
+  const int nproductions;
+  const int *productions;
+  const int *productionstart;
+  const int start;
+  const char **nonterminals;
 };
 
 template<class E, class T>
@@ -92,8 +97,23 @@ public:
           if( findsymbol(tok,firstaction+4,nsymbols) ) {
             T output;
             T *inputs = values.begin()+(values.size()-reducecount);
-            if( m_verbosity )
-              fprintf(m_vpout, "reduce %d states by rule %d?... ", reducecount, reduceby-m_parseinfo->prod0+1);
+            if( m_verbosity ) {
+              int reducebyp = reduceby-m_parseinfo->prod0;
+              fprintf(m_vpout, "reduce %d states by rule %d [", reducecount, reducebyp+1);
+              const int *pproduction = m_parseinfo->productions+m_parseinfo->productionstart[reducebyp];
+              int pcount = m_parseinfo->productionstart[reducebyp+1]-m_parseinfo->productionstart[reducebyp];
+              bool first = true;
+              while( pcount-- ) {
+                int s = *pproduction++;
+                fputs(" ", m_vpout);
+                fputs(s >= m_parseinfo->start ? m_parseinfo->nonterminals[s-m_parseinfo->start] : ptoks->tokstr(s), m_vpout);
+                if( first ) {
+                  first = false;
+                  fputs(" :", m_vpout);
+                }
+              }
+              fputs(" ] ? ... ", m_vpout);
+            }
             err = 0;
             if( reduce(m_extra,reduceby,inputs,output,&err) ) {
               if( m_verbosity )
