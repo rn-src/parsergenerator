@@ -1,21 +1,25 @@
 #include "parser.h"
 #include <stdio.h>
 
-bool hasarg(int argc, char *argv[], const char *arg) {
+const char *getarg(int argc, char *argv[], const char *arg) {
   for( int i = 1; i < argc; ++i )
-    if( strcmp(argv[i],arg) == 0 )
-      return true;
-  return false;
+    if( strncmp(argv[i],arg,strlen(arg)) == 0 )
+      return argv[i];
+  return 0;
 }
 
 int main(int argc, char *argv[]) {
   int verbosity = 0;
-  if( hasarg(argc,argv,"-vvv") )
+  int min_nt_value = 0;
+  const char *arg;
+  if( getarg(argc,argv,"-vvv") )
     verbosity = 3;
-  if( hasarg(argc,argv,"-vv") )
+  if( getarg(argc,argv,"-vv") )
     verbosity = 2;
-  else if( hasarg(argc,argv,"-v") )
+  else if( getarg(argc,argv,"-v") )
     verbosity = 1;
+  if( (arg = getarg(argc,argv,"-minnt=")) )
+    min_nt_value=atoi(arg+7);
   for( int i = 1; i < argc; ++i ) {
     if( argv[i][0] == '-' )
       continue;
@@ -49,7 +53,7 @@ int main(int argc, char *argv[]) {
         fclose(fin);
         continue;
       }
-      OutputParserSolution(fout, parser, solution, LanguageC);
+      OutputParserSolution(fout, parser, solution, LanguageC, min_nt_value);
     } catch(ParserErrorWithLineCol &pe) {
       fprintf(stderr, "%s(%d:%d) : %s\n", pe.m_filename.c_str(), pe.m_line, pe.m_col, pe.m_err.c_str());
     } catch(ParserError &pe) {

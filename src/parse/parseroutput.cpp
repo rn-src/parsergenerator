@@ -5,8 +5,6 @@ namespace pptok {
 #include "parsertok.h"
 }
 
-#define FIRST_NT_OFFSET 50
-
 class LanguageOutputter {
 public:
   virtual ~LanguageOutputter() {}
@@ -115,7 +113,7 @@ LanguageOutputter *getLanguageOutputter(OutputLanguage language) {
   return 0;
 }
 
-static void OutputParser(FILE *out, const ParserDef &parser, const ParserSolution &solution, const LanguageOutputter &lang) {
+static void OutputParser(FILE *out, const ParserDef &parser, const ParserSolution &solution, const LanguageOutputter &lang, int min_nt_value) {
   bool first = true;
   Map<int,int> pid2idx;
   Map<int,int> nt2idx;
@@ -133,8 +131,8 @@ static void OutputParser(FILE *out, const ParserDef &parser, const ParserSolutio
       ++nonterminals;
     }
   }
-  int firstnt = terminals+FIRST_NT_OFFSET;
-  int firstproduction = terminals+nonterminals+FIRST_NT_OFFSET;
+  int firstnt = min_nt_value>(terminals+1)?min_nt_value:(terminals+1);
+  int firstproduction = terminals+nonterminals+min_nt_value;
   for( Map<int,SymbolDef>::const_iterator curtok = parser.m_tokdefs.begin(), endtok = parser.m_tokdefs.end(); curtok != endtok; ++curtok ) {
     if( curtok->second.m_symboltype == SymbolTypeNonterminal ) {
       lang.outDecl(out,"const int",curtok->second.m_name.c_str());
@@ -405,7 +403,7 @@ static void OutputParser(FILE *out, const ParserDef &parser, const ParserSolutio
   lang.outEndFunctionCode(out);
 }
 
-void OutputParserSolution(FILE *out, const ParserDef &parser, const ParserSolution &solution, OutputLanguage language) {
+void OutputParserSolution(FILE *out, const ParserDef &parser, const ParserSolution &solution, OutputLanguage language, int min_nt_value) {
   LanguageOutputter *outputer = getLanguageOutputter(language);
-  OutputParser(out,parser,solution,*outputer);
+  OutputParser(out,parser,solution,*outputer,min_nt_value);
 }

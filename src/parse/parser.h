@@ -357,7 +357,7 @@ enum OutputLanguage {
 
 void ParseParser(TokBuf *tokbuf, ParserDef &parser, FILE *vout, int verbosity);
 void SolveParser(ParserDef &parser, ParserSolution &solution, FILE *vout, int verbosity);
-void OutputParserSolution(FILE *out, const ParserDef &parser, const ParserSolution &solution, OutputLanguage language);
+void OutputParserSolution(FILE *out, const ParserDef &parser, const ParserSolution &solution, OutputLanguage language, int min_nt_value);
 
 #endif /* __parser_h */
 
