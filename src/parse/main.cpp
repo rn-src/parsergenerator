@@ -10,7 +10,7 @@ const char *getarg(int argc, char *argv[], const char *arg) {
 
 int main(int argc, char *argv[]) {
   int verbosity = 0;
-  int min_nt_value = 0;
+  LanguageOutputOptions options;
   const char *arg;
   if( getarg(argc,argv,"-vvv") )
     verbosity = 3;
@@ -18,8 +18,10 @@ int main(int argc, char *argv[]) {
     verbosity = 2;
   else if( getarg(argc,argv,"-v") )
     verbosity = 1;
-  if( (arg = getarg(argc,argv,"-minnt=")) )
-    min_nt_value=atoi(arg+7);
+  if( (arg = getarg(argc,argv,"--minnt=")) )
+    options.min_nt_value=atoi(arg+8);
+  if( (arg = getarg(argc,argv,"--no-pound-line")) )
+    options.do_pound_line = false;
   for( int i = 1; i < argc; ++i ) {
     if( argv[i][0] == '-' )
       continue;
@@ -53,7 +55,7 @@ int main(int argc, char *argv[]) {
         fclose(fin);
         continue;
       }
-      OutputParserSolution(fout, parser, solution, LanguageC, min_nt_value);
+      OutputParserSolution(fout, parser, solution, LanguageC, options);
     } catch(ParserErrorWithLineCol &pe) {
       fprintf(stderr, "%s(%d:%d) : %s\n", pe.m_filename.c_str(), pe.m_line, pe.m_col, pe.m_err.c_str());
     } catch(ParserError &pe) {

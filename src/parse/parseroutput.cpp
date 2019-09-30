@@ -113,7 +113,7 @@ LanguageOutputter *getLanguageOutputter(OutputLanguage language) {
   return 0;
 }
 
-static void OutputParser(FILE *out, const ParserDef &parser, const ParserSolution &solution, const LanguageOutputter &lang, int min_nt_value) {
+static void OutputParser(FILE *out, const ParserDef &parser, const ParserSolution &solution, const LanguageOutputter &lang, const LanguageOutputOptions &outputOptions) {
   bool first = true;
   Map<int,int> pid2idx;
   Map<int,int> nt2idx;
@@ -131,8 +131,8 @@ static void OutputParser(FILE *out, const ParserDef &parser, const ParserSolutio
       ++nonterminals;
     }
   }
-  int firstnt = min_nt_value>(terminals+1)?min_nt_value:(terminals+1);
-  int firstproduction = terminals+nonterminals+min_nt_value;
+  int firstnt = outputOptions.min_nt_value>(terminals+1)?outputOptions.min_nt_value:(terminals+1);
+  int firstproduction = firstnt+nonterminals;
   for( Map<int,SymbolDef>::const_iterator curtok = parser.m_tokdefs.begin(), endtok = parser.m_tokdefs.end(); curtok != endtok; ++curtok ) {
     if( curtok->second.m_symboltype == SymbolTypeNonterminal ) {
       lang.outDecl(out,"const int",curtok->second.m_name.c_str());
@@ -372,7 +372,8 @@ static void OutputParser(FILE *out, const ParserDef &parser, const ParserSolutio
     fprintf(out,"case PROD_%d:\n", pid2idx[p->m_pid]);
     String s = p->m_filename;
     s.ReplaceAll("\\","\\\\");
-    fprintf(out, "#line %d \"%s\"\n", p->m_lineno, s.c_str());
+    if( outputOptions.do_pound_line )
+      fprintf(out, "#line %d \"%s\"\n", p->m_lineno, s.c_str());
     for( Vector<ActionItem>::const_iterator curaction = p->m_action.begin(), endaction = p->m_action.end(); curaction != endaction; ++curaction ) {
       const ActionItem &item = *curaction;
       if( item.m_actiontype == ActionTypeSrc )
@@ -403,7 +404,7 @@ static void OutputParser(FILE *out, const ParserDef &parser, const ParserSolutio
   lang.outEndFunctionCode(out);
 }
 
-void OutputParserSolution(FILE *out, const ParserDef &parser, const ParserSolution &solution, OutputLanguage language, int min_nt_value) {
+void OutputParserSolution(FILE *out, const ParserDef &parser, const ParserSolution &solution, OutputLanguage language, LanguageOutputOptions &options) {
   LanguageOutputter *outputer = getLanguageOutputter(language);
-  OutputParser(out,parser,solution,*outputer,min_nt_value);
+  OutputParser(out,parser,solution,*outputer,options);
 }

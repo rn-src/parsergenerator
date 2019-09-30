@@ -355,9 +355,17 @@ enum OutputLanguage {
   LanguageC
 };
 
+class LanguageOutputOptions {
+public:
+  LanguageOutputOptions() : min_nt_value(0), do_pound_line(true) {
+  }
+  int min_nt_value;
+  bool do_pound_line;
+};
+
 void ParseParser(TokBuf *tokbuf, ParserDef &parser, FILE *vout, int verbosity);
 void SolveParser(ParserDef &parser, ParserSolution &solution, FILE *vout, int verbosity);
-void OutputParserSolution(FILE *out, const ParserDef &parser, const ParserSolution &solution, OutputLanguage language, int min_nt_value);
+void OutputParserSolution(FILE *out, const ParserDef &parser, const ParserSolution &solution, OutputLanguage language, LanguageOutputOptions &options);
 
 #endif /* __parser_h */
 
