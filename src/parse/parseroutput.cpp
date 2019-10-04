@@ -202,7 +202,7 @@ static void OutputParser(FILE *out, const ParserDef &parser, const ParserSolutio
       for( reducebysymbols_t::const_iterator curreduce = reduce->second.begin(), endreduce = reduce->second.end(); curreduce != endreduce; ++curreduce )
         reduces.push_back(curreduce->first);
       if( reduces.size() > 1 )
-        qsort(reduces.begin(),reduces.size(),sizeof(int),Production::cmpprdid);
+        qsort(reduces.begin(),reduces.size(),sizeof(Production*),Production::cmpprdid);
       for( Vector<Production*>::const_iterator curp = reduces.begin(), endp = reduces.end(); curp != endp; ++curp ) {
         Production *p = *curp;
         const Set<int> &syms = (reduce->second)[p];

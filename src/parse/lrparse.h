@@ -146,11 +146,11 @@ public:
           const T &t = inputqueue.back().second;
           if( err ) {
             fprintf(m_vpout, "%s(%d:%d) : error : %s\n", t.tok.m_filename.c_str(), t.tok.m_line, t.tok.m_col, err);
-            for( auto pos = posstack.begin(), endPos = posstack.end(); pos != endPos; ++pos )
+            for( Vector<ParsePos>::const_iterator pos = posstack.begin(), endPos = posstack.end(); pos != endPos; ++pos )
               fprintf(m_vpout, "  at %s(%d:%d)\n", pos->filename.c_str(), pos->line, pos->col);
           } else {
             fprintf(m_vpout, "%s(%d:%d) : parse error : input (# %d) = %d %s = \"%s\" - \n", t.tok.m_filename.c_str(), t.tok.m_line, t.tok.m_col, inputnum, tok, ptoks->tokstr(tok), t.tok.m_s.c_str());
-            for( auto pos = posstack.begin(), endPos = posstack.end(); pos != endPos; ++pos )
+            for( Vector<ParsePos>::const_iterator pos = posstack.begin(), endPos = posstack.end(); pos != endPos; ++pos )
               fprintf(m_vpout, "  at %s(%d:%d)\n", pos->filename.c_str(), pos->line, pos->col);
             fputs("lrstates = { ", m_vpout);
             for( int i = 0; i < states.size(); ++i )
