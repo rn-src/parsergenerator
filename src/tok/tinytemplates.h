@@ -168,7 +168,7 @@ public:
       return true;
     return false;
   }
-  String substr(int first, int cnt) {
+  String substr(int first, int cnt) const {
     size_t len = length();
     if( first >= len || cnt <= 0 )
       return String("");
@@ -176,7 +176,7 @@ public:
       cnt = len;
     return String(c_str()+first,cnt);
   }
-  String slice(int first, int last) {
+  String slice(int first, int last) const {
     size_t len = length();
     if( first < 0 )
       first += len;
