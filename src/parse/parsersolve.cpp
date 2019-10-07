@@ -375,6 +375,7 @@ void PrintStatesAndActions() {
 }
 
 void PrintConflicts() {
+  int nconflicts = 0;
   const Map<int,SymbolDef> &tokens = parser.m_tokdefs;
   for( int i = 0, n = solution.m_states.size(); i != n; ++i ) {
     Set<int> symbols;
@@ -409,9 +410,10 @@ void PrintConflicts() {
       if( shiftsymbols.find(sym) != shiftsymbols.end() ) {
         if( bFirst ) {
           bFirst = false;
-          fprintf(out, "State %d:\n", i);
+          fprintf(stderr, "State %d:\n", i);
         }
-        fprintf(out, "shift/reduce conflict on %s\n", symstr);
+        fprintf(stderr, "shift/reduce conflict on %s\n", symstr);
+        ++nconflicts;
       }
       Vector<const Production*> symreductions;
       symreductions.insert(symreductions.end(), reductions[sym].begin(), reductions[sym].end());
@@ -420,25 +422,28 @@ void PrintConflicts() {
           if( !symreductions[r0]->m_rejectable && ! symreductions[r1]->m_rejectable ) {
             if( bFirst ) {
               bFirst = false;
-              fprintf(out, "State %d:\n", i);
+              fprintf(stderr, "State %d:\n", i);
             }
-            fprintf(out, "reduce/reduce conflict on %s\n", symstr);
+            fprintf(stderr, "reduce/reduce conflict on %s\n", symstr);
+            ++nconflicts;
           }
     }
     if( ! bFirst )
-      fputs("\n",out);
+      fputs("\n",stderr);
   }
+  if( nconflicts )
+    fprintf(stderr, "%d conflicts\n", nconflicts);
 }
 
 void SolveParser() {
   ComputeFirsts();
   ComputeFollows();
   ComputeStatesAndActions();
+  PrintConflicts();
   if( verbosity >= 1 ) {
     PrintRules();
     PrintStatesAndActions();
-  } else
-    PrintConflicts();
+  }
 }
 
 }; // end of class

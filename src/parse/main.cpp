@@ -43,7 +43,7 @@ int main(int argc, char *argv[]) {
     strcat(foutname,".h");
 
     try {
-      FILE *vout = stderr;
+      FILE *vout = stdout;
       ParserDef parser(vout,verbosity);
       FileTokBuf tokbuf(fin, fname);
       ParseParser(&tokbuf,parser,vout,verbosity);
