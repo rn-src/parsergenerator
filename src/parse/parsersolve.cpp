@@ -8,10 +8,6 @@ namespace pptok {
 #define REDUCE (2)
 #define REDUCE2 (4)
 
-static void error(const String &err) {
-  throw ParserError(err);
-}
-
 void StringToInt_2_IntToString(const Map<String,int> &src, Map<int,String> &tokens);
 
 class FirstAndFollowComputer {
@@ -374,7 +370,7 @@ void PrintStatesAndActions() {
   fputs("\n",out);
 }
 
-void PrintConflicts() {
+int PrintConflicts() {
   int nconflicts = 0;
   const Map<int,SymbolDef> &tokens = parser.m_tokdefs;
   for( int i = 0, n = solution.m_states.size(); i != n; ++i ) {
@@ -433,26 +429,30 @@ void PrintConflicts() {
   }
   if( nconflicts )
     fprintf(stderr, "%d conflicts\n", nconflicts);
+  return nconflicts;
 }
 
-void SolveParser() {
+int SolveParser() {
   ComputeFirsts();
   ComputeFollows();
   ComputeStatesAndActions();
-  PrintConflicts();
+  int nconflicts = PrintConflicts();
   if( verbosity >= 1 ) {
     PrintRules();
     PrintStatesAndActions();
   }
+  return nconflicts;
 }
 
 }; // end of class
 
-void SolveParser(ParserDef &parser, ParserSolution &solution, FILE *vout, int verbosity) {
-  if( ! parser.getStartProduction() )
-    error("The grammar definition requires a START production");
+int SolveParser(ParserDef &parser, ParserSolution &solution, FILE *vout, int verbosity) {
+  if( ! parser.getStartProduction() ) {
+    fputs("The grammar definition requires a START production",stderr);
+    return -1;
+  }
   parser.computeForbidAutomata();
   Map< ProductionsAtKey,Vector<productionandforbidstate_t> > productionsAtResults;
   FirstAndFollowComputer firstAndFollowComputer(parser,solution,vout,verbosity,productionsAtResults);
-  firstAndFollowComputer.SolveParser();
+  return firstAndFollowComputer.SolveParser();
 }

@@ -319,15 +319,10 @@ private:
 
 class ParserError {
 public:
-  String m_err;
-  ParserError(const String &err) : m_err(err) {}
-};
-
-class ParserErrorWithLineCol : public ParserError {
-public:
   int m_line, m_col;
   String m_filename;
-  ParserErrorWithLineCol(int line, int col, String filename, const String &err) : ParserError(err), m_line(line), m_col(col), m_filename(filename) {}
+  String m_err;
+  ParserError(int line, int col, String filename, const String &err) : m_err(err), m_line(line), m_col(col), m_filename(filename) {}
 };
 
 class state_t : public Set<ProductionState> {
@@ -364,7 +359,7 @@ public:
 };
 
 void ParseParser(TokBuf *tokbuf, ParserDef &parser, FILE *vout, int verbosity);
-void SolveParser(ParserDef &parser, ParserSolution &solution, FILE *vout, int verbosity);
+int SolveParser(ParserDef &parser, ParserSolution &solution, FILE *vout, int verbosity);
 void OutputParserSolution(FILE *out, const ParserDef &parser, const ParserSolution &solution, OutputLanguage language, LanguageOutputOptions &options);
 
 #endif /* __parser_h */

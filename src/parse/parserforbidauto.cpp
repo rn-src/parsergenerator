@@ -1,9 +1,5 @@
 #include "parser.h"
 
-static void error(const String &err) {
-  throw ParserError(err);
-}
-
 ForbidDescriptor::ForbidDescriptor() : m_positions(0), m_forbidden(0) {}
 ForbidDescriptor::ForbidDescriptor(const String &name, ProductionDescriptors *positions, ProductionDescriptors *forbidden) : m_name(name), m_positions(positions), m_forbidden(forbidden) {}
 ForbidDescriptor::ForbidDescriptor(const ForbidDescriptor &rhs) {
