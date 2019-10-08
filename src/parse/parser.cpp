@@ -136,7 +136,7 @@ int Production::cmpprdid(const void *lhs, const void *rhs) {
 }
 
 static void error(Tokenizer &toks, const String &err) {
-  throw ParserErrorWithLineCol(toks.line(),toks.col(),toks.filename(),err);
+  throw ParserError(toks.line(),toks.col(),toks.filename(),err);
 }
 
 void ParserDef::addProduction(Tokenizer &toks, Production *p) {

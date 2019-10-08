@@ -11,6 +11,6 @@ parser: $(OBJ)
 	g++ -c -o $@ $< $(CPPFLAGS) $(CFLAGS)
 
 clean:
-	rm *.o
-	rm parser
+	-rm *.o > /dev/null 2>&1
+	-rm parser > /dev/null 2>&1
 

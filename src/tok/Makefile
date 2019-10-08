@@ -11,6 +11,6 @@ main.o: main.cpp tokenizer.h
 	g++ -g -c main.cpp -omain.o
 
 clean:
-	rm *.o
-	rm tokenizer
+	-rm *.o > /dev/null 2>&1
+	-rm tokenizer > /dev/null 2>&1
 
