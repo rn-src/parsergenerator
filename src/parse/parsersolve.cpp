@@ -33,7 +33,7 @@ ticks_t getSystemTicksFreq()
 #ifdef WIN32
   LARGE_INTEGER freq;
   QueryPerformanceFrequency(&freq);
-  return freq.QuadPairt;
+  return freq.QuadPart;
 #else
   return sysconf(_SC_CLK_TCK);
 #endif
