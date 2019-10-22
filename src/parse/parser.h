@@ -359,7 +359,7 @@ public:
 };
 
 void ParseParser(TokBuf *tokbuf, ParserDef &parser, FILE *vout, int verbosity);
-int SolveParser(ParserDef &parser, ParserSolution &solution, FILE *vout, int verbosity);
+int SolveParser(ParserDef &parser, ParserSolution &solution, FILE *vout, int verbosity, int timed);
 void OutputParserSolution(FILE *out, const ParserDef &parser, const ParserSolution &solution, OutputLanguage language, LanguageOutputOptions &options);
 
 #endif /* __parser_h */

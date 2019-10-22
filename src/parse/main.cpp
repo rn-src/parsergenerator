@@ -10,11 +10,12 @@ const char *getarg(int argc, char *argv[], const char *arg) {
 
 int main(int argc, char *argv[]) {
   int verbosity = 0;
+  int timed = 0;
   LanguageOutputOptions options;
   const char *arg;
   if( getarg(argc,argv,"-vvv") )
     verbosity = 3;
-  if( getarg(argc,argv,"-vv") )
+  else if( getarg(argc,argv,"-vv") )
     verbosity = 2;
   else if( getarg(argc,argv,"-v") )
     verbosity = 1;
@@ -22,6 +23,8 @@ int main(int argc, char *argv[]) {
     options.min_nt_value=atoi(arg+8);
   if( (arg = getarg(argc,argv,"--no-pound-line")) )
     options.do_pound_line = false;
+  if( getarg(argc,argv,"--timed") )
+    timed = 1;
   const char *fname = 0;
   for( int i = 1; i < argc; ++i ) {
     if( argv[i][0] == '-' )
@@ -50,7 +53,7 @@ int main(int argc, char *argv[]) {
     FileTokBuf tokbuf(fin, fname);
     ParseParser(&tokbuf,parser,vout,verbosity);
     ParserSolution solution;
-    int n = SolveParser(parser, solution, vout, verbosity);
+    int n = SolveParser(parser, solution, vout, verbosity, timed);
     if( n != 0 ) {
       fclose(fin);
       return n;

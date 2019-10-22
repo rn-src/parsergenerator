@@ -4,6 +4,40 @@ namespace pptok {
 #include "parsertok.h"
 }
 
+#include <stdint.h>
+#ifdef WIN32
+#include <windows.h>
+#include <winnt.h>
+#endif
+
+typedef uint64_t ticks_t;
+
+ticks_t getSystemTicks()
+{
+#ifdef WIN32
+  LARGE_INTEGER timer;
+  QueryPerformanceCounter(&timer);
+  return timer.QuadPart;
+#else
+  //struct tms now;
+  //times(&now);
+  //return now.tms_stime;
+  return 0;
+#endif
+}
+
+ticks_t getSystemTicksFreq()
+{
+#ifdef WIN32
+  LARGE_INTEGER freq;
+  QueryPerformanceFrequency(&freq);
+  return freq.QuadPart;
+#else
+  //return sysconf(_SC_CLK_TICK);
+  return 1;
+#endif
+}
+
 #define SHIFT (1)
 #define REDUCE (2)
 #define REDUCE2 (4)
@@ -446,13 +480,22 @@ int SolveParser() {
 
 }; // end of class
 
-int SolveParser(ParserDef &parser, ParserSolution &solution, FILE *vout, int verbosity) {
+int SolveParser(ParserDef &parser, ParserSolution &solution, FILE *vout, int verbosity, int timed) {
   if( ! parser.getStartProduction() ) {
     fputs("The grammar definition requires a START production",stderr);
     return -1;
   }
+  double start = getSystemTicks();
   parser.computeForbidAutomata();
   Map< ProductionsAtKey,Vector<productionandforbidstate_t> > productionsAtResults;
   FirstAndFollowComputer firstAndFollowComputer(parser,solution,vout,verbosity,productionsAtResults);
-  return firstAndFollowComputer.SolveParser();
+  int result = firstAndFollowComputer.SolveParser();
+  double stop = getSystemTicks();
+  if( timed ) {
+    printf("Tokens %d\n", parser.m_tokens.size());
+    printf("Productions %d\n", parser.m_productions.size());
+    printf("States %d\n", solution.m_states.size());
+    printf("Duration %.6f\n", (double)(stop-start)/(double)getSystemTicksFreq());
+  }
+  return result;
 }
