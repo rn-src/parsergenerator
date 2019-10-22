@@ -694,7 +694,7 @@ static ProductionDescriptors *ParseProductions(Tokenizer &toks, ParserDef &parse
 // Combine the dots from two production descriptors that decribe the same production.
 void ProductionDescriptors::consolidateRules() {
   for( iterator lhs = begin(); lhs != end(); ++lhs ) {
-    for( iterator rhs = lhs+1; rhs != end(); ++rhs ) {
+    for( iterator rhs = lhs+1; rhs > lhs && rhs != end(); ++rhs ) {
       if( lhs->addDotsFrom(*rhs) ) {
         rhs = erase(rhs);
         --rhs;
