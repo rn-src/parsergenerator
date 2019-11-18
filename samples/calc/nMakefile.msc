@@ -7,10 +7,10 @@ CPPFLAGS=/nologo /Zi /Od /EHsc /DWIN32
 all: calculator.exe
 
 calculatorG.h: calculator.G
-	..\parse\parser.exe calculator.G
+	..\..\src\parse\parser.exe calculator.G
 
 calculatorL.h: calculator.L
-	..\tok\tokenizer.exe < calculator.L > calculatorL.h
+	..\..\src\tok\tokenizer.exe calculator.L
 
 calculator.exe: $(OBJS) calculatorL.h calculatorG.h
 	@echo linking...
