@@ -28,7 +28,7 @@ The output of both `tokenizer` and `parser` are header files with state that can
 See _Creating a parser_ for the details of how to use the outputs. `parser` also outputs a `reduce` function that contains
 the semantic actions provided in the grammar file.  To put it all together, several steps are needed.
 
-* Take a look at [the calculator sample](src/calc/calculator.cpp) to see how it is done;it only takes 40 lines.
+* Take a look at [the calculator sample](samples/calc/calculator.cpp) to see how it is done;it only takes 40 lines.
 * Or better yet, copy and modify.
 
 ## Running the tokenizer
@@ -59,7 +59,7 @@ The output file will be _parserG.h_
 
 ## The Tokenizer File
 
-See [The tokenizer sample](samples/L/toktest.L) or [the calculator example](src/calc/calculator.L) for examples.
+See [The tokenizer sample](samples/L/toktest.L) or [the calculator example](samples/calc/calculator.L) for examples.
 
 * Tokens are one to a line, but can be divided into sections.
 * The format is action, indicator, name, regex.  Action and indicdator are optional.
