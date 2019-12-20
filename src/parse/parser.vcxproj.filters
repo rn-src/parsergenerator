@@ -15,35 +15,47 @@
     </Filter>
   </ItemGroup>
   <ItemGroup>
-    <ClCompile Include="parser.cpp">
-      <Filter>Source Files</Filter>
-    </ClCompile>
-    <ClCompile Include="main.cpp">
-      <Filter>Source Files</Filter>
-    </ClCompile>
-    <ClCompile Include="parseroutput.cpp">
-      <Filter>Source Files</Filter>
-    </ClCompile>
-    <ClCompile Include="parsersolve.cpp">
-      <Filter>Source Files</Filter>
-    </ClCompile>
-    <ClCompile Include="parserforbidauto.cpp">
-      <Filter>Source Files</Filter>
-    </ClCompile>
-  </ItemGroup>
-  <ItemGroup>
     <ClInclude Include="parser.h">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="parsertok.h">
+    <ClInclude Include="..\tok\tinytemplates.h">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="..\tok\tinytemplates.h">
+    <ClInclude Include="..\tok\tok.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="parsertokL.h">
       <Filter>Header Files</Filter>
     </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <None Include="nMakefile.msc" />
     <None Include="parsertok.L" />
+  </ItemGroup>
+  <ItemGroup>
+    <ClCompile Include="main.c">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="parser.c">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="parseroutput.c">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="parsersolve.c">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="timer.c">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="..\tok\tinytemplates.c">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="..\tok\tok.c">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="parserrestrictfa.c">
+      <Filter>Source Files</Filter>
+    </ClCompile>
   </ItemGroup>
 </Project>

@@ -4,7 +4,7 @@
         START      /<start>/
         EXTRA      /<extra>/
         ERROR      /<error>/
-        DISALLOW   /DISALLOW/
+        RESTRICT   /RESTRICT/
         PRECEDENCE /PRECEDENCE/
         REJECTABLE /REJECTABLE/
         TYPEDEFTOK /TYPEDEFTOK/
@@ -12,18 +12,24 @@
         RIGHTASSOC /RIGHT-ASSOCIATIVE/
         NONASSOC   /NON-ASSOCIATIVE/
         ID         /[[:alpha:]_][[:alnum:]_]*/
+        INT        /[[:digit:]]+/
         COLON      /:/
+		COMMA      /\,/
         SEMI       /;/
 push b  LBRACE     /\{/
         RBRACE     /\}/
         LBRKT      /\[/
         RBRKT      /\]/
-        ARROW      /-+>/
-        NOTARROW   /-+\/-+>/
+        AT         /@/
+        LT         /</
         GT         />/
         DOT        /\./
         STAR       /\*/
+        PLUS       /\+/
         VSEP       /|/
+        QUESTION   /\?/
+        LPAREN     /\(/
+        RPAREN     /\)/
 
 - section b
       = SQSTR    /'([^']|\\.|\\x[[:xdigit:]]+)*'/

@@ -19,14 +19,18 @@
     </ProjectConfiguration>
   </ItemGroup>
   <ItemGroup>
-    <ClCompile Include="main.cpp" />
-    <ClCompile Include="tokenizer.cpp" />
-  </ItemGroup>
-  <ItemGroup>
     <None Include="nMakefile.msc" />
   </ItemGroup>
   <ItemGroup>
+    <ClInclude Include="tinytemplates.h" />
+    <ClInclude Include="tok.h" />
     <ClInclude Include="tokenizer.h" />
+  </ItemGroup>
+  <ItemGroup>
+    <ClCompile Include="main.c" />
+    <ClCompile Include="tinytemplates.c" />
+    <ClCompile Include="tok.c" />
+    <ClCompile Include="tokenizer.c" />
   </ItemGroup>
   <PropertyGroup Label="Globals">
     <ProjectGuid>{414AD4A7-9769-427F-BAA9-3228E0ECFFEF}</ProjectGuid>

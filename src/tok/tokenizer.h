@@ -3,73 +3,89 @@
 
 #include <stdio.h>
 #include "tinytemplates.h"
+#ifndef __cplusplus
+#include <stdbool.h>
+#endif
 
-class TokStream {
-  char *m_buf;
+struct TokStream;
+typedef struct TokStream TokStream;
+
+void TokStream_init(TokStream *This, FILE *in, bool onstack);
+void TokStream_destroy(TokStream *This);
+bool TokStream_fill(TokStream *This);
+int TokStream_peekc(TokStream *This, int n /*= 0*/);
+bool TokStream_peekstr(TokStream *This, const char *s);
+int TokStream_readc(TokStream *This);
+void TokStream_discard(TokStream *This, int n /*=1*/);
+int TokStream_line(TokStream *This);
+int TokStream_col(TokStream *This);
+
+struct TokStream {
+  char *m_buf, *m_next;
   int m_buflen, m_buffill, m_bufpos, m_pos, m_line, m_col;
   FILE *m_in;
-
-  bool addc();
-
-public:
-  TokStream(FILE *in);
-  ~TokStream();
-  int peekc(int n = 0);
-  bool peekstr(const char *s);
-  int readc();
-  void discard(int n=1);
-  int line();
-  int col();
 };
 
-class ParseException
+struct ParseError;
+typedef struct ParseError ParseError;
+
+void setParseError(int line, int col, const String *err);
+bool getParseError(const ParseError **err);
+void clearParseError();
+
+struct ParseError
 {
-public:
-  int m_line, m_col;
-  String m_err;
-
-  ParseException(int line, int col, String err) : m_line(line), m_col(col), m_err(err) {}
+  int line, col;
+  String err;
 };
 
-class CharRange {
-public:
+struct CharRange;
+typedef struct CharRange CharRange;
+CharRange *CharRange_SetRange(CharRange *This, int low, int high);
+bool CharRange_ContainsChar(const CharRange *This, int i);
+bool CharRange_ContainsCharRange(const CharRange *This, const CharRange *rhs);
+bool CharRange_OverlapsRange(const CharRange *This, int low, int high);
+bool CharRange_LessThan(const CharRange *lhs, const CharRange *rhs);
+
+struct CharRange {
   int m_low, m_high;
-  CharRange();
-  CharRange(int low, int high);
-  bool contains(int i) const;
-  bool contains(const CharRange &rhs) const;
-  bool overlaps(int low, int high) const;
 };
 
-class CharSet {
-protected:
-  Vector<CharRange> m_ranges;
+struct CharSet;
+typedef struct CharSet CharSet;
 
-  int find(int c, bool &found) const;
-  int splitRec(int low, int high, int i);
-public:
-  typedef Vector<CharRange>::const_iterator iterator;
+void CharSet_init(CharSet *This, bool onstack);
+void CharSet_destroy(CharSet *This);
+bool CharSet_LessThan(const CharSet *lhs, const CharSet *rhs);
+bool CharSet_Equal(const CharSet *lhs, const CharSet *rhs);
+void CharSet_Assign(CharSet *lhs, const CharSet *rhs);
+bool CharSet_ContainsCharRange(const CharSet *This, const CharRange *range);
+void CharSet_clear(CharSet *This);
+bool CharSet_empty(const CharSet *This);
+void CharSet_addChar(CharSet *This, int i);
+void CharSet_addCharRange(CharSet *This, int low, int high);
+void CharSet_addCharSet(CharSet *This, const CharSet *rhs);
+void CharSet_splitRange(CharSet *This, int low, int high);
+int CharSet_splitRangeRecursive(CharSet *This, int low, int high, int i);
+void CharSet_splitCharSet(CharSet *This, const CharSet *rhs);
+void CharSet_negate(CharSet *This);
+int CharSet_size(const CharSet *This);
+const CharRange *CharSet_getRange(const CharSet *This, int i);
 
-  bool contains(const CharRange &range) const;
-  iterator begin() const;
-  iterator end() const;
-  void clear();
-  bool empty() const;
-  void addChar(int i);
-  void addCharRange(int low, int high);
-  void addCharset(const CharSet &rhs);
-  void split(int low, int high);
-  void split(const CharSet &rhs);
-  void negate();
-  bool operator!() const;
-  int size() const { return m_ranges.size(); }
+struct CharSet {
+  VectorAny /*CharRange*/ m_ranges;
 };
 
-class Transition {
-public:
+struct Transition;
+typedef struct Transition Transition;
+
+void Transition_init(Transition *This, bool onstack);
+Transition *Transition_SetFromTo(Transition *This, int from, int to);
+bool Transition_LessThan(const Transition *lhs, const Transition *rhs);
+bool Transition_Equal(const Transition *lhs, const Transition *rhs);
+
+struct Transition {
   int m_from, m_to;
-  Transition(int from, int to);
-  bool operator<(const Transition &rhs) const;
 };
 
 enum TokenAction {
@@ -78,87 +94,72 @@ enum TokenAction {
   ActionPop,
   ActionGoto
 };
+typedef enum TokenAction TokenAction;
 
-class Action {
-public:
+struct Action;
+typedef struct Action Action;
+
+struct Action {
   TokenAction m_action;
   int m_actionarg;
 };
 
-class Token {
-public:
+struct Token;
+typedef struct Token Token;
+
+void Token_init(Token *This, bool onstack);
+void Token_destroy(Token *This);
+bool Token_LessThan(const Token *lhs, const Token *rhs);
+bool Token_Equal(const Token *lhs, const Token *rhs);
+void Token_Assign(Token *lhs, const Token *rhs);
+
+struct Token {
   int m_token;
   bool m_isws;
   String m_name;
-  Map<int,Action> m_actions;  
-  Token() : m_token(-1), m_isws(false) {}
-  bool operator<(const Token &rhs) const { return m_token < rhs.m_token; }
+  MapAny /*<int,Action>*/ m_actions;
 };
 
-class VectorToken {
-  Token *m_p;
-  int m_size;
-  int m_capacity;
-public:
-  typedef const Token* const_iterator;
-  typedef Token* iterator;
-  iterator begin() { return m_p; }
-  iterator end() { return m_p+m_size; }
-  const_iterator begin() const { return m_p; }
-  const_iterator end() const { return m_p+m_size; }
-  bool empty() const { return m_size == 0; }
-  Token &operator[](size_t i) { return m_p[i]; }
-  const Token &operator[](size_t i) const { return m_p[i]; }
-  void clear() { m_size = 0; }
-  void push_back(const Token &value) {
-    m_p[m_size++] = value;
-  }
-  int size() const { return m_size; }
-};
+struct Nfa;
+typedef struct Nfa Nfa;
 
-class Nfa {
-protected:
+void Nfa_init(Nfa *This, bool onstack);
+void Nfa_setTokenDef(Nfa *This, const Token *tok);
+int Nfa_stateCount(const Nfa *This);
+int Nfa_addState(Nfa *This);
+void Nfa_addStartState(Nfa *This, int startstate);
+void Nfa_addEndState(Nfa *This, int endstate);
+void Nfa_addTransition(Nfa *This, int from, int to, int symbol);
+void Nfa_addTransitionCharRange(Nfa *This, int from, int to, const CharRange *range);
+void Nfa_addTransitionCharSet(Nfa *This, int from, int to, const CharSet *charset);
+void Nfa_addEmptyTransition(Nfa *This, int from, int to);
+bool Nfa_hasTokenDef(const Nfa *This, int token);
+void Nfa_setTokenDef(Nfa *This, const Token *tok);
+bool Nfa_setTokenAction(Nfa *This, int token, int section, TokenAction action, int actionarg);
+int Nfa_getSections(const Nfa *This);
+void Nfa_setSections(Nfa *This, int sections);
+const Token *Nfa_getTokenDef(const Nfa *This, int token);
+bool Nfa_stateHasToken(const Nfa *This, int state);
+int Nfa_getStateToken(const Nfa *This, int state);
+void Nfa_setStateToken(Nfa *This, int state, int token);
+void Nfa_clear(Nfa *This);
+void Nfa_closure(const Nfa *This, const MapAny /*<int,Set<int>>*/ *emptytransitions, SetAny /*<int>*/ *states);
+void Nfa_follow(const Nfa *This, const CharRange *range, const SetAny /*<int>*/ *states, SetAny /*<int>*/ *nextstates );
+void Nfa_stateTransitions(const Nfa *This, const SetAny /*<int>*/ *states, CharSet *transitions);
+bool Nfa_hasEndState(const Nfa *This, const SetAny /*<int>*/ *states);
+int Nfa_lowToken(const Nfa *This, const SetAny /*<int>*/ *states);
+
+
+
+struct Nfa {
   int m_nextState;
-  Set<int> m_startStates;
-  Set<int> m_endStates;
-  Map<Transition,CharSet> m_transitions;
-  Set<Transition> m_emptytransitions;
-  Map<int,int> m_state2token;
-  Map<int,Token> m_tokendefs;
+  SetAny /*<int>*/ m_startStates;
+  SetAny /*<int>*/ m_endStates;
+  MapAny /*<Transition,CharSet>*/ m_transitions;
+  SetAny /*<Transition>*/ m_emptytransitions;
+  MapAny /*<int,int>*/ m_state2token;
+  MapAny /*<int,Token>*/ m_tokendefs;
   int m_sections;
-
-public:
-  Nfa();
-  void addNfa(const Nfa &nfa);
-  int stateCount() const;
-  int addState();
-  void addStartState(int startstate);
-  void addEndState(int endstate);
-  void addTransition(int from, int to, int symbol);
-  void addTransition(int from, int to, const CharRange &range);
-  void addTransition(int from, int to, const CharSet &charset);
-  void addEmptyTransition(int from, int to);
-  bool stateHasToken(int state) const;
-  int getStateToken(int state) const;
-  void setStateToken(int state, int token);
-  bool hasTokenDef(int token) const;
-  Token getTokenDef(int token) const;
-  Vector<Token> getTokenDefs() const;
-  void setTokenDef(const Token &tok);
-  bool setTokenAction(int token, int section, TokenAction action, int actionarg);
-  int getSections() const;
-  void setSections(int sections);
-  void clear();
-  void closure(const Map<int,Set<int> > &emptytransitions, Set<int> &states) const;
-  void follow( const CharRange &range, const Set<int> &states, Set<int> &nextstates ) const;
-  void stateTransitions(const Set<int> &states, CharSet &transitions) const;
-  bool hasEndState(const Set<int> &states) const;
-  int lowToken(const Set<int> &states) const;
-  void toDfa(Nfa &dfa) const;
-
-  typedef Map<Transition,CharSet>::const_iterator const_iterator;
-  const_iterator begin() const { return m_transitions.begin(); }
-  const_iterator end() const { return m_transitions.end(); }
 };
 
 enum RxType {
@@ -167,40 +168,38 @@ enum RxType {
   RxType_BinaryOp = 2,
   RxType_Many = 3
 };
+typedef enum RxType RxType;
 
 enum BinaryOp {
   BinaryOp_None = 0,
   BinaryOp_Or = 1,
   BinaryOp_Concat = 2
 };
+typedef enum BinaryOp BinaryOp;
 
-class Rx {
+struct Rx;
+typedef struct Rx Rx;
+
+void Rx_init(Rx *This, bool onstack);
+Rx *Rx_new();
+void Rx_AsC(Rx *This, char c);
+void Rx_AsCharSet(Rx *This, const CharSet *charset);
+void Rx_AsBinaryOp(Rx *This, BinaryOp op,Rx *lhs, Rx *rhs);
+void Rx_AsRxCount(Rx *This, Rx *rx, int count);
+void Rx_AsRxCountRange(Rx *This, Rx *rx, int low, int high);
+Rx *Rx_clone(const Rx *This);
+int Rx_addToNfa(const Rx *This, Nfa *nfa, int startState);
+Nfa *Rx_toNfa(const Rx *This);
+
+struct Rx {
   RxType m_t;
   BinaryOp m_op;
   CharSet m_charset;
   Rx *m_lhs, *m_rhs;
   int m_low, m_high;
-
-  void init();
-
-public:
-  Rx();
-  Rx(char c);
-  Rx(const CharSet &charset);
-  Rx(BinaryOp op,Rx *lhs, Rx *rhs);
-  Rx(Rx *rx, int count);
-  Rx(Rx *rx, int low, int high);
-  Rx *clone();
-  int addToNfa(Nfa &nfa, int startState);
-  Nfa *toNfa();
 };
 
-enum OutputLanguage {
-  LanguageJs,
-  LanguageC
-};
-
-Nfa *ParseTokenizerFile(TokStream &s);
-void OutputTokenizerSource(FILE *out, const Nfa &dfa, OutputLanguage language);
+Nfa *ParseTokenizerFile(TokStream *s);
+void OutputTokenizerSource(FILE *out, const Nfa *dfa, const char *prefix);
 
 #endif /* __tokenizer_h */

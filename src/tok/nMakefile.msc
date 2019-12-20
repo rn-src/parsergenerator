@@ -1,19 +1,24 @@
 # To build
 # start visual studio command line prompt
 # nmake -f nMakefile.msc
+FLAGS=/Zi /Od /EHsc /DWIN32 /MD
+#FLAGS=/O1 /EHsc /DWIN32 /MD
 
 all: tokenizer.exe
 
-tokenizer.exe: tokenizer.obj main.obj
+tokenizer.exe: tokenizer.obj main.obj tinytemplates.obj
 	@echo linking...
-#	@link /nologo /SUBSYSTEM:CONSOLE /OUT:tokenizer.exe tokenizer.obj main.obj
-	@link /nologo /DEBUG /SUBSYSTEM:CONSOLE /OUT:tokenizer.exe tokenizer.obj main.obj
+	@link /nologo /DEBUG /SUBSYSTEM:CONSOLE /OUT:tokenizer.exe tokenizer.obj tinytemplates.obj main.obj
+#	@link /nologo /SUBSYSTEM:CONSOLE /OUT:tokenizer.exe tokenizer.obj tinytemplates.obj main.obj
 
-tokenizer.obj: tokenizer.cpp tokenizer.h tinytemplates.h
-	@cl /nologo /c /Zi /Od /EHsc /DWIN32 tokenizer.cpp
+tinytemplates.obj: tinytemplates.c tinytemplates.h
+	@cl /nologo /c $(FLAGS) tinytemplates.c
 
-main.obj: main.cpp tokenizer.h tinytemplates.h
-	@cl /nologo /c /Zi /Od /EHsc /DWIN32 main.cpp
+tokenizer.obj: tokenizer.c tokenizer.h tinytemplates.h
+	@cl /nologo /c $(FLAGS) tokenizer.c
+
+main.obj: main.c tokenizer.h tinytemplates.h
+	@cl /nologo /c $(FLAGS) main.c
 
 clean:
 	@-del tokenizer.exe > NUL 2>&1

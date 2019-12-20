@@ -19,20 +19,24 @@
     </ProjectConfiguration>
   </ItemGroup>
   <ItemGroup>
-    <ClCompile Include="main.cpp" />
-    <ClCompile Include="parser.cpp" />
-    <ClCompile Include="parserforbidauto.cpp" />
-    <ClCompile Include="parseroutput.cpp" />
-    <ClCompile Include="parsersolve.cpp" />
-  </ItemGroup>
-  <ItemGroup>
     <ClInclude Include="..\tok\tinytemplates.h" />
+    <ClInclude Include="..\tok\tok.h" />
     <ClInclude Include="parser.h" />
-    <ClInclude Include="parsertok.h" />
+    <ClInclude Include="parsertokL.h" />
   </ItemGroup>
   <ItemGroup>
     <None Include="nMakefile.msc" />
     <None Include="parsertok.L" />
+  </ItemGroup>
+  <ItemGroup>
+    <ClCompile Include="..\tok\tinytemplates.c" />
+    <ClCompile Include="..\tok\tok.c" />
+    <ClCompile Include="main.c" />
+    <ClCompile Include="parser.c" />
+    <ClCompile Include="parseroutput.c" />
+    <ClCompile Include="parserrestrictfa.c" />
+    <ClCompile Include="parsersolve.c" />
+    <ClCompile Include="timer.c" />
   </ItemGroup>
   <PropertyGroup Label="Globals">
     <ProjectGuid>{44803BDC-8250-43EB-A9B3-C9E4CA4EA24B}</ProjectGuid>

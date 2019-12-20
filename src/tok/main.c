@@ -3,13 +3,11 @@
 
 int main(int argc, char *argv[])
 {
-  OutputLanguage language = LanguageC;
+  const char *prefix = "prefix";
   for( int i = 1; i < argc; ++i ) {
     if( argv[i][0] == '-' ) {
-      if( strcmp(argv[i],"--js") == 0 ) {
-        language = LanguageJs;
-      } else if( strcmp(argv[i],"--c") == 0 ) {
-        language = LanguageC;
+      if (strncmp(argv[i],"--prefix=",9) == 0) {
+        prefix = argv[i] + 9;
       }
     }
   }
@@ -33,22 +31,31 @@ int main(int argc, char *argv[])
     }
     strcat(foutname,".h");
 
-    try {
-      TokStream s(fin);
-      Nfa *dfa = ParseTokenizerFile(s);
-      FILE *fout = fopen(foutname,"w");
+    ParseError *pe;
+    TokStream s;
+    Scope_Push();
+    TokStream_init(&s,fin,true);
+    int ret = 0;
+    Scope_SetJmp(ret);
+    if( ! ret ) {
+      Nfa *dfa = ParseTokenizerFile(&s);
+      fout = fopen(foutname,"w");
       if( ! fout ) {
         fprintf(stderr, "Unable to open %s for writing\n", foutname);
         fclose(fin);
         continue;
       }
-      OutputTokenizerSource(fout,*dfa,language);
-    } catch(ParseException pe) {
-      fprintf(stderr, "Parse Error %s(%d:%d) : %s\n", fname, pe.m_line, pe.m_col, pe.m_err.c_str());
+      OutputTokenizerSource(fout,dfa,prefix);
+    } else if( getParseError(&pe) ) {
+      fprintf(stderr, "Parse Error %s(%d:%d) : %s\n", fname, pe->line, pe->col, String_Chars(&pe->err));
+      clearParseError();
+    } else {
+      fputs("Unknown Error\n", stderr);
     }
     fclose(fin);
     if( fout )
       fclose(fout);
+    Scope_Pop();
   }
   return 0;
 }

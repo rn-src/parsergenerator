@@ -6,9 +6,28 @@
 #define EOF_TOK (-1)
 #define MARKER_DOT (999999)
 
-using namespace std;
-class ParserDef;
-class Production;
+struct ProductionRegex;
+typedef struct ProductionRegex ProductionRegex;
+struct ParserDef;
+typedef struct ParserDef ParserDef;
+struct Production;
+typedef struct Production Production;
+struct RestrictAutomata;
+typedef struct RestrictAutomata RestrictAutomata;
+
+struct ParseError;
+typedef struct ParseError ParseError;
+
+void setParseError(int line, int col, const String *err);
+bool getParseError(const ParseError **err);
+void clearParseError();
+
+struct ParseError
+{
+  int line, col;
+  String file;
+  String err;
+};
 
 enum SymbolType {
   SymbolTypeUnknown,
@@ -16,89 +35,84 @@ enum SymbolType {
   SymbolTypeNonterminal,
   SymbolTypeNonterminalProduction
 };
+typedef enum SymbolType SymbolType;
 
+struct SymbolDef;
+typedef struct SymbolDef SymbolDef;
 
-class SymbolDef {
-public:
+void SymbolDef_init(SymbolDef *This, bool onstack);
+void SymbolDef_destroy(SymbolDef *This);
+bool SymbolDef_LessThan(const SymbolDef *lhs, const SymbolDef *rhs);
+bool SymbolDef_Equal(const SymbolDef *lhs, const SymbolDef *rhs);
+void SymbolDef_Assign(SymbolDef *lhs, const SymbolDef *rhs);
+SymbolDef *SymbolDef_setinfo(SymbolDef *This, int tokid, const String *name, SymbolType symbolType);
+
+struct SymbolDef {
   int m_tokid;
   String m_name;
   SymbolType m_symboltype;
   String m_semantictype;
   Production *m_p;
-  SymbolDef() : m_tokid(-1), m_symboltype(SymbolTypeUnknown), m_p(0) {}
-  SymbolDef(int tokid, const String &name, SymbolType symboltype) : m_tokid(tokid), m_name(name), m_symboltype(symboltype), m_p(0) {}
 };
 
 enum ActionType {
+  ActionTypeUnknown,
   ActionTypeSrc,
   ActionTypeDollarDollar,
   ActionTypeDollarNumber
 };
- 
+typedef enum ActionType ActionType;
+
+struct ActionItem;
+typedef struct ActionItem ActionItem;
+
+void ActionItem_init(ActionItem *This, bool onstack);
+void ActionItem_destroy(ActionItem *This); 
+void ActionItem_Assign(ActionItem *lhs, const ActionItem *rhs);
+
 struct ActionItem {
   ActionType m_actiontype;
   String m_str;
   int m_dollarnum;
 };
 
-class Production {
-public:
+struct Production;
+typedef struct Production Production;
+
+void Production_init(Production *This, bool rejectable, int nt, const VectorAny /*<int>*/ *symbols, const VectorAny /*<ActionItem>*/ *action, int lineno, const String *filename, bool onstack);
+//void Production_init(Production *This);
+void Production_destroy(Production *This);
+//void Production_setInfo(Production *This, bool rejectable, int nt, const VectorAny /*<int>*/ *symbols, const VectorAny /*<ActionItem>*/ *action, int lineno, const String *filename);
+Production *Production_clone(const Production *This);
+bool Production_Equal(const Production *lhs, const Production *rhs);
+bool Production_NotEqual(const Production *lhs, const Production *rhs);
+bool Production_LessThan(const Production *lhs, const Production *rhs);
+void Production_print(const Production *This, FILE *out, const MapAny /*<int,SymbolDef>*/ *tokens, int pos /*=-1*/, int restrictstate /*=0*/);
+// for use in qsort
+int Production_CompareId(const void *lhs, const void *rhs);
+
+struct Production {
   bool m_rejectable;
   int m_nt;
   int m_pid;
-  Vector<int> m_symbols;
-  Vector<ActionItem> m_action;
+  VectorAny /*<int>*/ m_symbols;
+  VectorAny /*<ActionItem>*/ m_action;
   int m_lineno;
   String m_filename;
-
-  Production(bool rejectable, int nt, const Vector<int> &symbols, const Vector<ActionItem> &action, int lineno, String filename);
-  Production *clone();
-  void print(FILE *out, const Map<int,SymbolDef> &tokens, int pos=-1, int forbidstate=0) const;
-  bool operator<(const Production &rhs) const {
-    if( m_pid < rhs.m_pid )
-      return true;
-    if( m_pid > rhs.m_pid )
-      return false;
-    if( m_pid != -1 && m_pid == rhs.m_pid )
-      return false;
-    if( m_nt < rhs.m_nt )
-      return true;
-    if( m_nt > rhs.m_nt )
-      return false;
-    if( m_symbols < rhs.m_symbols )
-      return true;
-    return false;
-  }  
-
-  // for use in qsort
-  static int cmpprdid(const void *lhs, const void *rhs);
 };
 
-class ProductionState {
-public:
-  Production *m_p;
+struct ProductionState;
+typedef struct ProductionState ProductionState;
+
+ProductionState *ProductionState_set(ProductionState *This, const Production *p, int pos, int restrictstate);
+bool ProductionState_LessThan(const ProductionState *lhs, const ProductionState *rhs);
+bool ProductionState_Equal(const ProductionState *lhs, const ProductionState *rhs);
+int ProductionState_symbol(const ProductionState *This);
+
+struct ProductionState {
+  const Production *m_p;
   int m_pos;
-  int m_forbidstate;
-  ProductionState(Production *p, int pos, int forbidstate) : m_p(p), m_pos(pos), m_forbidstate(forbidstate) {}
-  ProductionState(const ProductionState &rhs) : m_p(rhs.m_p), m_pos(rhs.m_pos), m_forbidstate(rhs.m_forbidstate) {}
-  bool operator<(const ProductionState &rhs) const {
-    if( *m_p < *rhs.m_p )
-      return true;
-    else if( *rhs.m_p < *m_p )
-      return false;
-    if( m_forbidstate < rhs.m_forbidstate )
-      return true;
-    else if( rhs.m_forbidstate < m_forbidstate )
-      return false;
-    if( m_pos < rhs.m_pos )
-      return true;
-    return false;
-  }
-  int symbol() const {
-    if( m_pos >= m_p->m_symbols.size() )
-      return -1;
-    return m_p->m_symbols[m_pos];
-  }
+  int m_restrictstate;
 };
 
 enum Assoc {
@@ -106,261 +120,291 @@ enum Assoc {
   AssocRight,
   AssocNon
 };
+typedef enum Assoc Assoc;
 
+struct ProductionDescriptor;
+typedef struct ProductionDescriptor ProductionDescriptor;
 
-class ProductionDescriptor {
-protected:
-  Vector<int> m_symbols;
+void ProductionDescriptor_init(ProductionDescriptor *This, bool onstack);
+void ProductionDescriptor_destroy(ProductionDescriptor *This);
+ProductionDescriptor *ProductionDescriptor_setinfo(ProductionDescriptor *This, int nt, const VectorAny /*<int>*/ *symbols);
+void ProductionDescriptor_setInfoWithDots(ProductionDescriptor *This, int nt, const VectorAny /*<int>*/ *symbols, int dots, int dotcnt);
+bool ProductionDescriptor_hasDotAt(const ProductionDescriptor *This, int pos);
+bool ProductionDescriptor_matchesProduction(const ProductionDescriptor *This, const Production *p);
+bool ProductionDescriptor_matchesProductionAndPositionconst (ProductionDescriptor *This, const Production *p, int pos);
+// Check if, ignoring dots, the productions are the same
+bool ProductionDescriptor_hasSameProductionAs(const ProductionDescriptor *This, const ProductionDescriptor *rhs);
+// Add dots from rhs to this descriptor.  Fail if not same production.
+bool ProductionDescriptor_addDotsFrom(ProductionDescriptor *This, const ProductionDescriptor *rhs);
+void ProductionDescriptor_addDots(ProductionDescriptor *This, int dots);
+void ProductionDescriptor_removeDots(ProductionDescriptor *This, int dots);
+int ProductionDescriptor_appearancesOf(const ProductionDescriptor *This, int sym, int *at);
+bool ProductionDescriptor_LessThan(const ProductionDescriptor *lhs, const ProductionDescriptor *rhs);
+void ProductionDescriptor_Assign(ProductionDescriptor *lhs, const ProductionDescriptor *rhs);
+ProductionDescriptor *ProductionDescriptor_clone(const ProductionDescriptor *This);
+void ProductionDescriptor_UnDottedProductionDescriptor(const ProductionDescriptor *This, ProductionDescriptor *out);
+void ProductionDescriptor_DottedProductionDescriptor(const ProductionDescriptor *This, ProductionDescriptor *out, int nt, Assoc assoc);
+void ProductionDescriptor_symbolsAtDots(const ProductionDescriptor *This, VectorAny /*<int>*/ *symbols);
+bool ProductionDescriptor_Equal(const ProductionDescriptor *lhs, const ProductionDescriptor *rhs);
+bool ProductionDescriptor_NotEqual(const ProductionDescriptor *lhs, const ProductionDescriptor *rhs);
+void ProductionDescriptor_print(const ProductionDescriptor *This, FILE *out, const MapAny /*<int,SymbolDef>*/ *tokens);
+
+struct ProductionDescriptor {
+  VectorAny /*<int>*/ m_symbols;
   int m_dots;
   int m_dotcnt;
-  ProductionDescriptor(int nt, const Vector<int> &symbols, int dots, int dotcnt);
-  bool hasDotAt(int pos) const;
-public:
   int m_nt;
-  ProductionDescriptor() {}
-  ProductionDescriptor(int nt, const Vector<int> &symbols);
-  bool matchesProduction(const Production *p) const;
-  bool matchesProductionAndPosition(const Production *p, int pos) const;
-  // Check if, ignoring dots, the productions are the same
-  bool hasSameProductionAs(const ProductionDescriptor &rhs) const;
-  // Add dots from rhs to this descriptor.  Fail if not same production.
-  bool addDotsFrom(const ProductionDescriptor &rhs);
-  void addDots(int dots);
-  void removeDots(int dots);
-  int appearancesOf(int sym, int &at) const;
-  bool operator<(const ProductionDescriptor &rhs) const;
-  ProductionDescriptor *clone() const;
-  ProductionDescriptor UnDottedProductionDescriptor() const;
-  ProductionDescriptor DottedProductionDescriptor(int nt, Assoc assoc) const;
-  Vector<int> symbolsAtDots() const;
-  bool operator==(const ProductionDescriptor &rhs) const {
-    return m_nt == rhs.m_nt && m_dots == rhs.m_dots && m_dotcnt == rhs.m_dotcnt && m_symbols == rhs.m_symbols;
-  }
-  bool operator!=(const ProductionDescriptor &rhs) const {
-    return ! operator==(rhs);
-  }
-  void print(FILE *out, const Map<int,SymbolDef> &tokens) const;
 };
 
-class ProductionDescriptors : public Set<ProductionDescriptor> {
-public:
-  void consolidateRules();
-  ProductionDescriptors *clone() const;
-  ProductionDescriptors *DottedProductionDescriptors(int nt, Assoc assoc) const;
-  ProductionDescriptors *UnDottedProductionDescriptors() const;
+struct ProductionDescriptors;
+typedef struct ProductionDescriptors ProductionDescriptors;
 
-  bool operator==(const ProductionDescriptors &rhs) const {
-    return Set<ProductionDescriptor>::operator==(rhs);
-  }
-  bool operator!=(const ProductionDescriptors &rhs) const {
-    return ! operator==(rhs);
-  }
-  bool matchesProduction(const Production *lhs) const {
-    for( const_iterator c = begin(), e = end(); c != e; ++c )
-     if( c->matchesProduction(lhs) )
-       return true;
-    return false;
-  }
-  bool matchesProductionAndPosition(const Production *lhs, int pos) const {
-    for( const_iterator c = begin(), e = end(); c != e; ++c )
-     if( c->matchesProductionAndPosition(lhs,pos) )
-       return true;
-    return false;
-  }
-  void trifrucate(ProductionDescriptors &rhs, ProductionDescriptors &overlap);
-  void print(FILE *out, const Map<int,SymbolDef> &tokens) const;
+void ProductionDescriptors_init(ProductionDescriptors *This, bool onstack);
+void ProductionDescriptors_destroy(ProductionDescriptors *This);
+ProductionDescriptors *ProductionDescriptors_UnDottedProductionDescriptors(const ProductionDescriptors *This, ProductionDescriptors *psundottedOut);
+ProductionRegex *ProductionDescriptors_ProductionRegex(const ProductionDescriptors *This, Assoc assoc);
+ProductionDescriptors *ProductionDescriptors_clone(const ProductionDescriptors *This);
+void ProductionDescriptors_print(const ProductionDescriptors *This, FILE *out, const MapAny /*<int,SymbolDef>*/ *tokens);
+bool ProductionDescriptors_LessThan(const ProductionDescriptors *lhs, const ProductionDescriptors *rhs);
+bool ProductionDescriptors_Equal(const ProductionDescriptors *lhs, const ProductionDescriptors *rhs);
+bool ProductionDescriptors_NotEqual(const ProductionDescriptors *lhs, const ProductionDescriptors *rhs);
+void ProductionDescriptors_Assign(ProductionDescriptors *lhs, const ProductionDescriptors *rhs);
+bool ProductionDescriptors_matchesProduction(const ProductionDescriptors *This, const Production *lhs);
+bool ProductionDescriptors_matchesProductionAndPosition(const ProductionDescriptors *This, const Production *lhs, int pos);
+//#define ProductionDescriptors_getByIndex(This,i) SetAny_getByIndexT(&((This)->m_productionDescriptors),i,ProductionDescriptor);
+#define ProductionDescriptors_getByIndexConst(This,i) SetAny_getByIndexConstT(&((This)->m_productionDescriptors),i,ProductionDescriptor)
+#define ProductionDescriptors_insert(This,p,pfound) SetAny_insert(&((This)->m_productionDescriptors),p,pfound)
+#define ProductionDescriptors_insertMany(This,p,count) SetAny_insertMany(&((This)->m_productionDescriptors),p,count)
+#define ProductionDescriptors_ptr(This) SetAny_ptr(&((This)->m_productionDescriptors))
+#define ProductionDescriptors_ptrConst(This) SetAny_ptrConst(&((This)->m_productionDescriptors))
+#define ProductionDescriptors_size(This) SetAny_size(&((This)->m_productionDescriptors))
+
+struct ProductionDescriptors {
+  SetAny /*<ProductionDescriptor>*/ m_productionDescriptors;
 };
 
-class PrecedenceRule : public Vector<ProductionDescriptors*> {
-public:
-  void print(FILE *out, const Map<int,SymbolDef> &tokens) const;
+struct PrecedenceRule;
+typedef struct PrecedenceRule PrecedenceRule;
+
+void PrecedenceRule_init(PrecedenceRule *This, bool onstack);
+void PrecedenceRule_destroy(PrecedenceRule *This);
+void PrecedenceRule_print(const PrecedenceRule *This, FILE *out, const MapAny /*<int,SymbolDef>*/ *tokens);
+#define PrecedenceRule_size(This) VectorAny_size(This)
+#define PrecedenceRule_ArrayOp(This,i) VectorAny_ArrayOpT(&This->m_productionDescriptors,i,ProductionDescriptors*)
+#define PrecedenceRule_ArrayOpConst(This,i) VectorAny_ArrayOpConstT(&This->m_productionDescriptors,i,ProductionDescriptors*)
+void PrecedenceRule_push_back(PrecedenceRule *This, ProductionDescriptors *part);
+
+struct PrecedenceRule {
+  VectorAny /*<ProductionDescriptors*>*/ m_productionDescriptors;
 };
 
-class DisallowProductionDescriptors {
-public:
-  ProductionDescriptors *m_descriptors;
-  bool m_star;
-  bool operator==(const DisallowProductionDescriptors &rhs) const {
-    return m_star == rhs.m_star && *m_descriptors == *rhs.m_descriptors;
-  }
-  bool operator!=(const DisallowProductionDescriptors &rhs) const {
-    return ! operator==(rhs);
-  }
-  void print(FILE *out, const Map<int,SymbolDef> &tokens) const;
+enum RxType {
+  RxType_None = 0,
+  RxType_Production = 1,
+  RxType_BinaryOp = 2,
+  RxType_Many = 3
+};
+typedef enum RxType RxType;
+
+enum BinaryOp {
+  BinaryOp_None = 0,
+  BinaryOp_Or = 1,
+  BinaryOp_Concat = 2
+};
+typedef enum BinaryOp BinaryOp;
+
+void ProductionRegex_init(ProductionRegex *This, bool onstack);
+void ProductionRegex_destroy(ProductionRegex *This);
+int RestrictRegex_addToNfa(ProductionRegex *This, RestrictAutomata *nrestrict, int startState);
+void ProductionRegex_print(ProductionRegex *This, FILE *out, const MapAny /*<int,SymbolDef>*/ *tokens);
+
+struct ProductionRegex {
+  RxType m_t;
+  BinaryOp m_op;
+  ProductionDescriptor *m_pd;
+  ProductionRegex *m_lhs, *m_rhs;
+  int m_low, m_high;
+  bool m_paren;
 };
 
-class DisallowRule {
-public:
-  ProductionDescriptors *m_lead;
-  Vector<DisallowProductionDescriptors*> m_intermediates;
-  ProductionDescriptors *m_disallowed;
-  void consolidateRules();
-  void print(FILE *out, const Map<int,SymbolDef> &tokens) const;
+struct RestrictRule;
+typedef struct RestrictRule RestrictRule;
+
+void RestrictRule_print(const RestrictRule *This, FILE *out, const MapAny /*<int,SymbolDef>*/ *tokens);
+
+struct RestrictRule {
+  ProductionRegex *m_rx;
+  ProductionDescriptors *m_restricted;
+  bool m_auto;
 };
 
-class AssociativeRule {
-public:
+struct AssociativeRule;
+typedef struct AssociativeRule AssociativeRule;
+
+AssociativeRule *AssociativeRule_set(AssociativeRule *This, Assoc assoc, ProductionDescriptors *pds);
+void AssociativeRule_print(const AssociativeRule *This, FILE *out, const MapAny /*<int,SymbolDef>*/ *tokens);
+
+struct AssociativeRule {
   Assoc m_assoc;
   ProductionDescriptors *m_pds;
-  AssociativeRule(Assoc assoc, ProductionDescriptors *pds) : m_assoc(assoc), m_pds(pds) {}
-  void print(FILE *out, const Map<int,SymbolDef> &tokens) const;
 };
 
-class ForbidDescriptor {
-public:
-  String m_name;
-  ProductionDescriptors *m_positions;
-  ProductionDescriptors *m_forbidden;
+void RestrictAutomata_init(RestrictAutomata *This, bool onstack);
+void RestrictAutomata_destroy(RestrictAutomata *This);
+void RestrictAutomata_Assign(RestrictAutomata *lhs, const RestrictAutomata *rhs);
+int RestrictAutomata_newstate(RestrictAutomata *This);
+int RestrictAutomata_nstates(const RestrictAutomata *This);
+void RestrictAutomata_addStartState(RestrictAutomata *This, int stateNo);
+void RestrictAutomata_addEndState(RestrictAutomata *This, int stateNo);
+void RestrictAutomata_addEmptyTransition(RestrictAutomata *This, int s0, int s1);
+void RestrictAutomata_addTransition(RestrictAutomata *This, int s0, int s1, const ProductionDescriptor *pd);
+void RestrictAutomata_addRestriction(RestrictAutomata *This, int stateNo, const ProductionDescriptor *restricted);
+void RestrictAutomata_addRestrictions(RestrictAutomata *This, int stateNo, const ProductionDescriptors *restricted);
+// Find *the* state after the current state, assuming this is a deterministic automata
+int RestrictAutomata_nextState(const RestrictAutomata *This, const Production *curp, int pos, int stateno, const Production *p);
+bool RestrictAutomata_isRestricted(const RestrictAutomata *This, const Production *p, int pos, int restrictstate, const Production *ptest);
+void RestrictAutomata_closure(const RestrictAutomata *This, SetAny /*<int>*/ *multistate);
+void RestrictAutomata_RestrictsFromStates(const RestrictAutomata *This, const SetAny /*<int>*/ *stateset, ProductionDescriptors *restricts);
+void RestrictAutomata_SymbolsFromStates(const RestrictAutomata *This, const SetAny /*<int>*/ *stateset, ProductionDescriptors *symbols);
+void RestrictAutomata_toDeterministicRestrictAutomata(const RestrictAutomata *This, RestrictAutomata *out);
+void RestrictAutomata_print(const RestrictAutomata *This, FILE *out, const MapAny /*<int,SymbolDef>*/ *tokens);
 
-  ForbidDescriptor();
-  ForbidDescriptor(const String &name, ProductionDescriptors *positions, ProductionDescriptors *forbidden);
-  ForbidDescriptor(const ForbidDescriptor &rhs);
-  bool forbids(const Production *positionProduction, int pos, const Production *expandProduction) const;
-  bool operator<(const ForbidDescriptor &rhs) const;
-  void print(FILE *out, const Map<int,SymbolDef> &tokens) const;
-};
-
-typedef Set<ForbidDescriptor> ForbidDescriptors;
-
-typedef Map<int,ForbidDescriptors> StateToForbids;
-
-class ForbidSub {
-public:
-  const ProductionDescriptors *m_lhs, *m_rhs;
-  ForbidSub();
-  ForbidSub(const ProductionDescriptors *lhs, const ProductionDescriptors *rhs);
-  ForbidSub(const ForbidSub &rhs);
-  bool operator<(const ForbidSub &rhs) const;
-  bool matches(const Production *lhs, int pos, const Production *rhs) const;
-  void print(FILE *out, const Map<int,SymbolDef> &tokens) const;
-};
-
-class ForbidAutomata {
+struct RestrictAutomata {
   int m_nextstate;
   int m_nxtnameidx;
-  int m_q0;
-  StateToForbids m_statetoforbids;
-  Map< int,Set<int> > m_emptytransitions;
-  Map< int,Map< ForbidSub,Set<int> > > m_transitions;
-public:
-  ForbidAutomata();
-  int newstate();
-  int nstates() const;
-  void addEmptyTransition(int s0, int s1);
-  void addTransition(int s0, int s1, const ProductionDescriptors *subLhs, const ProductionDescriptors *subRhs);
-  // Find *the* state after the current state, assuming this is a deterministic automata
-  int nextState(const Production *curp, int pos, int stateno, const Production *p) const;
-  bool isForbidden(const Production *p, int pos, int forbidstate, const Production *ptest) const;
-  void addRule(const DisallowRule *rule);
-  void closure(Set<int> &multistate) const;
-  void ForbidsFromStates(const Set<int> &stateset, ForbidDescriptors &forbids) const;
-  void SymbolsFromStates(const Set<int> &stateset, Set<ForbidSub> &symbols) const;
-  void toDeterministicForbidAutomata(ForbidAutomata &out) const;
-  void print(FILE *out, const Map<int,SymbolDef> &tokens) const;
+  SetAny /* <int> */ m_startStates;
+  SetAny /* <int> */ m_endStates;
+  MapAny /* <int,Set<int> >*/ m_emptytransitions;
+  MapAny /* <int,Map< ProductionDescriptor, Set<int> > >*/ m_transitions;
+  MapAny /* <int,ProducctionDescriptors> */ m_statetorestricts;
 };
 
-typedef  Pair<Production*,int>  productionandforbidstate_t;
+struct productionandrestrictstate_t;
+typedef struct productionandrestrictstate_t productionandrestrictstate_t;
 
-class ProductionsAtKey {
-public:
+productionandrestrictstate_t *productionandrestrictstate_t_set(productionandrestrictstate_t *This, const Production *production, int restrictstate);
+
+struct productionandrestrictstate_t {
+  const Production *production;
+  int restrictstate;
+};
+
+struct ProductionsAtKey;
+typedef struct ProductionsAtKey ProductionsAtKey;
+
+bool ProductionsAtKey_LessThan(const ProductionsAtKey *lhs, const ProductionsAtKey *rhs);
+bool ProductionsAtKey_Equal(const ProductionsAtKey *lhs, const ProductionsAtKey *rhs);
+bool ProductionsAtKey_NotEqual(const ProductionsAtKey *lhs, const ProductionsAtKey *rhs);
+
+struct ProductionsAtKey {
   const Production *m_p;
   int m_pos;
-  int m_forbidstate;
-  bool operator<(const ProductionsAtKey &rhs) const {
-    if( m_p < rhs.m_p )
-      return true;
-    else if( m_p > rhs.m_p )
-      return false;
-    if( m_pos < rhs.m_pos )
-      return true;
-    else if( m_pos > rhs.m_pos )
-      return false;
-    if( m_forbidstate < rhs.m_forbidstate )
-      return true;
-     return false;
-  }
-  bool operator==(const ProductionsAtKey &rhs) const {
-    return m_p == rhs.m_p && m_pos == rhs.m_pos && m_forbidstate == rhs.m_forbidstate;
-  }
+  int m_restrictstate;
 };
 
-class ParserDef {
+struct ParserDef;
+typedef struct ParserDef ParserDef;
+
+void ParserDef_init(ParserDef *This, FILE *vout, int verbosity, bool onstack);
+void ParserDef_destroy(ParserDef *This);
+void ParserDef_addProduction(ParserDef *This, Tokenizer *toks, Production *p);
+bool ParserDef_addProductionWithCheck(ParserDef *This, Production *p);
+int ParserDef_findSymbolId(const ParserDef *This, const String *s);
+int ParserDef_addSymbolId(ParserDef *This, const String *s, SymbolType stype);
+int ParserDef_findOrAddSymbolId(ParserDef *This, Tokenizer *toks, const String *s, SymbolType stype);
+int ParserDef_getStartNt(const ParserDef *This);
+int ParserDef_getExtraNt(const ParserDef *This);
+Production *ParserDef_getStartProduction(ParserDef *This);
+const Production *ParserDef_getStartProductionConst(const ParserDef *This);
+const VectorAny /*<productionandrestrictstate_t>*/ *ParserDef_productionsAt(const ParserDef *This, const Production *p, int pos, int restrictstate, MapAny /*< ProductionsAtKey,Vector<productionandrestrictstate_t> >*/ *productionsAtResults);
+void ParserDef_computeRestrictAutomata(ParserDef *This);
+SymbolType ParserDef_getSymbolType(const ParserDef *This, int tok);
+void ParserDef_print(const ParserDef *This, FILE *out);
+void ParserDef_addRestrictRule(ParserDef *This, RestrictRule *rule);
+void ParserDef_expandAssocRules(ParserDef *This);
+void ParserDef_expandPrecRules(ParserDef *This);
+
+struct ParserDef {
   int m_nextsymbolid;
   Production *m_startProduction;
   FILE *m_vout;
   int m_verbosity;
-public:
-  ParserDef(FILE *vout, int verbosity) : m_nextsymbolid(0), m_startProduction(0), m_vout(vout), m_verbosity(verbosity) {}
-  Map<String,int> m_tokens;
-  Map<int,SymbolDef> m_tokdefs;
-  Vector<Production*> m_productions;
-  Vector<DisallowRule*> m_disallowrules;
-  Vector<AssociativeRule*> m_assocrules;
-  Vector<PrecedenceRule*> m_precrules;
-  ForbidAutomata m_forbid;
-  void addProduction(Tokenizer &toks, Production *p);
-  bool addProduction(Production *p);
-  int findSymbolId(const String &s) const;
-  int addSymbolId(const String &s, SymbolType stype);
-  int findOrAddSymbolId(Tokenizer &toks, const String &s, SymbolType stype);
-  int getStartNt() const;
-  int getExtraNt() const;
-  Production *getStartProduction() const { return m_startProduction; }
-  const Vector<productionandforbidstate_t> &productionsAt(const Production *p, int pos, int forbidstate, Map< ProductionsAtKey,Vector<productionandforbidstate_t> > &productionsAtResults) const;
-  void computeForbidAutomata();
-  SymbolType getSymbolType(int tok) const;
-  void print(FILE *out) const;
-  void addDisallowRule(DisallowRule *rule);
-private:
-  void expandAssocRules();
-  void expandPrecRules();
-  void combineRules();
+  MapAny /*<String,int>*/ m_tokens;
+  MapAny /*<int,SymbolDef>*/ m_tokdefs;
+  VectorAny /*<Production*>*/ m_productions;
+  VectorAny /*<RestrictRule*>*/ m_restrictrules;
+  VectorAny /*<AssociativeRule*>*/ m_assocrules;
+  VectorAny /*<PrecedenceRule*>*/ m_precrules;
+  RestrictAutomata m_restrict;
 };
 
-class ParserError {
-public:
+struct ParserError;
+typedef struct ParserError ParserError;
+
+struct ParserError {
   int m_line, m_col;
   String m_filename;
   String m_err;
-  ParserError(int line, int col, String filename, const String &err) : m_err(err), m_line(line), m_col(col), m_filename(filename) {}
 };
 
-class state_t : public Set<ProductionState> {
-public:
-  void print(FILE *out, const Map<int,SymbolDef> &tokens) const;
+struct state_t;
+typedef struct state_t state_t;
+
+void state_t_init(state_t *This, bool onstack);
+void state_t_destroy(state_t *This);
+void state_t_print(const state_t *This, FILE *out, const MapAny /*<int,SymbolDef>*/ *tokens);
+bool state_t_LessThan(const state_t *lhs, const state_t *rhs);
+bool state_t_Equal(const state_t *lhs, const state_t *rhs);
+void state_t_Assign(state_t *lhs, const state_t *rhs);
+#define state_t_size(This) SetAny_size(&((This)->m_productionStates))
+#define state_t_getByIndexConst(This,i) SetAny_getByIndexConstT(&((This)->m_productionStates),i,ProductionState)
+#define state_t_insert(This,p,pfound) SetAny_insert(&((This)->m_productionStates),p,pfound)
+#define state_t_empty(This) (SetAny_size(&((This)->m_productionStates)) == 0)
+#define state_t_clear(This) SetAny_clear(&((This)->m_productionStates))
+
+struct state_t {
+  SetAny /*<ProductionState>*/ m_productionStates;
 };
 
-typedef Map<int,Set<int> > shifttosymbols_t;
-typedef Map<int,shifttosymbols_t> shiftmap_t;
-typedef Map<Production*,Set<int> > reducebysymbols_t;
-typedef Map<int,reducebysymbols_t> reducemap_t;
-typedef Pair<int,int> symbolandforbidstate_t;
+typedef MapAny /*<int,Set<int> >*/ shifttosymbols_t;
+typedef MapAny /*<int,shifttosymbols_t>*/ shiftmap_t;
+typedef MapAny /*<Production*,Set<int> >*/ reducebysymbols_t;
+typedef MapAny /*<int,reducebysymbols_t>*/ reducemap_t;
 
-class ParserSolution {
-public:
-  Map< symbolandforbidstate_t, Set<int> > m_firsts;
-  Map< symbolandforbidstate_t, Set<int> > m_follows;
-  Vector<state_t> m_states;
+struct symbolandrestrictstate_t;
+typedef struct symbolandrestrictstate_t symbolandrestrictstate_t;
+
+symbolandrestrictstate_t *symbolandrestrictstate_t_set(symbolandrestrictstate_t *This, int symbol, int restrictstate);
+
+struct symbolandrestrictstate_t {
+  int symbol;
+  int restrictstate;
+};
+
+struct ParserSolution;
+typedef struct ParserSolution ParserSolution;
+
+void ParserSolution_init(ParserSolution *This, bool onstack);
+
+struct ParserSolution {
+  MapAny /*< symbolandrestrictstate_t, Set<int> >*/ m_firsts;
+  MapAny /*< symbolandrestrictstate_t, Set<int> >*/ m_follows;
+  VectorAny /*<state_t>*/ m_states;
   shiftmap_t m_shifts;
   reducemap_t m_reductions;
 };
 
-enum OutputLanguage {
-  LanguageJs,
-  LanguageC
-};
+struct LanguageOutputOptions;
+typedef struct LanguageOutputOptions LanguageOutputOptions;
 
-class LanguageOutputOptions {
-public:
-  LanguageOutputOptions() : min_nt_value(0), do_pound_line(true) {
-  }
+struct LanguageOutputOptions {
   int min_nt_value;
   bool do_pound_line;
 };
 
-void ParseParser(TokBuf *tokbuf, ParserDef &parser, FILE *vout, int verbosity);
-int SolveParser(ParserDef &parser, ParserSolution &solution, FILE *vout, int verbosity, int timed);
-void OutputParserSolution(FILE *out, const ParserDef &parser, const ParserSolution &solution, OutputLanguage language, LanguageOutputOptions &options);
+void ParseParser(TokBuf *tokbuf, ParserDef *parser, FILE *vout, int verbosity);
+int SolveParser(ParserDef *parser, ParserSolution *solution, FILE *vout, int verbosity, int timed);
+void OutputParserSolution(FILE *out, const ParserDef *parser, const ParserSolution *solution, LanguageOutputOptions *options);
 
 #endif /* __parser_h */
 

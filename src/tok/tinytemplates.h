@@ -2,623 +2,200 @@
 #define __tinytemplates_h
 // Some templates so the executable size can shrink
 
+#ifdef __cplusplus
 #include <new>
+#endif
 #include <string.h>
 #include <stdlib.h>
 #include <stdarg.h>
 #include <stdio.h>
+#include <setjmp.h>
 
-class String {
-protected:
-  struct strkernel {
-    char *m_s;
-    int m_refs;
-    int m_len;
-  } *m_p;
-  void decref() {
-    if( m_p && --(m_p->m_refs) == 0 ) {
-      free(m_p->m_s);
-      delete m_p;
-    }
-  }
-public:
-  String() : m_p(0) {}
-  String(const char *s, int len=-1) : m_p(0) {
-    if( s && *s ) {
-      m_p = new strkernel();
-      if( len < 0 || len > strlen(s) )
-        len = strlen(s);
-      m_p->m_len = len;
-      m_p->m_s = (char*)malloc(m_p->m_len+1);
-      strncpy(m_p->m_s,s,len);
-      m_p->m_s[len] = 0;
-      m_p->m_refs = 1;
-    }
-  }
-  String(const String &s) : m_p(0) {
-    if( s.m_p ) {
-      m_p = s.m_p;
-      m_p->m_refs++;
-    }
-  }
-  String &operator=(const String &s) {
-    if( s.m_p )
-      s.m_p->m_refs++;
-    decref();
-    m_p = s.m_p;
-    return *this;
-  }
-  String &operator=(const char *s) {
-    if( m_p && m_p->m_refs == 1 ) {
-      m_p->m_len = strlen(s);
-      m_p->m_s = (char*)realloc(m_p->m_s,m_p->m_len+1);
-      strcpy(m_p->m_s,s);
-    } else {
-      decref();
-      m_p = 0;
-      if( s && *s) {
-        m_p = new strkernel();
-        m_p->m_len = strlen(s);
-        m_p->m_s = (char*)malloc(m_p->m_len+1);
-        strcpy(m_p->m_s,s);
-        m_p->m_refs = 1;
-      }
-    }
-    return *this;
-  }
-  ~String() {
-    decref();
-  }
-  String &operator+=(const char *s) {
-    if( ! s || ! *s )
-      return *this;
-    if( m_p && m_p->m_refs == 1 ) {
-      m_p->m_len += strlen(s);
-      m_p->m_s = (char*)realloc(m_p->m_s,m_p->m_len+1);
-      strcat(m_p->m_s,s);
-    } else {
-      strkernel *newp = new strkernel();
-      newp->m_len = length()+strlen(s);
-      newp->m_s = (char*)malloc(newp->m_len+1);
-      *newp->m_s = 0;
-      if( m_p && m_p->m_s )
-        strcat(newp->m_s,m_p->m_s);
-      strcat(newp->m_s,s);
-      newp->m_refs = 1;
-      decref();
-      m_p = newp;
-    }
-    return *this;
-  }
-  String &operator+=(char c) {
-    if( ! c )
-      return *this;
-    char cc[2];
-    cc[0] = c;
-    cc[1] = 0;
-    *this += cc;
-    return *this;
-  }
-  String &operator+=(const String &rhs) {
-    *this += rhs.c_str();
-    return *this;
-  }
-  String operator+(const char *s) const {
-    String ret =*this;
-    ret += s;
-    return ret;
-  }
-  String operator+(char c) const {
-    String ret =*this;
-    ret += c;
-    return ret;
-  }
-  String operator+(const String &rhs) const {
-    String ret =*this;
-    ret += rhs;
-    return ret;
-  }
-  int length() const {
-    if( m_p )
-      return m_p->m_len;
-    return 0;
-  }
-  const char *c_str() const {
-    if( m_p )
-      return m_p->m_s;
-    return 0;
-  }
-  bool operator==(const String &rhs) const {
-    if( length() != rhs.length() )
-      return false;
-    if( length() == 0 )
-      return true;
-    const char *s1 = m_p->m_s, *s2 = rhs.m_p->m_s;
-    while( *s1 && *s2 ) {
-      if( *s1 != *s2 )
-        return false;
-      ++s1;
-      ++s2;
-    }
-    if( *s1 != *s2 )
-      return false;
-    return true;
-  }
-  bool operator!=(const String &rhs) const {
-    return ! operator==(rhs);
-  }
-  bool operator<(const String &rhs) const {
-    if( ! m_p || ! rhs.m_p ) {
-      if( ! m_p && rhs.m_p != 0 )
-        return true;
-      return false;
-    }
-    const char *s1 = m_p->m_s, *s2 = rhs.m_p->m_s;
-    while( *s1 && *s2 ) {
-      if( *s1 < *s2 )
-        return true;
-      else if( *s1 > *s2 )
-        return false;
-      ++s1;
-      ++s2;
-    }
-    if( ! *s1 && ! *s2 )
-      return false;
-    else if( ! *s1 )
-      return true;
-    return false;
-  }
-  String substr(int first, int cnt) const {
-    size_t len = length();
-    if( first >= len || cnt <= 0 )
-      return String("");
-    if( cnt > len )
-      cnt = len;
-    return String(c_str()+first,cnt);
-  }
-  String slice(int first, int last) const {
-    size_t len = length();
-    if( first < 0 )
-      first += len;
-    if( last < 0 )
-      last += len;
-    return substr(first,last-first);
-  }
-  String &ReplaceAll(const char *s, const char *with) {
-    if( ! s || ! *s )
-      return *this;
-    int len0 = strlen(s);
-    int len1 = strlen(with);
-    const char *src = c_str();
-    const char *nxt = 0;
-    int finallen = 0;
-    while( (nxt = strstr(src,s)) != 0) {
-      finallen += nxt-src;
-      finallen += len1;
-      src = nxt+len0;
-    }
-    finallen += strlen(src);
-    char *buf = (char*)malloc(finallen+1);
-    char *dst = buf;
-    src = c_str();
-    while( (nxt = strstr(src,s)) != 0) {
-      int leadlen = nxt-src;
-      strncpy(dst,src,leadlen);
-      dst += leadlen;
-      if( len1 ) {
-        strncpy(dst,with,len1);
-        dst += len1;
-      }
-      src = nxt+len0;
-    }
-    int taillen = strlen(src);
-    if( taillen ) {
-      strncpy(dst,src,taillen);
-      dst += taillen;
-    }
-    *dst = 0;
-    *this = buf;
-    free(buf);
-    return *this;
-  }
-  String &ReplaceAt(int at, int len, const char *with) {
-    if( at < 0 )
-      at = length()+at;
-    if( at < 0 || at > length() )
-      return *this;
-    int finallen = at+strlen(with)+(length()-len-at);
-    char *buf = (char*)malloc(finallen+1);
-    char *dst = buf;
-    if( at > 0 ) {
-      strncpy(dst,c_str(),at);
-      dst += at;
-    }
-    if( strlen(with) > 0 ) {
-      strncpy(dst,with,strlen(with));
-      dst += strlen(with);
-    }
-    int taillen = length()-len-at;
-    if( taillen > 0 ) {
-      strncpy(dst,c_str()+at+len,taillen);
-      dst += taillen;
-    }
-    *dst = 0;
-    *this = buf;
-    free(buf);
-    return *this;
-  }
-  static String vFormatString(const char *fmt, va_list args) {
-    // TODO : premeasure length instead of a fixed length
-    char buf[3200];
-    vsprintf(buf,fmt,args);
-    return String(buf);
-  }
-  static String FormatString(const char *fmt, ...) {
-    String s;
-    va_list args;
-    va_start(args,fmt);
-    s = vFormatString(fmt, args);
-    va_end(args);
-    return s;
-  }
+#ifndef __cplusplus
+#include <stdbool.h>
+#endif
+
+typedef void (*vpstack_destroyer)(void *vpstack);
+void Push_Destroy(void *vpstack, vpstack_destroyer destroyer);
+void Scope_Push();
+void Scope_Pop();
+#define Scope_SetJmp(ret) Scope_Push_SetJmp(); ret = setjmp((*getJmpBuf())); Scope_DestroyScopeTail(ret);
+void Scope_LongJmp(int ret);
+// Don't use these directly, just for Scope_SetJmp {
+void Scope_Push_SetJmp();
+void Scope_DestroyScopeTail(int ret);
+jmp_buf *getJmpBuf();
+// } Don't use these directly, just for Scope_SetJmp
+
+struct String;
+typedef struct String String;
+struct strkernel;
+typedef struct strkernel strkernel;
+
+void String_init(String *This, bool onstack);
+String *String_new();
+String *String_FromChars(const char *s, int len /*=-1*/);
+String *String_FromString(const String *s);
+void String_clear(String *This);
+void String_AssignString(String *This, const String *s);
+void String_AssignNChars(String *This, const char *s, int n);
+void String_AssignChars(String *This, const char *s);
+void String_AddCharsInPlace(String *This, const char *s);
+void String_AddCharInPlace(String *This, char c);
+void String_AddStringInPlace(String *This, const String *rhs);
+String *String_AddChars(const String *lhs, const char *rhs);
+String *String_AddChar(const String *lhs, char rhs);
+String *String_AddString(const String *lhs, const String *rhs);
+int String_length(const String *This);
+const char *String_Chars(const String *This);
+bool String_Equal(const String *This, const String *rhs);
+bool String_NotEqual(const String *This, const String *rhs);
+bool String_LessThan(const String *This, const String *rhs);
+String *String_substr(const String *This, int first, int cnt);
+String *String_slice(const String *This, int first, int last);
+void String_ReplaceAll(String *This, const char *s, const char *with);
+void String_ReplaceAt(String *This, int at, int len, const char *with);
+void String_vFormatString(String *This, const char *fmt, va_list args);
+String *String_FormatString(const char *fmt, ...);
+void String_ReFormatString(String *This, const char *fmt, ...);
+
+struct String {
+  strkernel *m_p;
 };
 
-template<class T>
-class Vector {
-  T *m_p;
+struct ElementOps;
+typedef struct ElementOps ElementOps;
+
+const ElementOps *getIntElement();
+const ElementOps *getPointerElement();
+const ElementOps *getVectorAnyElement();
+const ElementOps *getSetAnyElement();
+const ElementOps *getMapAnyElement();
+const ElementOps *getStringElement();
+
+// Do any constructor actions.
+// Memory is zeroed out before init.
+// Default does nothing.
+typedef void (*elementInit)(void *e, bool onstack);
+
+// Do any destructor actions.
+// Default does nothing.
+typedef void (*elementDestroy)(void *e);
+
+// Test if lhs < rhs.
+// Default uses elementSize/isInteger/isSigned as follows:
+// If elementSize is the size of an architecture integer value, then a cast is
+// made to an appropriate type, taking isSigned into account, and the values
+// are compared.
+// Otherwise, Default is memcmp.
+typedef bool (*elementLessThan)(const void *lhs, const void *rhs);
+
+// Test if lhs == rhs.  Default implementation is memcmp.
+typedef bool (*elementEqual)(const void *lhs, const void *rhs);
+
+// Assign will copy from rhs to lhs, cloning what is must.
+// Default implementation simply copies the memory.
+typedef void (*elementAssign)(void *lhs, const void *rhs);
+
+// Move is effectively memcopy, it overwrites lhs without respect for what was there before.
+// It is assumed that anything in lhs has already undergone destroy.
+// It is assumed that rhs is destroyed during the move process.
+// lhs and rhs are guaranteed not to overlap.
+// Default implementation is memmove
+typedef void (*elementCopy)(void *lhs, void *rhs, int count);
+
+struct ElementOps {
+  int elementSize;
+  bool isInteger;
+  bool isSigned;
+  elementInit init;
+  elementDestroy destroy;
+  elementLessThan lessthan;
+  elementEqual equal;
+  elementAssign assign;
+  elementCopy copy;
+};
+
+struct VectorAny;
+typedef struct VectorAny VectorAny;
+struct VectorAnyIterator;
+typedef struct VectorAnyIterator VectorAnyIterator;
+
+void VectorAny_init(VectorAny *This, const ElementOps *ops, bool onstack);
+void VectorAny_destroy(VectorAny *This);
+void VectorAny_capacity(VectorAny *This, size_t mincap);
+void *VectorAny_ArrayOp(VectorAny *This, int i);
+const void *VectorAny_ArrayOpConst(const VectorAny *This, int i);
+#define VectorAny_ArrayOpT(This,i,T) (*((T*)VectorAny_ArrayOp(This,i)))
+#define VectorAny_ArrayOpConstT(This,i,T) (*((const T*)VectorAny_ArrayOpConst(This,i)))
+void VectorAny_insert(VectorAny *This, int at, const void *value);
+void VectorAny_insertMany(VectorAny *This, int at, const void *value, size_t count);
+void VectorAny_clear(VectorAny *This);
+void VectorAny_set(VectorAny *This, int i, const void *value);
+int VectorAny_erase(VectorAny *This, int i);
+void *VectorAny_ptr(VectorAny *This);
+const void *VectorAny_ptrConst(const VectorAny *This);
+bool VectorAny_LessThan(const VectorAny *lhs, const VectorAny *rhs);
+bool VectorAny_Equal(const VectorAny *lhs, const VectorAny *rhs);
+void VectorAny_Assign(VectorAny *lhs, const VectorAny *rhs);
+
+struct VectorAny {
+  void *m_p;
   size_t m_size;
   size_t m_capacity;
-
-  void capacity(size_t mincap) {
-    if( mincap <= m_capacity )
-      return;
-    if( m_capacity == 0 )
-      m_capacity = 8;
-    while( m_capacity < mincap ) {
-      m_capacity *= 2;
-    }
-    if( ! m_p )
-      m_p = (T*)malloc(sizeof(T)*m_capacity);
-    else
-      m_p = (T*)realloc(m_p,sizeof(T)*m_capacity);
-  }
-public:
-  Vector() : m_p(0), m_size(0), m_capacity(0) {}
-  Vector(const Vector<T> &rhs) : m_p(0), m_size(0), m_capacity(0) {
-    insert(end(),rhs.begin(),rhs.end());
-  }
-  Vector<T> &operator=(const Vector<T> &rhs) {
-    clear();
-    insert(end(),rhs.begin(),rhs.end());
-    return *this;
-  }
-  typedef const T *const_iterator;
-  typedef T *iterator;
-  T &front() { return *m_p; }
-  iterator begin() { return m_p; }
-  iterator end() { return m_p+m_size; }
-  const_iterator begin() const { return m_p; }
-  const_iterator end() const { return m_p+m_size; }
-  bool empty() const { return m_size == 0; }
-  T &operator[](int i) {
-    if( i < 0 )
-      i+= m_size;
-    return m_p[i];
-  }
-  const T &operator[](int i) const {
-    if( i < 0 )
-      i+= m_size;
-    return m_p[i];
-  }
-  void clear() {
-    for( int i = 0; i < m_size; ++i )
-      m_p[i].~T();
-    m_size = 0;
-  }
-  iterator push_back(const T &value) {
-    capacity(m_size+1);
-    iterator dst = end();
-    new(dst) T(value);
-    ++m_size;
-    return dst;
-  }
-  void resize(size_t newsize, const T &def) {
-    if( newsize < m_size ) {
-      for( int i = newsize; i < m_size; ++i )
-        m_p[i].~T();
-      m_size = newsize;
-    } else if( newsize > m_size ) {
-      capacity(newsize);
-      for( int i = m_size; i < newsize; ++i )
-        new(m_p+i) T(def);
-      m_size = newsize;
-    }
-  }
-  void resize(size_t newsize) {
-    if( newsize < m_size ) {
-      for( int i = newsize; i < m_size; ++i )
-        m_p[i].~T();
-      m_size = newsize;
-    } else if( newsize > m_size ) {
-      capacity(newsize);
-      for( int i = m_size; i < newsize; ++i )
-        new(m_p+i) T();
-      m_size = newsize;
-    }
-  }
-  void pop_back() {
-    if( m_size == 0 )
-      return;
-    erase(m_p+(m_size-1));
-  }
-  iterator erase(iterator at) {
-    at->~T();
-    int following = end()-at;
-    if( following > 0 )
-      memmove(at,at+1,following*sizeof(T));
-    --m_size;
-    return at;
-  }
-  iterator erase(iterator first, iterator last) {
-    // DEBUG ME!
-    int cnt = last-first;
-    for( iterator cur = first; cur != last; ++cur )
-      cur->~T();
-    int following = end()-last;
-    if( following > 0 )
-      memmove(first,last,following*sizeof(T));
-    m_size -= cnt;
-    return first;
-  }
-  iterator insert(iterator at, const T &value) {
-    int idx = at-m_p;
-    capacity(m_size+1);
-    at = m_p+idx;
-    int following = end()-at;
-    if( following )
-      memmove(at+1,at,following*sizeof(T));
-    new(at) T(value);
-    ++m_size;
-    return at;
-  }
-  template <class T2>
-  iterator insert(iterator at, T2 first, T2 last) {
-    int idx = at-m_p;
-    int xtra = last-first;
-    capacity(m_size+xtra);
-    at = m_p+idx;
-    int following = end()-at;
-    if( following )
-      memmove(at+xtra,at,following*sizeof(T));
-    while( first != last )
-      new(at++) T(*first++);
-    m_size += xtra;
-    return m_p+idx;
-  }
-  int size() const { return m_size; }
-  T &back() { return m_p[m_size-1]; }
-  const T &back() const { return m_p[m_size-1]; }
-  bool operator!=(const Vector<T> &rhs) const {
-    if( size() != rhs.size() )
-      return true;
-    for( int i = 0, n = size(); i < n; ++i )
-      if( operator[](i) != rhs[i] )
-        return true;
-    return false;
-  }
-  bool operator==(const Vector<T> &rhs) const {
-    return ! operator!=(rhs);
-  }
-  bool operator<(const Vector<T> &rhs) const {
-    int len = size()<rhs.size()?size():rhs.size();
-    for( int i = 0, n = len; i < n; ++i ) {
-      if( operator[](i) < rhs[i] )
-        return true;
-      else if( rhs[i] < operator[](i) )
-        return false;
-    }
-    if( size() < rhs.size() )
-      return true;
-    return false;
-  }
+  const ElementOps *m_ops;
 };
 
-template<class T, class T2>
-class Pair {
-public:
-  Pair() {}
-  Pair(const T &f, const T2 &s) : first(f), second(s) {}
-  T  first;
-  T2 second;
-  bool operator<(const Pair<T,T2> &rhs) const {
-    if( first < rhs.first )
-      return true;
-    else if( rhs.first < first )
-      return false;
-    return second < rhs.second;
-  }
+struct SetAny;
+typedef struct SetAny SetAny;
+
+void SetAny_init(SetAny *This, const ElementOps *ops, bool onstack);
+void SetAny_destroy(SetAny *This);
+bool SetAny_LessThan(const SetAny *lhs, const SetAny *rhs);
+bool SetAny_Equal(const SetAny *lhs, const SetAny *rhs);
+void SetAny_Assign(SetAny *lhs, const SetAny *rhs);
+int SetAny_size(const SetAny *This);
+const void *SetAny_getByIndexConst(const SetAny *This, int i);
+#define SetAny_getByIndexConstT(This,i,T) (*((const T*)SetAny_getByIndexConst(This,i)))
+const void *SetAny_findConst(const SetAny *This, const void *value);
+#define SetAny_findConstT(This,value,T) (*((const T*)SetAny_findConst(This,value)))
+int SetAny_insert(SetAny *This, const void *value, bool *found);
+void SetAny_insertMany(SetAny *This, const void *value, int count);
+void SetAny_erase(SetAny *This, const void *value);
+void SetAny_eraseMany(SetAny *This, const void *value, int count);
+void SetAny_eraseAtIndex(SetAny *This, int i);
+bool SetAny_contains(const SetAny *This, const void *value);
+void SetAny_clear(SetAny *This);
+void *SetAny_ptr(SetAny *This);
+const void *SetAny_ptrConst(const SetAny *This);
+
+struct SetAny {
+  VectorAny m_values;
 };
 
-template<class T>
-class Set {
-  Vector<T> m_values;
-public:
-  typedef typename Vector<T>::const_iterator const_iterator;
-  typedef typename Vector<T>::iterator iterator;
+struct MapAny;
+typedef struct MapAny MapAny;
 
-  iterator begin() { return m_values.begin(); }
-  iterator end() { return m_values.end(); }
-  const_iterator begin() const { return m_values.begin(); }
-  const_iterator end() const { return m_values.end(); }
-  bool empty() const { return m_values.empty(); }
-  void clear() { m_values.clear(); }
-  int size() const { return m_values.size(); }
-private:
-  int findIndex(const T &value, bool &found) const {
-    if( m_values.size() == 0 ) {
-      found = false;
-      return 0;
-    }
-    const_iterator low = begin(), high = end()-1;
-    while( low <= high ) {
-      const_iterator mid = low+(high-low)/2;
-      if( value < *mid )
-        high = mid-1;
-      else if( *mid < value )
-        low = mid+1;
-      else {
-        found = true;
-        return mid-begin();
-      }
-    }
-    found = false;
-    return low-begin();
-  }
+void MapAny_init(MapAny *This, const ElementOps *keyops, const ElementOps *valueops, bool onstack);
+void MapAny_destroy(MapAny *This);
+int MapAny_size(const MapAny *This);
+void MapAny_getByIndex(MapAny *This, int i, const void **key, void **value);
+void MapAny_getByIndexConst(const MapAny *This, int i, const void **key, const void **value);
+void *MapAny_find(MapAny *This, const void *key);
+#define MapAny_findT(This,key,T)  (*((T*)MapAny_find(This,key)))
+const void *MapAny_findConst(const MapAny *This, const void *key);
+#define MapAny_findConstT(This,key,T) (*((const T*)MapAny_findConst(This,key)))
+int MapAny_insert(MapAny *This, const void *key, const void *value);
+void MapAny_clear(MapAny *This);
+void MapAny_erase(MapAny *This, const void *key);
+bool MapAny_contains(const MapAny *This, const void *value);
+bool MapAny_LessThan(const MapAny *lhs, const MapAny *rhs);
+bool MapAny_Equal(const MapAny *lhs, const MapAny *rhs);
+void MapAny_Assign(MapAny *lhs, const MapAny *rhs);
 
-public:
-  iterator find(const T &value) {
-    bool found = false;
-    int idx = findIndex(value,found);
-    if( found )
-      return begin()+idx;
-    return end();
-  }
-  const_iterator find(const T &value) const {
-    bool found = false;
-    int idx = findIndex(value,found);
-    if( found )
-      return begin()+idx;
-    return end();
-  }
-  bool contains(const  T &value) const {
-    bool found = false;
-    int idx = findIndex(value,found);
-    return found;
-  }
-  iterator insert(const T &value) {
-    bool found =false;
-    int idx = findIndex(value,found);
-    if( found )
-      return begin()+idx;
-    return m_values.insert(begin()+idx,value);
-  }
-  iterator erase(iterator iter) {
-    return erase(*iter);
-  }
-  template <class Iter>
-  void erase(Iter first, Iter last) {
-    while( first != last ) {
-      erase(*first);
-      ++first;
-    }
-  }
-  iterator erase(const T &value) {
-    iterator iter = find(value);
-    if( iter == end() )
-      return iter;
-    return m_values.erase(iter);
-  }
-  template<class Iter>
-  void insert(Iter first, Iter last) {
-    while( first != last ) {
-      insert(*first++);
-    }
-  }
-  bool operator==(const Set<T> &rhs) const {
-    if( size() != rhs.size() )
-      return false;
-    const_iterator rhscur = rhs.begin();
-    for( const_iterator cur = begin(), last = end(); cur != last; ++cur, ++rhscur )
-      if( *cur < *rhscur || *rhscur < *cur )
-        return false;
-    return true;
-  }
-  bool operator!=(const Set<T> &rhs) const {
-    return !operator==(rhs);
-  }
-  bool operator<(const Set<T> &rhs) const {
-    return m_values < rhs.m_values;
-  }
-};
-
-template<class T, class T2>
-class Map {
-private:
-  Vector< Pair<T,T2> > m_entries;
-
-public:
-  typedef typename Vector< Pair<T,T2> >::iterator iterator;
-  typedef typename Vector< Pair<T,T2> >::const_iterator const_iterator;
-
-  iterator begin() { return m_entries.begin(); }
-  iterator end() { return m_entries.end(); }
-  const_iterator begin() const { return m_entries.begin(); }
-  const_iterator end() const { return m_entries.end(); }
-  void clear() { m_entries.clear(); }
-
-private:
-  int findIdx(const T &key, bool &found) const {
-    if( m_entries.size() == 0 ) {
-      found = false;
-      return 0;
-    }
-    const_iterator low = begin(), high = end()-1;
-    while( low <= high ) {
-      const_iterator mid = low+(high-low)/2;
-      if( key < mid->first )
-        high = mid-1;
-      else if( mid->first < key )
-        low = mid+1;
-      else {
-        found = true;
-        return mid-begin();
-      }
-    }
-    found = false;
-    return low-begin();
-  }
-public:
-  int size() const { return m_entries.size(); }
-  iterator find(const T &key) {
-    bool found = false;
-    int idx = findIdx(key,found);
-    if( found )
-      return begin()+idx;
-    return end();
-  }
-  const_iterator find(const T &key) const {
-    bool found = false;
-    int idx = findIdx(key,found);
-    if( found )
-      return begin()+idx;
-    return end();
-  }
-  bool contains(const T &key) const {
-    bool found =false;
-    int idx = findIdx(key,found);
-    return found;
-  }
-  iterator erase(const T &key) {
-    iterator iter = find(key);
-    if( iter != end() )
-      iter = m_entries.erase(iter);
-    return iter;
-  }
-  T2 &operator[](const T &key) {
-    bool found = false;
-    int idx = findIdx(key,found);
-    if( found )
-      return m_entries[idx].second;
-    return m_entries.insert(begin()+idx,Pair<T,T2>(key,T2()))->second;
-  }
-  const T2 &operator[](const T &key) const {
-    bool found = false;
-    int idx = findIdx(key,found);
-    if( found )
-      return m_entries[idx].second;
-    // uh oh. boom
-    return m_entries.end()->second;
-  }
+struct MapAny {
+  SetAny m_keys;
+  VectorAny m_values;
 };
 
 #endif

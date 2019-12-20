@@ -1,18 +1,31 @@
 # To build
 # start visual studio command line prompt
 # nmake -f nMakefile.msc
-OBJS=parser.obj parsersolve.obj parseroutput.obj main.obj parserforbidauto.obj
-CPPFLAGS=/nologo /Zi /Od /EHsc /DWIN32 
+OBJS=parser.obj parsersolve.obj parseroutput.obj main.obj parserrestrictfa.obj timer.obj  ../tok/tok.obj ../tok/tinytemplates.obj
+CFLAGS=/nologo /Zi /Od /EHsc /DWIN32 /MD /I.
+#CFLAGS=/nologo /O1 /EHsc /DWIN32 /MD /I.
+.SUFFIXES: .c .obj
 
 all: parser.exe
 
 parser.exe: $(OBJS)
 	@echo linking...
-#	@link /nologo /SUBSYSTEM:CONSOLE /OUT:parser.exe $(OBJS)
 	@link /nologo /DEBUG /SUBSYSTEM:CONSOLE /OUT:parser.exe $(OBJS)
+#	@link /nologo /SUBSYSTEM:CONSOLE /OUT:parser.exe $(OBJS)
+
+#../tok/tinytemplates.obj: ../tok/tinytemplates.c
+#	@cl /nologo /c $(CFLAGS) ../tok/tinytemplates.c /Fo../tok/tinytemplates.obj
+
+{../tok}.c{../tok}.obj:
+	@cl /nologo /c $(CFLAGS) $< /Fo$@
+
+.c.obj:
+	@cl /nologo /c $(CFLAGS) $< /Fo$@
 
 clean:
 	@-del parser.exe > NUL 2>&1
+	@-del ..\tok\tinytemplates.obj > NUL 2>&1
+	@-del ..\tok\tok.obj > NUL 2>&1
 	@-del *.obj > NUL 2>&1
 	@-del *.pdb > NUL 2>&1
 
