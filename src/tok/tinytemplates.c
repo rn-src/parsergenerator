@@ -587,7 +587,7 @@ void VectorAny_set(VectorAny *This, int i, const void *value) {
     memcpy(dst,value,This->m_ops->elementSize);  
 }
 
-void VectorAny_push_back(VectorAny *This, void *ptrvalue) {
+void VectorAny_push_back(VectorAny *This, const void *ptrvalue) {
   VectorAny_capacity(This,This->m_size+1);
   void *dst = (char*)This->m_p+(This->m_size*This->m_ops->elementSize);
   memset(dst,0,This->m_ops->elementSize);
@@ -600,7 +600,7 @@ void VectorAny_push_back(VectorAny *This, void *ptrvalue) {
   ++This->m_size;
 }
 
-void VectorAny_resizeWithDefault(VectorAny *This, size_t newsize, void *def) {
+void VectorAny_resizeWithDefault(VectorAny *This, size_t newsize, const void *def) {
   if( newsize < This->m_size ) {
     VectorAny_destroyElements(This,newsize,This->m_size-newsize+1);
     This->m_size = newsize;
@@ -941,6 +941,67 @@ void *SetAny_ptr(SetAny *This) {
 
 const void *SetAny_ptrConst(const SetAny *This) {
   return VectorAny_ptrConst(&This->m_values);
+}
+
+bool SetAny_intersects(const SetAny *lhs, const SetAny *rhs) {
+  int curlhs = 0, endlhs = SetAny_size(lhs), currhs = 0, endrhs = SetAny_size(lhs);
+  elementLessThan lessthan = lhs->m_values.m_ops->lessthan;
+  int elementSize = lhs->m_values.m_ops->elementSize;
+  if (!lessthan && lhs->m_values.m_ops->isInteger)
+    lessthan = getNumericComparer(lhs->m_values.m_ops->isSigned, elementSize);
+  while (curlhs < endlhs && currhs < endrhs) {
+    const void *lhselem = SetAny_getByIndexConst(lhs, curlhs);
+    const void *rhselem = SetAny_getByIndexConst(lhs, curlhs);
+    int cmp = 0;
+    if (lessthan) {
+      if (lessthan(lhselem, rhselem))
+        cmp = -1;
+      else if (lessthan(rhselem, lhselem))
+        cmp = 1;
+    }
+    else {
+      cmp = memcmp(lhselem, rhselem, elementSize);
+    }
+    if (cmp < 0)
+      ++curlhs;
+    else if (cmp > 0)
+      ++currhs;
+    else
+      return true;
+  }
+  return false;
+}
+
+void SetAny_intersection(SetAny *out, const SetAny *lhs, const SetAny *rhs) {
+  int curlhs = 0, endlhs = SetAny_size(lhs), currhs = 0, endrhs = SetAny_size(lhs);
+  elementLessThan lessthan = out->m_values.m_ops->lessthan;
+  int elementSize = out->m_values.m_ops->elementSize;
+  if (!lessthan && out->m_values.m_ops->isInteger)
+    lessthan = getNumericComparer(out->m_values.m_ops->isSigned, elementSize);
+  SetAny_clear(out);
+  while (curlhs < endlhs && currhs < endrhs ) {
+    const void *lhselem = SetAny_getByIndexConst(lhs, curlhs);
+    const void *rhselem = SetAny_getByIndexConst(lhs, curlhs);
+    int cmp = 0;
+    if (lessthan) {
+      if (lessthan(lhselem, rhselem))
+        cmp = -1;
+      else if (lessthan(rhselem,lhselem))
+        cmp = 1;
+    }
+    else {
+      cmp = memcmp(lhselem, rhselem, elementSize);
+    }
+    if (cmp < 0)
+      ++curlhs;
+    else if (cmp > 0)
+      ++currhs;
+    else {
+      VectorAny_push_back(&out->m_values, lhselem);
+      ++curlhs;
+      ++currhs;
+    }
+  }
 }
 
 void MapAny_init(MapAny *This, const ElementOps *keyops, const ElementOps *valueops, bool onstack) {

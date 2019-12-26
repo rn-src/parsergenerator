@@ -10,6 +10,10 @@ struct ProductionRegex;
 typedef struct ProductionRegex ProductionRegex;
 struct ParserDef;
 typedef struct ParserDef ParserDef;
+struct LRParserSolution;
+typedef struct LRParserSolution LRParserSolution;
+struct LLParserSolution;
+typedef struct LLParserSolution LLParserSolution;
 struct Production;
 typedef struct Production Production;
 struct RestrictAutomata;
@@ -131,7 +135,7 @@ ProductionDescriptor *ProductionDescriptor_setinfo(ProductionDescriptor *This, i
 void ProductionDescriptor_setInfoWithDots(ProductionDescriptor *This, int nt, const VectorAny /*<int>*/ *symbols, int dots, int dotcnt);
 bool ProductionDescriptor_hasDotAt(const ProductionDescriptor *This, int pos);
 bool ProductionDescriptor_matchesProduction(const ProductionDescriptor *This, const Production *p);
-bool ProductionDescriptor_matchesProductionAndPositionconst (ProductionDescriptor *This, const Production *p, int pos);
+bool ProductionDescriptor_matchesProductionAndPosition(const ProductionDescriptor *This, const Production *p, int pos);
 // Check if, ignoring dots, the productions are the same
 bool ProductionDescriptor_hasSameProductionAs(const ProductionDescriptor *This, const ProductionDescriptor *rhs);
 // Add dots from rhs to this descriptor.  Fail if not same production.
@@ -148,6 +152,7 @@ void ProductionDescriptor_symbolsAtDots(const ProductionDescriptor *This, Vector
 bool ProductionDescriptor_Equal(const ProductionDescriptor *lhs, const ProductionDescriptor *rhs);
 bool ProductionDescriptor_NotEqual(const ProductionDescriptor *lhs, const ProductionDescriptor *rhs);
 void ProductionDescriptor_print(const ProductionDescriptor *This, FILE *out, const MapAny /*<int,SymbolDef>*/ *tokens);
+void ProductionDescriptor_clear(ProductionDescriptor *This);
 
 struct ProductionDescriptor {
   VectorAny /*<int>*/ m_symbols;
@@ -249,34 +254,48 @@ struct AssociativeRule {
   ProductionDescriptors *m_pds;
 };
 
+struct Restriction;
+typedef struct Restriction Restriction;
+
+void Restriction_init(Restriction *This, bool onstack);
+void Restriction_destroy(Restriction *This);
+bool Restriction_LessThan(const Restriction *lhs, const Restriction *rhs);
+bool Restriction_Equal(const Restriction *lhs, const Restriction *rhs);
+void Restriction_Assign(Restriction *lhs, const Restriction *rhs);
+void Restriction_clear(Restriction *This);
+void Restriction_print(const Restriction *This, FILE *out, const MapAny /*<int,SymbolDef>*/ *tokens);
+
+struct Restriction {
+  ProductionDescriptor m_restricted;
+  ProductionDescriptor m_at;
+};
+
 void RestrictAutomata_init(RestrictAutomata *This, bool onstack);
 void RestrictAutomata_destroy(RestrictAutomata *This);
 void RestrictAutomata_Assign(RestrictAutomata *lhs, const RestrictAutomata *rhs);
 int RestrictAutomata_newstate(RestrictAutomata *This);
 int RestrictAutomata_nstates(const RestrictAutomata *This);
-void RestrictAutomata_addStartState(RestrictAutomata *This, int stateNo);
 void RestrictAutomata_addEndState(RestrictAutomata *This, int stateNo);
 void RestrictAutomata_addEmptyTransition(RestrictAutomata *This, int s0, int s1);
-void RestrictAutomata_addTransition(RestrictAutomata *This, int s0, int s1, const ProductionDescriptor *pd);
-void RestrictAutomata_addRestriction(RestrictAutomata *This, int stateNo, const ProductionDescriptor *restricted);
-void RestrictAutomata_addRestrictions(RestrictAutomata *This, int stateNo, const ProductionDescriptors *restricted);
+void RestrictAutomata_addTransition(RestrictAutomata *This, int s0, int s1, const Restriction *restriction);
+void RestrictAutomata_addMultiStateTransition(RestrictAutomata *This, int s0, const SetAny /*<int>*/ *s1, const Restriction *restriction);
+void RestrictAutomata_addRestriction(RestrictAutomata *This, int stateNo, const Restriction *restriction);
 // Find *the* state after the current state, assuming this is a deterministic automata
 int RestrictAutomata_nextState(const RestrictAutomata *This, const Production *curp, int pos, int stateno, const Production *p);
 bool RestrictAutomata_isRestricted(const RestrictAutomata *This, const Production *p, int pos, int restrictstate, const Production *ptest);
 void RestrictAutomata_closure(const RestrictAutomata *This, SetAny /*<int>*/ *multistate);
-void RestrictAutomata_RestrictsFromStates(const RestrictAutomata *This, const SetAny /*<int>*/ *stateset, ProductionDescriptors *restricts);
-void RestrictAutomata_SymbolsFromStates(const RestrictAutomata *This, const SetAny /*<int>*/ *stateset, ProductionDescriptors *symbols);
+void RestrictAutomata_RestrictsFromStates(const RestrictAutomata *This, const SetAny /*<int>*/ *stateset, SetAny /*<Restriction*>*/ *restrictions);
+void RestrictAutomata_SymbolsFromStates(const RestrictAutomata *This, const SetAny /*<int>*/ *stateset, SetAny /*<Restriction>*/ *symbols);
 void RestrictAutomata_toDeterministicRestrictAutomata(const RestrictAutomata *This, RestrictAutomata *out);
 void RestrictAutomata_print(const RestrictAutomata *This, FILE *out, const MapAny /*<int,SymbolDef>*/ *tokens);
 
 struct RestrictAutomata {
   int m_nextstate;
-  int m_nxtnameidx;
-  SetAny /* <int> */ m_startStates;
+  int m_startState;
   SetAny /* <int> */ m_endStates;
   MapAny /* <int,Set<int> >*/ m_emptytransitions;
-  MapAny /* <int,Map< ProductionDescriptor, Set<int> > >*/ m_transitions;
-  MapAny /* <int,ProducctionDescriptors> */ m_statetorestricts;
+  MapAny /* <int,Map< Restriction, Set<int> > >*/ m_transitions;
+  MapAny /* <int,Set< Restriction > > */ m_statetorestrictions;
 };
 
 struct productionandrestrictstate_t;
@@ -316,7 +335,7 @@ int ParserDef_getStartNt(const ParserDef *This);
 int ParserDef_getExtraNt(const ParserDef *This);
 Production *ParserDef_getStartProduction(ParserDef *This);
 const Production *ParserDef_getStartProductionConst(const ParserDef *This);
-const VectorAny /*<productionandrestrictstate_t>*/ *ParserDef_productionsAt(const ParserDef *This, const Production *p, int pos, int restrictstate, MapAny /*< ProductionsAtKey,Vector<productionandrestrictstate_t> >*/ *productionsAtResults);
+const VectorAny /*<productionandrestrictstate_t>*/ *ParserDef_productionsAt(ParserDef *This, const Production *p, int pos, int restrictstate);
 void ParserDef_computeRestrictAutomata(ParserDef *This);
 SymbolType ParserDef_getSymbolType(const ParserDef *This, int tok);
 void ParserDef_print(const ParserDef *This, FILE *out);
@@ -336,6 +355,7 @@ struct ParserDef {
   VectorAny /*<AssociativeRule*>*/ m_assocrules;
   VectorAny /*<PrecedenceRule*>*/ m_precrules;
   RestrictAutomata m_restrict;
+  MapAny /*< ProductionsAtKey,Vector<productionandrestrictstate_t> >*/ productionsAtResults;
 };
 
 struct ParserError;
@@ -371,40 +391,53 @@ typedef MapAny /*<int,shifttosymbols_t>*/ shiftmap_t;
 typedef MapAny /*<Production*,Set<int> >*/ reducebysymbols_t;
 typedef MapAny /*<int,reducebysymbols_t>*/ reducemap_t;
 
-struct symbolandrestrictstate_t;
-typedef struct symbolandrestrictstate_t symbolandrestrictstate_t;
+struct FirstsAndFollows;
+typedef struct FirstsAndFollows FirstsAndFollows;
 
-symbolandrestrictstate_t *symbolandrestrictstate_t_set(symbolandrestrictstate_t *This, int symbol, int restrictstate);
+void FirstsAndFollows_init(FirstsAndFollows *This, bool onstack);
+void FirstsAndFollows_destroy(FirstsAndFollows *This);
+void FirstsAndFollows_Compute(FirstsAndFollows *This, ParserDef *parser, FILE *vout, int verbosity);
 
-struct symbolandrestrictstate_t {
-  int symbol;
-  int restrictstate;
+struct FirstsAndFollows {
+  MapAny /*< productionandrestrictstate_t, Set<int> >*/ m_firsts;
+  MapAny /*< productionandrestrictstate_t, Set<int> >*/ m_follows;
 };
 
-struct ParserSolution;
-typedef struct ParserSolution ParserSolution;
+void LRParserSolution_init(LRParserSolution *This, bool onstack);
+void LRParserSolution_destroy(LRParserSolution *This);
 
-void ParserSolution_init(ParserSolution *This, bool onstack);
-
-struct ParserSolution {
-  MapAny /*< symbolandrestrictstate_t, Set<int> >*/ m_firsts;
-  MapAny /*< symbolandrestrictstate_t, Set<int> >*/ m_follows;
+struct LRParserSolution {
+  FirstsAndFollows m_firstsAndFollows;
   VectorAny /*<state_t>*/ m_states;
   shiftmap_t m_shifts;
   reducemap_t m_reductions;
 };
 
+void LLParserSolution_init(LLParserSolution *This, bool onstack);
+void LLParserSolution_destroy(LLParserSolution *This);
+
+struct LLParserSolution {
+  FirstsAndFollows m_firstsAndFollows;
+};
+
 struct LanguageOutputOptions;
 typedef struct LanguageOutputOptions LanguageOutputOptions;
+
+enum ParserType {
+  ParserType_LR,
+  ParserType_LL
+};
+typedef enum ParserType ParserType;
 
 struct LanguageOutputOptions {
   int min_nt_value;
   bool do_pound_line;
+  ParserType m_parserType;
 };
 
 void ParseParser(TokBuf *tokbuf, ParserDef *parser, FILE *vout, int verbosity);
-int SolveParser(ParserDef *parser, ParserSolution *solution, FILE *vout, int verbosity, int timed);
-void OutputParserSolution(FILE *out, const ParserDef *parser, const ParserSolution *solution, LanguageOutputOptions *options);
+int LR_SolveParser(ParserDef *parser, LRParserSolution *solution, FILE *vout, int verbosity, int timed);
+void OutputLRParserSolution(FILE *out, const ParserDef *parser, const LRParserSolution *solution, LanguageOutputOptions *options);
 
 #endif /* __parser_h */
 

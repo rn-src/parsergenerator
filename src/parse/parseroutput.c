@@ -70,7 +70,7 @@ void CLanguageOutputter_outEndFunctionCode(const LanguageOutputter *This, FILE *
 }
 LanguageOutputter CLanguageOutputter = {CLanguageOutputter_outDecl, CLanguageOutputter_outArrayDecl, CLanguageOutputter_outStartArray, CLanguageOutputter_outEndArray, CLanguageOutputter_outEndStmt, CLanguageOutputter_outNull, CLanguageOutputter_outBool, CLanguageOutputter_outStr, CLanguageOutputter_outChar, CLanguageOutputter_outInt, CLanguageOutputter_outFunctionStart, CLanguageOutputter_outStartParameters, CLanguageOutputter_outEndParameters, CLanguageOutputter_outStartFunctionCode, CLanguageOutputter_outEndFunctionCode};
 
-static void OutputParser(FILE *out, const ParserDef *parser, const ParserSolution *solution, const LanguageOutputter *lang, const LanguageOutputOptions *outputOptions) {
+static void OutputLRParser(FILE *out, const ParserDef *parser, const LRParserSolution *solution, const LanguageOutputter *lang, const LanguageOutputOptions *outputOptions) {
   bool first = true;
   MapAny /*<int,int>*/ pid2idx;
   MapAny /*<int,int>*/ nt2idx;
@@ -409,7 +409,16 @@ static void OutputParser(FILE *out, const ParserDef *parser, const ParserSolutio
   Scope_Pop();
 }
 
-void OutputParserSolution(FILE *out, const ParserDef *parser, const ParserSolution *solution, LanguageOutputOptions *options) {
+void OutputLRParserSolution(FILE *out, const ParserDef *parser, const LRParserSolution *solution, LanguageOutputOptions *options) {
   LanguageOutputter *outputer = &CLanguageOutputter;
-  OutputParser(out,parser,solution,outputer,options);
+  OutputLRParser(out,parser,solution,outputer,options);
+}
+
+void OutputLLParserSolution(FILE *out, const ParserDef *parser, const LLParserSolution *solution, LanguageOutputOptions *options) {
+  String err;
+  Scope_Push();
+  String_init(&err,true);
+  String_AssignChars(&err, "LL Parser Output not implemented");
+  setParseError(-1,-1,&err);
+  Scope_Pop();
 }

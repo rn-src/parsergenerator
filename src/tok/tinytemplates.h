@@ -132,7 +132,12 @@ void VectorAny_insert(VectorAny *This, int at, const void *value);
 void VectorAny_insertMany(VectorAny *This, int at, const void *value, size_t count);
 void VectorAny_clear(VectorAny *This);
 void VectorAny_set(VectorAny *This, int i, const void *value);
+void VectorAny_push_back(VectorAny *This, const void *value);
+void VectorAny_resizeWithDefault(VectorAny *This, size_t newsize, const void *def);
+void VectorAny_resize(VectorAny *This, size_t newsize);
+void VectorAny_pop_back(VectorAny *This);
 int VectorAny_erase(VectorAny *This, int i);
+void VectorAny_eraseRange(VectorAny *This, int first, int last);
 void *VectorAny_ptr(VectorAny *This);
 const void *VectorAny_ptrConst(const VectorAny *This);
 bool VectorAny_LessThan(const VectorAny *lhs, const VectorAny *rhs);
@@ -168,6 +173,8 @@ bool SetAny_contains(const SetAny *This, const void *value);
 void SetAny_clear(SetAny *This);
 void *SetAny_ptr(SetAny *This);
 const void *SetAny_ptrConst(const SetAny *This);
+void SetAny_intersection(SetAny *out, const SetAny *lhs, const SetAny *rhs);
+bool SetAny_intersects(const SetAny *lhs, const SetAny *rhs);
 
 struct SetAny {
   VectorAny m_values;

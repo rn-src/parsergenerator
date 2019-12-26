@@ -8,7 +8,8 @@ ElementOps SymbolDefElement = { sizeof(ProductionDescriptor), false, false, Symb
 ElementOps ProductionAndRestrictStateElement = { sizeof(productionandrestrictstate_t), false, false, 0, 0, 0, 0, 0, 0 };
 ElementOps ProductionStateElement = { sizeof(ProductionState), false, false, 0, 0, ProductionState_LessThan, ProductionState_Equal, 0, 0 };
 ElementOps StateElement = { sizeof(state_t), false, false, state_t_init, state_t_destroy, state_t_LessThan, state_t_Equal, state_t_Assign, 0 };
-ElementOps SymbolAndRestrictStateElement = { sizeof(symbolandrestrictstate_t), false, false, 0, 0, 0, 0, 0, 0 };
+ElementOps RestrictionElement = { sizeof(Restriction), false, false, Restriction_init, Restriction_destroy, Restriction_LessThan, Restriction_Equal, Restriction_Assign, 0 };
+ElementOps ProductionsAtKeyElement = { sizeof(ProductionsAtKey), false, false, 0, 0, ProductionsAtKey_LessThan, ProductionsAtKey_Equal, 0, 0 };
 
 void *zalloc(size_t len) {
   void *ret = malloc(len);
@@ -415,7 +416,7 @@ void ProductionDescriptor_symbolsAtDots(const ProductionDescriptor *This, Vector
 	VectorAny_clear(symbols);
 	for( int i = 0, n = VectorAny_size(&This->m_symbols); i < n; ++i ) {
 		if( ProductionDescriptor_hasDotAt(This,i) )
-			VectorAny_push_back(symbols,VectorAny_ArrayOpConstT(&This->m_symbols,i,int));
+			VectorAny_push_back(symbols,&VectorAny_ArrayOpConstT(&This->m_symbols,i,int));
 	}
 }
 
@@ -443,6 +444,13 @@ void ProductionDescriptor_print(const ProductionDescriptor *This, FILE *out, con
     fputs(String_Chars(&sdef->m_name),out);
   }
   fputc(']',out);
+}
+
+void ProductionDescriptor_clear(ProductionDescriptor *This) {
+  VectorAny_clear(&This->m_symbols);
+  This->m_nt = -1;
+  This->m_dots = 0;
+  This->m_dotcnt = 0;
 }
 
 void ProductionDescriptors_init(ProductionDescriptors *This, bool onstack) {
@@ -707,6 +715,7 @@ void ParserDef_init(ParserDef *This, FILE *vout, int verbosity, bool onstack) {
   VectorAny_init(&This->m_assocrules, getPointerElement(),false);
   VectorAny_init(&This->m_precrules, getPointerElement(),false);
   RestrictAutomata_init(&This->m_restrict,false);
+  MapAny_init(&This->productionsAtResults, &ProductionsAtKeyElement, getVectorAnyElement(), false);
   if( onstack )
     Push_Destroy(This,ParserDef_destroy);
 }
@@ -719,6 +728,7 @@ void ParserDef_destroy(ParserDef *This) {
   VectorAny_destroy(&This->m_assocrules);
   VectorAny_destroy(&This->m_precrules);
   RestrictAutomata_destroy(&This->m_restrict);
+  MapAny_destroy(&This->productionsAtResults);
 }
 
 void ParserDef_addProduction(ParserDef *This, Tokenizer *toks, Production *p) {
@@ -863,30 +873,29 @@ int ParserDef_getExtraNt(const ParserDef *This) {
   return 1;
 }
 
-const VectorAny /*<productionandrestrictstate_t>*/ *ParserDef_productionsAt(const ParserDef *This, const Production *p, int pos, int restrictstate, 
-                              MapAny /*< ProductionsAtKey,Vector<productionandrestrictstate_t> >*/ *productionsAtResults) {
+const VectorAny /*<productionandrestrictstate_t>*/ *ParserDef_productionsAt(ParserDef *This, const Production *p, int pos, int restrictstate) {
   ProductionsAtKey badkey;
   badkey.m_p = 0;
   badkey.m_pos = -1;
   badkey.m_restrictstate = -1;
-  if( ! MapAny_find(productionsAtResults,&badkey) ) {
+  if( ! MapAny_find(&This->productionsAtResults,&badkey) ) {
     VectorAny v;
     Scope_Push();
     VectorAny_init(&v,&ProductionAndRestrictStateElement,true);
-    MapAny_insert(productionsAtResults,&badkey,&v);
+    MapAny_insert(&This->productionsAtResults,&badkey,&v);
     Scope_Pop();
   }
   if( pos < 0 || pos >= VectorAny_size(&p->m_symbols) )
-    return &MapAny_findConstT(productionsAtResults,&badkey,VectorAny);
+    return &MapAny_findConstT(&This->productionsAtResults,&badkey,VectorAny);
   int symbol = VectorAny_ArrayOpConstT(&p->m_symbols,pos,int);
   if( ParserDef_getSymbolType(This,symbol) != SymbolTypeNonterminal )
-    return &MapAny_findConstT(productionsAtResults,&badkey,VectorAny);
+    return &MapAny_findConstT(&This->productionsAtResults,&badkey,VectorAny);
   ProductionsAtKey key;
   key.m_p = p;
   key.m_pos = pos;
   key.m_restrictstate = restrictstate;
-  if( MapAny_find(productionsAtResults,&key) )
-    return &MapAny_findConstT(productionsAtResults,&key,VectorAny);
+  if( MapAny_find(&This->productionsAtResults,&key) )
+    return &MapAny_findConstT(&This->productionsAtResults,&key,VectorAny);
   if( This->m_verbosity > 2 ) {
     static int nout = 1;
     Production_print(p,This->m_vout,&This->m_tokdefs,pos,restrictstate);
@@ -919,9 +928,9 @@ const VectorAny /*<productionandrestrictstate_t>*/ *ParserDef_productionsAt(cons
       fputs("\n", This->m_vout);
     }
   }
-  MapAny_insert(productionsAtResults,&key,&productions);
+  MapAny_insert(&This->productionsAtResults,&key,&productions);
   Scope_Pop();
-  return &MapAny_findConstT(productionsAtResults,&key,VectorAny);
+  return &MapAny_findConstT(&This->productionsAtResults,&key,VectorAny);
 }
 
 // No rule may nest into another rule in the same group of productions, including itself.
@@ -1719,18 +1728,4 @@ bool state_t_Equal(const state_t *lhs, const state_t *rhs) {
 
 void state_t_Assign(state_t *lhs, const state_t *rhs) {
   SetAny_Assign(&lhs->m_productionStates,&rhs->m_productionStates);
-}
-
-symbolandrestrictstate_t *symbolandrestrictstate_t_set(symbolandrestrictstate_t *This, int symbol, int restrictstate) {
-  This->symbol = symbol;
-  This->restrictstate = restrictstate;
-  return This;
-}
-
-void ParserSolution_init(ParserSolution *This, bool onstack) {
-  MapAny_init(&This->m_firsts, &SymbolAndRestrictStateElement, getSetAnyElement(), onstack);
-  MapAny_init(&This->m_follows, &SymbolAndRestrictStateElement, getSetAnyElement(), onstack);
-  VectorAny_init(&This->m_states, &StateElement, onstack);
-  MapAny_init(&This->m_shifts, getIntElement(), getMapAnyElement(), onstack);
-  MapAny_init(&This->m_reductions, getIntElement(), getMapAnyElement(), onstack);
 }

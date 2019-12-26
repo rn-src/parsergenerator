@@ -62,132 +62,274 @@ void StringAndIntSet_Assign(StringAndIntSet *lhs, const StringAndIntSet *rhs) {
 }
 
 ElementOps StringAndIntSetElement = {sizeof(StringAndIntSet), false, false, StringAndIntSet_init, StringAndIntSet_destroy, StringAndIntSet_LessThan, StringAndIntSet_Equal, StringAndIntSet_Assign, 0};
-ElementOps ProductionsAtKeyElement = {sizeof(ProductionsAtKey), false, false, 0, 0, ProductionsAtKey_LessThan, ProductionsAtKey_Equal, 0, 0};
 extern ElementOps ProductionStateElement;
 
-struct FirstAndFollowComputer;
-typedef struct FirstAndFollowComputer FirstAndFollowComputer;
+struct FirstAndFollowState;
+typedef struct FirstAndFollowState FirstAndFollowState;
 
-struct FirstAndFollowComputer {
-  const ParserDef *parser;
-  ParserSolution *solution;
+struct FirstAndFollowState {
+  ParserDef *parser;
   FILE *out;
   int verbosity;
-  MapAny /*< ProductionsAtKey,Vector<productionandrestrictstate_t> >*/ *productionsAtResults;
-  SetAny /*<productionandrestrictstate_t>*/ followproductionset;
-  VectorAny /*<productionandrestrictstate_t>*/ followproductions;
+  FirstsAndFollows *firstsAndFollows;
+  SetAny /*<productionandrestrictstate_t>*/ visited;
+  SetAny /*<int>*/ emptyintset;
+  SetAny /*<int>*/ adding;
 };
 
-FirstAndFollowComputer_destroy(FirstAndFollowComputer *This) {
-  SetAny_destroy(&This->followproductionset);
-  VectorAny_destroy(&This->followproductions);
+FirstAndFollowState_destroy(FirstAndFollowState *This) {
+  SetAny_destroy(&This->visited);
+  SetAny_destroy(&This->emptyintset);
+  SetAny_destroy(&This->adding);
 }
 
-FirstAndFollowComputer_init(FirstAndFollowComputer *This, const ParserDef *_parser, ParserSolution *_solution, FILE *_out, int _verbosity,
-  MapAny /*< ProductionsAtKey,Vector<productionandrestrictstate_t> >*/ *_productionsAtResults, bool onstack)
-  {
-    This->parser = _parser;
-    This->solution = _solution;
-    This->out = _out;
-    This->verbosity = _verbosity;
-    This->productionsAtResults = _productionsAtResults;
-    SetAny_init(&This->followproductionset, &ProductionAndRestrictStateElement,false);
-    VectorAny_init(&This->followproductions, &ProductionAndRestrictStateElement,false);
-    if( onstack )
-      Push_Destroy(This,FirstAndFollowComputer_destroy);
-  }
+FirstAndFollowState_init(FirstAndFollowState *This, FirstsAndFollows *_firstsAndFollows, ParserDef *_parser, FILE *_out, int _verbosity, bool onstack) {
+  This->firstsAndFollows = _firstsAndFollows;
+  This->parser = _parser;
+  This->out = _out;
+  This->verbosity = _verbosity;
+  SetAny_init(&This->visited, &ProductionAndRestrictStateElement, false);
+  SetAny_init(&This->emptyintset, getIntElement(), false);
+  SetAny_init(&This->adding, getIntElement(), false);
+  if( onstack )
+    Push_Destroy(This,FirstAndFollowState_destroy);
+}
 
-void FirstAndFollowComputer_ComputeFirsts(FirstAndFollowComputer *This) {
-  SetAny /*<int>*/ adding;
-  Scope_Push();
-  SetAny_init(&adding, getIntElement(), true);
-  // No need to add terminals... we just test if the symbol is a terminal in the rest of the code
-  /*
-  for( Map<int,SymbolDef>::const_iterator cur = parser.m_tokdefs.begin(), end = parser.m_tokdefs.end(); cur != end; ++cur ) {
-    if( cur->second.m_symboltype == SymbolTypeTerminal ) {
-      int tokid = cur->second.m_tokid;
-      for( int restrictstate = 0; restrictstate < parser.m_restrict.nstates(); ++restrictstate )
-        solution.m_firsts[symbolandrestrictstate_t(tokid,restrictstate)].insert(cur->second.m_tokid);
-    }
-  }
-  */
-  bool added = true;
-  while( added ) {
-    added = false;
-    for( int cur = 0, end = MapAny_size(&This->parser->m_tokdefs); cur != end; ++cur ) {
-      const int *tok = 0;
-      const SymbolDef *symbolDef = 0;
-      MapAny_getByIndexConst(&This->parser->m_tokdefs,cur,&tok,&symbolDef);
-      if( symbolDef->m_symboltype != SymbolTypeNonterminalProduction )
+static void FirstAndFollowState_logAdded(FirstAndFollowState *This, const char *to, int symbol, int pid, int restrictState) {
+  const char *symbolstr = (symbol == EOF_TOK) ? "$" : String_Chars(&MapAny_findConstT(&This->parser->m_tokdefs, &symbol, SymbolDef).m_name);
+  const char *productionstr = String_Chars(&MapAny_findConstT(&This->parser->m_tokdefs, &pid, SymbolDef).m_name);
+  fprintf(This->out, "Adding %s to %s(%s,%d)\n", symbolstr, to, productionstr, restrictState);
+}
+
+static  bool FirstAndFollowState_ComputeFirsts_productionandrestrictstate(FirstAndFollowState *This, const productionandrestrictstate_t *prs) {
+  bool added = false;
+  const Production *production = prs->production;
+  int restrictState = prs->restrictstate;
+  bool previouslyVisited = SetAny_contains(&This->visited, prs);
+
+  if( ! previouslyVisited )
+    SetAny_insert(&This->visited, prs, 0);
+
+  // compute the firsts of the sub-productions, but avoid infinite recursion
+  if( ! previouslyVisited ) {
+    for (int placementdot = 0, placementend = VectorAny_size(&production->m_symbols); placementdot < placementend; ++placementdot) {
+      int symbol = VectorAny_ArrayOpConstT(&production->m_symbols, placementdot, int);
+      SymbolType stype = ParserDef_getSymbolType(This->parser, symbol);
+      if (stype == SymbolTypeTerminal)
         continue;
-      int tokid = symbolDef->m_tokid;
-      for( int restrictstate = 0, nstates = RestrictAutomata_nstates(&This->parser->m_restrict); restrictstate < nstates; ++restrictstate ) {
-        symbolandrestrictstate_t symbolandrestrictstate;
-        symbolandrestrictstate_t_set(&symbolandrestrictstate, tokid, restrictstate);
-        SetAny /*<int>*/ *firsts = &MapAny_findT(&This->solution->m_firsts,&symbolandrestrictstate,SetAny);
-        if (!firsts) {
-          SetAny_clear(&adding);
-          MapAny_insert(&This->solution->m_firsts,&symbolandrestrictstate,&adding);
-          firsts = &MapAny_findT(&This->solution->m_firsts, &symbolandrestrictstate, SetAny);
-        }
-        int beforecnt = SetAny_size(firsts);
-        const Production *p = symbolDef->m_p;
-        if( VectorAny_size(&p->m_symbols) == 0 )
-          continue;
-        int s = VectorAny_ArrayOpConstT(&p->m_symbols,0,int);
-        if( ParserDef_getSymbolType(This->parser,s) == SymbolTypeTerminal ) {          
-          if( This->verbosity > 2 ) {
-            if( ! SetAny_contains(firsts,&s) ) {
-              const String *name_s = &MapAny_findConstT(&This->parser->m_tokdefs,&s,SymbolDef).m_name;
-              const String *name_tokid = &MapAny_findConstT(&This->parser->m_tokdefs,&tokid,SymbolDef).m_name;
-              fprintf(This->out,"Adding %s to FIRST(%s,%d)\n",String_Chars(name_s),String_Chars(name_tokid),restrictstate);
-            }
-          }
-          SetAny_insert(firsts,&s,0);
-        } else {
-          const VectorAny /*<productionandrestrictstate_t>*/ *productions = ParserDef_productionsAt(This->parser,p,0,restrictstate,This->productionsAtResults);
-          for( int curp = 0, endp = VectorAny_size(productions); curp != endp; ++curp ) {
-            const productionandrestrictstate_t *curPFS = &VectorAny_ArrayOpConstT(productions,curp,productionandrestrictstate_t);
-            symbolandrestrictstate_t_set(&symbolandrestrictstate, curPFS->production->m_pid, curPFS->restrictstate);
-            const SetAny /*<int>*/ *sfirsts = &MapAny_findConstT(&This->solution->m_firsts, &symbolandrestrictstate, SetAny);
-            if (!sfirsts)
-              continue;
-            if( This->verbosity > 2 ) {
-              SetAny_clear(&adding);
-              SetAny_Assign(&adding,sfirsts);
-              SetAny_eraseMany(&adding,SetAny_ptrConst(firsts),SetAny_size(firsts));
-              if( SetAny_size(&adding) > 0 ) {
-                for( int curadd = 0, endadd = SetAny_size(&adding); curadd != endadd; ++curadd ) {
-                  int curtok = SetAny_getByIndexConstT(&adding,curadd,int);
-                  const String *str_curtok = &MapAny_findConstT(&This->parser->m_tokdefs,&curtok,SymbolDef).m_name;
-                  const String *str_tokid = &MapAny_findConstT(&This->parser->m_tokdefs,&tokid,SymbolDef).m_name;
-                  fprintf(This->out,"Adding %s to FIRST(%s,%d)\n",String_Chars(str_curtok),String_Chars(str_tokid),restrictstate);
-                }
-              }
-            }
-            SetAny_insertMany(firsts,SetAny_ptrConst(sfirsts),SetAny_size(sfirsts));
-          }
-        }
-        int aftercnt =  SetAny_size(firsts);
-        if( beforecnt != aftercnt )
-          added = true;
+      const VectorAny /*<productionandrestrictstate_t>*/ *subproductions = ParserDef_productionsAt(This->parser, production, placementdot, restrictState);
+      for (int pidx = 0, endpidx = VectorAny_size(subproductions); pidx < endpidx; ++pidx) {
+        const productionandrestrictstate_t *subprs = &VectorAny_ArrayOpConstT(subproductions, pidx, productionandrestrictstate_t);
+        const Production *subProduction = subprs->production;
+        int subRestrictState = subprs->restrictstate;
+        added = FirstAndFollowState_ComputeFirsts_productionandrestrictstate(This, subprs) || added;
       }
     }
   }
-  Scope_Pop();
+
+  // firsts are assigned until the first non-epsilon carrying placement is found
+  bool assignFirsts = true;
+
+  for( int placementdot = 0, placementend = VectorAny_size(&production->m_symbols); assignFirsts && placementdot < placementend; ++placementdot) {
+    bool hasEpsilon = false;
+    int symbol = VectorAny_ArrayOpConstT(&production->m_symbols, placementdot, int);
+    SymbolType stype = ParserDef_getSymbolType(This->parser,symbol);
+    if( stype == SymbolTypeTerminal ) {
+      if( ! MapAny_contains(&This->firstsAndFollows->m_firsts,prs) )
+        MapAny_insert(&This->firstsAndFollows->m_firsts, prs, &This->emptyintset);
+      SetAny /*<int>*/ *firsts = &MapAny_findT(&This->firstsAndFollows->m_firsts, prs, SetAny);
+      int before = SetAny_size(firsts);
+      SetAny_insert(firsts,&symbol,0);
+      int after = SetAny_size(firsts);
+      if( after > before ) {
+        added = true;
+        if (This->verbosity > 2)
+          FirstAndFollowState_logAdded(This, "FIRST", symbol, production->m_pid, restrictState);
+      }
+    } else {
+      bool foundEmptyProduction = false;
+      const VectorAny /*<productionandrestrictstate_t>*/ *subproductions = ParserDef_productionsAt(This->parser, production, placementdot, restrictState);
+      for( int pidx = 0, endpidx = VectorAny_size(subproductions); pidx < endpidx; ++pidx ) {
+        const productionandrestrictstate_t *subprs = &VectorAny_ArrayOpConstT(subproductions,pidx,productionandrestrictstate_t);
+        const Production *subProduction = subprs->production;
+        int subRestrictState = subprs->restrictstate;
+
+        // Watch for empty productions, which introduces an epsilon
+        if( VectorAny_size(&subprs->production->m_symbols) == 0 )
+          foundEmptyProduction = true;
+
+        // Add to our own firsts if called for
+        SetAny /*<int>*/ *subfirsts = &MapAny_findT(&This->firstsAndFollows->m_firsts, subprs, SetAny);
+        if( subfirsts ) {
+          if( ! MapAny_contains(&This->firstsAndFollows->m_firsts, prs) )
+            MapAny_insert(&This->firstsAndFollows->m_firsts, prs, &This->emptyintset);
+          SetAny /*<int>*/ *firsts = &MapAny_findT(&This->firstsAndFollows->m_firsts, prs, SetAny);
+          subfirsts = &MapAny_findT(&This->firstsAndFollows->m_firsts, subprs, SetAny);
+          if (This->verbosity > 2) {
+            SetAny_Assign(&This->adding, subfirsts);
+            SetAny_eraseMany(&This->adding, SetAny_ptrConst(firsts), SetAny_size(firsts));
+            for (int addidx = 0, addend = SetAny_size(&This->adding); addidx < addend; ++addidx) {
+              int addsymbol = SetAny_getByIndexConstT(&This->adding,addidx,int);
+              FirstAndFollowState_logAdded(This, "FIRST", addsymbol, production->m_pid, restrictState);
+            }
+          }
+          int before = SetAny_size(firsts);
+          SetAny_insertMany(firsts, SetAny_ptr(subfirsts), SetAny_size(subfirsts));
+          int after = SetAny_size(firsts);
+          if (after > before)
+            added = true;
+        }
+      }
+      if( foundEmptyProduction )
+        hasEpsilon = true;
+    }
+    if( ! hasEpsilon )
+      assignFirsts = false;
+  }
+
+  return added;
 }
 
-void FirstAndFollowComputer_getFollows(FirstAndFollowComputer *This, const Production *p, int pos, int restrictstate, VectorAny /*< Pair< String,Set<int> > >*/ *followslist) {
+void FirstAndFollowState_ComputeFirsts(FirstAndFollowState *This) {
+  productionandrestrictstate_t prs;
+  volatile bool runAgain = true;
+  int eoftok = EOF_TOK;
+
+  MapAny_clear(&This->firstsAndFollows->m_firsts);
+
+  prs.production = This->parser->m_startProduction;
+  prs.restrictstate = 0;
+
+  while( runAgain ) {
+    SetAny_clear(&This->visited);
+    runAgain = FirstAndFollowState_ComputeFirsts_productionandrestrictstate(This, &prs);
+  }
+}
+
+static  bool FirstAndFollowState_ComputeFollows_productionandrestrictstate(FirstAndFollowState *This, const productionandrestrictstate_t *prs) {
+  bool added = false;
+  const Production *production = prs->production;
+  int restrictState = prs->restrictstate;
+  bool previouslyVisited = SetAny_contains(&This->visited, prs);
+
+  if( ! previouslyVisited )
+    SetAny_insert(&This->visited, prs, 0);
+
+  // Add follows to sub-productions
+  for (int placementdot = 0, placementend = VectorAny_size(&production->m_symbols); placementdot < placementend; ++placementdot) {
+    int symbol = VectorAny_ArrayOpConstT(&production->m_symbols, placementdot, int);
+    SymbolType stype = ParserDef_getSymbolType(This->parser, symbol);
+    if (stype == SymbolTypeTerminal)
+      continue; // not sub-productions
+    const VectorAny /*<productionandrestrictstate_t>*/ *subproductions = ParserDef_productionsAt(This->parser, production, placementdot, restrictState);
+    for (int pidx = 0, endpidx = VectorAny_size(subproductions); pidx < endpidx; ++pidx) {
+      const productionandrestrictstate_t *subprs = &VectorAny_ArrayOpConstT(subproductions, pidx, productionandrestrictstate_t);
+      const Production *subProduction = subprs->production;
+      int subRestrictState = subprs->restrictstate;
+      if (!MapAny_contains(&This->firstsAndFollows->m_follows, subprs))
+        MapAny_insert(&This->firstsAndFollows->m_follows, subprs, &This->emptyintset);
+      SetAny /*<int>*/ *subfollows = &MapAny_findT(&This->firstsAndFollows->m_follows, subprs, SetAny);
+      if( placementdot+1 < placementend) {
+        // Use the firsts from the next symbol in the production
+        int nextsymbol = VectorAny_ArrayOpConstT(&production->m_symbols, placementdot+1, int);
+        SymbolType nextstype = ParserDef_getSymbolType(This->parser, nextsymbol);
+        // Easy case, next symbol is a terminal
+        if(nextstype == SymbolTypeTerminal) {
+          int before = SetAny_size(subfollows);
+          SetAny_insert(subfollows,&nextsymbol,0);
+          int after = SetAny_size(subfollows);
+          if( after > before ) {
+            added = true;
+            if (This->verbosity > 2)
+              FirstAndFollowState_logAdded(This,"FOLLOW", nextsymbol, subProduction->m_pid,restrictState);
+          }
+        } else {
+          // Next symbol is a nonterminal, use the union of firsts from the sub-productions
+          productionandrestrictstate_t nextprs;
+          const VectorAny /*<productionandrestrictstate_t>*/ *subnextproductions = ParserDef_productionsAt(This->parser, production, placementdot+1, restrictState);
+          for (int nextpidx = 0, nextendpidx = VectorAny_size(subnextproductions); nextpidx < nextendpidx; ++nextpidx) {
+            const productionandrestrictstate_t *subnextprs = &VectorAny_ArrayOpConstT(subnextproductions, nextpidx, productionandrestrictstate_t);
+            SetAny /*<int>*/ *nextfirsts = &MapAny_findT(&This->firstsAndFollows->m_firsts, subnextprs, SetAny);
+            if (This->verbosity > 2) {
+              SetAny_Assign(&This->adding, nextfirsts);
+              SetAny_eraseMany(&This->adding, SetAny_ptrConst(subfollows), SetAny_size(subfollows));
+              for (int addidx = 0, addend = SetAny_size(&This->adding); addidx < addend; ++addidx) {
+                int addsymbol = SetAny_getByIndexConstT(&This->adding, addidx, int);
+                FirstAndFollowState_logAdded(This, "FOLLOW", addsymbol, subProduction->m_pid, subRestrictState);
+              }
+            }
+            int before = SetAny_size(subfollows);
+            SetAny_insertMany(subfollows, SetAny_ptr(nextfirsts), SetAny_size(nextfirsts));
+            int after = SetAny_size(subfollows);
+            if (after > before)
+              added = true;
+          }
+        }
+      } else {
+        // At the end, add our own follows to the sub-production
+        SetAny /*<int>*/ *follows = &MapAny_findT(&This->firstsAndFollows->m_follows, prs, SetAny);
+        if (This->verbosity > 2) {
+          SetAny_Assign(&This->adding, follows);
+          SetAny_eraseMany(&This->adding, SetAny_ptrConst(subfollows), SetAny_size(subfollows));
+          for (int addidx = 0, addend = SetAny_size(&This->adding); addidx < addend; ++addidx) {
+            int addsymbol = SetAny_getByIndexConstT(&This->adding, addidx, int);
+            FirstAndFollowState_logAdded(This, "FOLLOW", addsymbol, subProduction->m_pid, subRestrictState);
+          }
+        }
+        SetAny_insertMany(subfollows, SetAny_ptr(follows), SetAny_size(follows));
+      }
+    }
+  }
+
+  // Repeat for sub-productions
+  if( ! previouslyVisited ) {
+    for (int placementdot = 0, placementend = VectorAny_size(&production->m_symbols); placementdot < placementend; ++placementdot) {
+      int symbol = VectorAny_ArrayOpConstT(&production->m_symbols, placementdot, int);
+      SymbolType stype = ParserDef_getSymbolType(This->parser, symbol);
+      if (stype == SymbolTypeTerminal)
+        continue; // not sub-productions
+      const VectorAny /*<productionandrestrictstate_t>*/ *subproductions = ParserDef_productionsAt(This->parser, production, placementdot, restrictState);
+      for (int pidx = 0, endpidx = VectorAny_size(subproductions); pidx < endpidx; ++pidx) {
+        const productionandrestrictstate_t *subprs = &VectorAny_ArrayOpConstT(subproductions, pidx, productionandrestrictstate_t);
+        added = FirstAndFollowState_ComputeFollows_productionandrestrictstate(This, subprs) || added;
+      }
+    }
+  }
+
+  return added;
+}
+
+void FirstAndFollowState_ComputeFollows(FirstAndFollowState *This) {
+  productionandrestrictstate_t prs;
+  volatile bool runAgain = true;
+  int eoftok = EOF_TOK;
+
+  MapAny_clear(&This->firstsAndFollows->m_follows);
+
+  if (This->verbosity > 2)
+    FirstAndFollowState_logAdded(This, "FOLLOW", EOF_TOK, This->parser->m_startProduction->m_pid, 0);
+  prs.production = This->parser->m_startProduction;
+  prs.restrictstate = 0;
+  MapAny_insert(&This->firstsAndFollows->m_follows, &prs, &This->emptyintset);
+  SetAny_insert(&MapAny_findT(&This->firstsAndFollows->m_follows, &prs, SetAny), &eoftok, 0);
+
+  while (runAgain) {
+    SetAny_clear(&This->visited);
+    runAgain = FirstAndFollowState_ComputeFollows_productionandrestrictstate(This, &prs);
+  }
+}
+
+void FirstAndFollowState_getFollows(FirstAndFollowState *This, const Production *p, int pos, int restrictstate, VectorAny /*< Pair< String,Set<int> > >*/ *followslist) {
   Scope_Push();
   StringAndIntSet followitem;
   StringAndIntSet_init(&followitem,true);
 
   VectorAny_clear(followslist);
-  symbolandrestrictstate_t symbolandrestrictstate;
+  productionandrestrictstate_t prs;
   if( pos+1== VectorAny_size(&p->m_symbols) ) {
     StringAndIntSet_clear(&followitem);
     String_ReFormatString(&followitem.str,"FOLLOW(%s,%d)", String_Chars(&MapAny_findConstT(&This->parser->m_tokdefs,&p->m_pid,SymbolDef).m_name), restrictstate);
-    const SetAny *pidfollows = &MapAny_findConstT(&This->solution->m_follows,symbolandrestrictstate_t_set(&symbolandrestrictstate,p->m_pid,restrictstate),SetAny);
+    const SetAny *pidfollows = &MapAny_findConstT(&This->firstsAndFollows->m_follows,productionandrestrictstate_t_set(&prs,p,restrictstate),SetAny);
     if( pidfollows )
       SetAny_Assign(&followitem.set,pidfollows);
     VectorAny_push_back(followslist,&followitem);
@@ -200,16 +342,12 @@ void FirstAndFollowComputer_getFollows(FirstAndFollowComputer *This, const Produ
       SetAny_insert(&followitem.set,&nexttok,0);
       VectorAny_push_back(followslist,&followitem);
     } else if( stypenext == SymbolTypeNonterminal ) {
-      const VectorAny /*<productionandrestrictstate_t>*/ *productions = ParserDef_productionsAt(This->parser,p,pos+1,restrictstate,This->productionsAtResults);
+      const VectorAny /*<productionandrestrictstate_t>*/ *productions = ParserDef_productionsAt(This->parser,p,pos+1,restrictstate);
       for( int i = 0, n = VectorAny_size(productions); i != n; ++i ) {
         const productionandrestrictstate_t *curpat = &VectorAny_ArrayOpConstT(productions,i,productionandrestrictstate_t);
-        if( ! SetAny_contains(&This->followproductionset,curpat) ) {
-          SetAny_insert(&This->followproductionset,curpat,0);
-          VectorAny_push_back(&This->followproductions,curpat);
-        }
         StringAndIntSet_clear(&followitem);
         String_ReFormatString(&followitem.str,"FIRST(%s,%d)", String_Chars(&MapAny_findConstT(&This->parser->m_tokdefs,&curpat->production->m_pid,SymbolDef).m_name), curpat->restrictstate);
-        const SetAny *pidfirsts = &MapAny_findConstT(&This->solution->m_firsts,symbolandrestrictstate_t_set(&symbolandrestrictstate,curpat->production->m_pid,curpat->restrictstate),SetAny);
+        const SetAny *pidfirsts = &MapAny_findConstT(&This->firstsAndFollows->m_firsts, productionandrestrictstate_t_set(&prs,curpat->production,curpat->restrictstate),SetAny);
         if( pidfirsts )
           SetAny_Assign(&followitem.set,pidfirsts);
         VectorAny_push_back(followslist,&followitem);
@@ -219,126 +357,7 @@ void FirstAndFollowComputer_getFollows(FirstAndFollowComputer *This, const Produ
   Scope_Pop();
 }
 
-void FirstAndFollowComputer_ComputeFollows(FirstAndFollowComputer *This) {
-  symbolandrestrictstate_t symbolandrestrictstate;
-  productionandrestrictstate_t productionandrestrictstate;
-  VectorAny /*< StringAndIntSet >*/ followslist;
-  StringAndIntSet followitem;
-  SetAny /*<int>*/ adding;
-
-  Scope_Push();
-  VectorAny_init(&followslist, &StringAndIntSetElement,true);
-  SetAny_init(&adding, getIntElement(), true);
-  StringAndIntSet_init(&followitem, true);
-
-  int eoftok = EOF_TOK;
-  const Production *startProduction = ParserDef_getStartProductionConst(This->parser);
-  symbolandrestrictstate_t_set(&symbolandrestrictstate, startProduction->m_pid, 0);
-  productionandrestrictstate_t_set(&productionandrestrictstate, startProduction, 0);
-  SetAny_insert(&adding, &eoftok, 0);
-  MapAny_insert(&This->solution->m_follows, &adding, 0);
-
-  SetAny_insert(&This->followproductionset, &productionandrestrictstate,0);
-  VectorAny_push_back(&This->followproductions, &productionandrestrictstate);
-  bool added = true;
-  while( added ) {
-    added = false;
-    for( int ifp = 0; ifp < VectorAny_size(&This->followproductions); ++ifp ) {
-      const Production *p = VectorAny_ArrayOpT(&This->followproductions,ifp,productionandrestrictstate_t).production;
-      int restrictstate = VectorAny_ArrayOpT(&This->followproductions, ifp,productionandrestrictstate_t).restrictstate;
-
-      for( int pos = 0, endpos = VectorAny_size(&p->m_symbols); pos != endpos; ++pos ) {
-        int tok = VectorAny_ArrayOpConstT(&p->m_symbols,pos,int);
-        SymbolType stype = ParserDef_getSymbolType(This->parser,tok);
-        VectorAny_clear(&followslist);
-        FirstAndFollowComputer_getFollows(This,p,pos,restrictstate,&followslist);
-        if( This->verbosity > 2 ) {
-          fputs("Evaluting ",This->out);
-          Production_print(p,This->out,&This->parser->m_tokdefs,pos,restrictstate);
-          fputs("\n",This->out);
-        }
-        if( stype == SymbolTypeTerminal ) {
-          symbolandrestrictstate_t_set(&symbolandrestrictstate, tok, restrictstate);
-          SetAny /*<int>*/ *follows = &MapAny_findT(&This->solution->m_follows, &symbolandrestrictstate, SetAny);
-          if (!follows) {
-            SetAny_clear(&adding);
-            MapAny_insert(&This->solution->m_follows, &symbolandrestrictstate, &adding);
-            follows = &MapAny_findT(&This->solution->m_follows, &symbolandrestrictstate, SetAny);
-          }
-          int before = SetAny_size(follows);
-          for( int i = 0, n = VectorAny_size(&followslist); i < n; ++i ) {
-            const StringAndIntSet *followitem = &VectorAny_ArrayOpConstT(&followslist,i,StringAndIntSet);
-            const String *descstr = &followitem->str;
-            const SetAny /*<int>*/ *followitemset = &followitem->set;
-            if( This->verbosity > 2 ) {
-              SetAny_clear(&adding);
-              SetAny_Assign(&adding,followitemset);
-              SetAny_eraseMany(&adding,SetAny_ptrConst(follows),SetAny_size(follows));
-              if( SetAny_size(&adding) > 0 ) {
-                fprintf(This->out, "%s {\n", String_Chars(descstr));
-                for( int i = 0, n = SetAny_size(&adding); i < n; ++i ) {
-                  int curadd = SetAny_getByIndexConstT(&adding,i,int);
-                  const String *curadd_str = &MapAny_findConstT(&This->parser->m_tokdefs,&curadd,SymbolDef).m_name;
-                  const String *tok_str = &MapAny_findConstT(&This->parser->m_tokdefs,&tok,SymbolDef).m_name;
-                  fprintf(This->out,"Adding %s to FOLLOW(%s,%d)\n",String_Chars(curadd_str),String_Chars(tok_str),restrictstate);
-                }
-                fprintf(This->out, "} %s\n", String_Chars(descstr));
-              }
-            }
-            SetAny_insertMany(follows,SetAny_ptrConst(followitemset),SetAny_size(followitemset));
-          }
-          int after = SetAny_size(follows);
-          if (after > before)
-            added = true;
-        }
-        else {
-          const VectorAny /*<productionandrestrictstate_t>*/ *productions = ParserDef_productionsAt(This->parser,p,pos,restrictstate,This->productionsAtResults);
-          for( int ip = 0, np = VectorAny_size(productions); ip < np; ++ip ) {
-            const productionandrestrictstate_t *curpat = &VectorAny_ArrayOpConstT(productions,ip,productionandrestrictstate_t);
-            if( ! SetAny_contains(&This->followproductionset,curpat) ) {
-              SetAny_insert(&This->followproductionset,curpat,0);
-              VectorAny_push_back(&This->followproductions,curpat);
-            }
-            symbolandrestrictstate_t_set(&symbolandrestrictstate, curpat->production->m_pid, curpat->restrictstate);
-            SetAny /*<int>*/ *follows = &MapAny_findT(&This->solution->m_follows,&symbolandrestrictstate,SetAny);
-            if (!follows) {
-              SetAny_clear(&adding);
-              MapAny_insert(&This->solution->m_follows, &symbolandrestrictstate, &adding);
-              follows = &MapAny_findT(&This->solution->m_follows, &symbolandrestrictstate, SetAny);
-            }
-            int before = SetAny_size(follows);
-            for( int i = 0, n = VectorAny_size(&followslist); i < n; ++i ) {
-              StringAndIntSet_clear(&followitem);
-              StringAndIntSet_Assign(&followitem,&VectorAny_ArrayOpT(&followslist,i,StringAndIntSet));
-              const String *descstr = &followitem.str;
-              const SetAny /*<int>*/ *followitemset = &followitem.set;
-              if( This->verbosity > 2 ) {
-                SetAny_clear(&adding);
-                SetAny_Assign(&adding, followitemset);
-                SetAny_eraseMany(&adding,SetAny_ptr(follows),SetAny_size(follows));
-                if( SetAny_size(&adding) > 0 ) {
-                  fprintf(This->out, "%s {\n", String_Chars(descstr));
-                  for( int j = 0, m = SetAny_size(&adding); j < m; ++j ) {
-                    int curadd = SetAny_getByIndexConstT(&adding,j,int);
-                    fprintf(This->out,"Adding %s to FOLLOW(%s,%d)\n", String_Chars(&MapAny_findConstT(&This->parser->m_tokdefs,&curadd,SymbolDef).m_name),String_Chars(&MapAny_findConstT(&This->parser->m_tokdefs,&curpat->production->m_pid,SymbolDef).m_name),curpat->restrictstate);
-                  }
-                  fprintf(This->out, "} %s\n", String_Chars(descstr));
-                }
-              }
-              SetAny_insertMany(follows,SetAny_ptrConst(followitemset),SetAny_size(followitemset));
-            }
-            int after = SetAny_size(follows);
-            if (after > before)
-              added = true;
-          }
-        }
-      }
-    }
-  }
-  Scope_Pop();
-}
-
-void FirstAndFollowComputer_closure(FirstAndFollowComputer *This, state_t *state) {
+void State_closure(state_t *state, ParserDef *parser) {
   int prevsize = 0;
   SetAny /*<ProductionState>*/ newparts;
   Scope_Push();
@@ -348,7 +367,7 @@ void FirstAndFollowComputer_closure(FirstAndFollowComputer *This, state_t *state
     SetAny_clear(&newparts);
      for( int cur = 0, end = state_t_size(state); cur != end; ++cur ) {
       const ProductionState *curState = &state_t_getByIndexConst(state,cur);
-      const VectorAny /*<productionandrestrictstate_t>*/ *productions = ParserDef_productionsAt(This->parser,curState->m_p,curState->m_pos,curState->m_restrictstate,This->productionsAtResults);
+      const VectorAny /*<productionandrestrictstate_t>*/ *productions = ParserDef_productionsAt(parser,curState->m_p,curState->m_pos,curState->m_restrictstate);
       for( int curp = 0, endp = VectorAny_size(productions); curp != endp; ++curp ) {
         const productionandrestrictstate_t *curProductionAndRestrictState = &VectorAny_ArrayOpConstT(productions,curp,productionandrestrictstate_t);
         ProductionState ps;
@@ -364,16 +383,16 @@ void FirstAndFollowComputer_closure(FirstAndFollowComputer *This, state_t *state
   Scope_Pop();
 }
 
-void FirstAndFollowComputer_nexts(FirstAndFollowComputer *This, const state_t *state, SetAny /*<int>*/ *nextSymbols) {
+void State_nexts(const state_t *state, ParserDef *parser, SetAny /*<int>*/ *nextSymbols) {
   for( int curs = 0, ends = state_t_size(state); curs != ends; ++curs ) {
     const ProductionState *curState = &state_t_getByIndexConst(state,curs);
     int symbol = ProductionState_symbol(curState);
     if( symbol == -1 )
       continue;
-    if( ParserDef_getSymbolType(This->parser,symbol) == SymbolTypeTerminal )
+    if( ParserDef_getSymbolType(parser,symbol) == SymbolTypeTerminal )
       SetAny_insert(nextSymbols,&symbol,0);
     else {
-      const VectorAny /*<productionandrestrictstate_t>*/ *productions = ParserDef_productionsAt(This->parser,curState->m_p,curState->m_pos,curState->m_restrictstate,This->productionsAtResults);
+      const VectorAny /*<productionandrestrictstate_t>*/ *productions = ParserDef_productionsAt(parser,curState->m_p,curState->m_pos,curState->m_restrictstate);
       for( int curp = 0, endp = VectorAny_size(productions); curp != endp; ++curp ) {
         const productionandrestrictstate_t *curProductionAndRestrictState = &VectorAny_ArrayOpConstT(productions,curp,productionandrestrictstate_t);
         SetAny_insert(nextSymbols,&curProductionAndRestrictState->production->m_pid,0);
@@ -382,27 +401,27 @@ void FirstAndFollowComputer_nexts(FirstAndFollowComputer *This, const state_t *s
   }
 }
 
-void FirstAndFollowComputer_advance(FirstAndFollowComputer *This, state_t *state, int tsymbol, state_t *nextState) {
+void State_advance(state_t *state, int tsymbol, ParserDef *parser, state_t *nextState) {
   state_t_clear(nextState);
   const Production *p = 0;
   ProductionState ps;
-  if( ParserDef_getSymbolType(This->parser,tsymbol) == SymbolTypeNonterminalProduction )
-    p = MapAny_findConstT(&This->parser->m_tokdefs,&tsymbol,SymbolDef).m_p;
+  if( ParserDef_getSymbolType(parser,tsymbol) == SymbolTypeNonterminalProduction )
+    p = MapAny_findConstT(&parser->m_tokdefs,&tsymbol,SymbolDef).m_p;
   for( int curs = 0, ends = state_t_size(state); curs != ends; ++curs ) {
     const ProductionState *curState = &state_t_getByIndexConst(state,curs);
     int symbol = ProductionState_symbol(curState);
-    if( symbol == tsymbol || (p && p->m_nt == symbol && ! RestrictAutomata_isRestricted(&This->parser->m_restrict,curState->m_p,curState->m_pos,curState->m_restrictstate,p)) )
+    if( symbol == tsymbol || (p && p->m_nt == symbol && ! RestrictAutomata_isRestricted(&parser->m_restrict,curState->m_p,curState->m_pos,curState->m_restrictstate,p)) )
       state_t_insert(nextState,ProductionState_set(&ps,curState->m_p,curState->m_pos+1,curState->m_restrictstate),0);
   }
 }
 
-void FirstAndFollowComputer_ComputeStatesAndActions(FirstAndFollowComputer *This) {
+void LR_ComputeStatesAndActions(ParserDef *parser, LRParserSolution *solution, FILE *out, int verbosity) {
   MapAny /*<state_t,int>*/ statemap;
   state_t state, nextState;
   SetAny /*<int>*/ nextSymbols;
   SetAny /*<int>*/ emptyintset;
   ProductionState ps;
-  symbolandrestrictstate_t symbolandrestrictstate;
+  productionandrestrictstate_t prs;
   shifttosymbols_t emptyshifttosymbols;
   reducebysymbols_t emptyreducebysymbols;
 
@@ -416,38 +435,38 @@ void FirstAndFollowComputer_ComputeStatesAndActions(FirstAndFollowComputer *This
   MapAny_init(&emptyshifttosymbols, getIntElement(), getSetAnyElement(), true);
   MapAny_init(&emptyreducebysymbols, getPointerElement(), getSetAnyElement(), true);
 
-  state_t_insert(&state,ProductionState_set(&ps,ParserDef_getStartProductionConst(This->parser),0,0),0);
-  FirstAndFollowComputer_closure(This,&state);
-  int n = VectorAny_size(&This->solution->m_states);
+  state_t_insert(&state,ProductionState_set(&ps,ParserDef_getStartProductionConst(parser),0,0),0);
+  State_closure(&state,parser);
+  int n = VectorAny_size(&solution->m_states);
   MapAny_insert(&statemap,&state,&n);
-  VectorAny_push_back(&This->solution->m_states,&state);
-  for( int i = 0; i < VectorAny_size(This->solution->m_states); ++i ) {
-    if( This->verbosity > 2 )
-      fprintf(This->out,"computing state %d\n",i);
-    state_t_Assign(&state,&VectorAny_ArrayOpConstT(&This->solution->m_states,i,state_t));
+  VectorAny_push_back(&solution->m_states,&state);
+  for( int i = 0; i < VectorAny_size(&solution->m_states); ++i ) {
+    if( verbosity > 2 )
+      fprintf(out,"computing state %d\n",i);
+    state_t_Assign(&state,&VectorAny_ArrayOpConstT(&solution->m_states,i,state_t));
     int stateIdx = i;
-    FirstAndFollowComputer_nexts(This,&state,&nextSymbols);
+    State_nexts(&state,parser,&nextSymbols);
     for( int cur = 0, end = SetAny_size(&nextSymbols); cur != end; ++cur ) {
       int symbol = SetAny_getByIndexConstT(&nextSymbols,cur,int);
-      FirstAndFollowComputer_advance(This,&state,symbol,&nextState);
-      FirstAndFollowComputer_closure(This,&nextState);
+      State_advance(&state,symbol,parser,&nextState);
+      State_closure(&nextState,parser);
       if( state_t_empty(&nextState) )
         continue;
       int nextStateIdx = -1;
       const int *stateiter = &MapAny_findConstT(&statemap,&nextState,int);
       if( ! stateiter ) {
-        nextStateIdx = VectorAny_size(&This->solution->m_states);
+        nextStateIdx = VectorAny_size(&solution->m_states);
         MapAny_insert(&statemap,&nextState,&nextStateIdx);
-        VectorAny_push_back(&This->solution->m_states,&nextState);
-        if( This->verbosity > 2 )
-          fprintf(This->out,"added state %d\n",nextStateIdx);
+        VectorAny_push_back(&solution->m_states,&nextState);
+        if( verbosity > 2 )
+          fprintf(out,"added state %d\n",nextStateIdx);
       } else {
         nextStateIdx = *stateiter;
       }
-      shifttosymbols_t *shifttosymbols = &MapAny_findT(&This->solution->m_shifts,&stateIdx,shifttosymbols_t);
+      shifttosymbols_t *shifttosymbols = &MapAny_findT(&solution->m_shifts,&stateIdx,shifttosymbols_t);
       if (!shifttosymbols) {
-        MapAny_insert(&This->solution->m_shifts, &stateIdx, &emptyshifttosymbols);
-        shifttosymbols = &MapAny_findT(&This->solution->m_shifts, &stateIdx, shifttosymbols_t);
+        MapAny_insert(&solution->m_shifts, &stateIdx, &emptyshifttosymbols);
+        shifttosymbols = &MapAny_findT(&solution->m_shifts, &stateIdx, shifttosymbols_t);
       }
       SetAny *stateShiftTos = &MapAny_findT(shifttosymbols,&nextStateIdx,SetAny);
       if (!stateShiftTos) {
@@ -460,13 +479,13 @@ void FirstAndFollowComputer_ComputeStatesAndActions(FirstAndFollowComputer *This
       const ProductionState *curProductionState = &state_t_getByIndexConst(&state,curps);
       if( curProductionState->m_pos < VectorAny_size(&curProductionState->m_p->m_symbols) )
         continue;
-      const SetAny /*<int>*/ *follows = &MapAny_findConstT(&This->solution->m_follows,symbolandrestrictstate_t_set(&symbolandrestrictstate,curProductionState->m_p->m_pid,curProductionState->m_restrictstate),SetAny);
+      const SetAny /*<int>*/ *follows = &MapAny_findConstT(&solution->m_firstsAndFollows.m_follows,productionandrestrictstate_t_set(&prs,curProductionState->m_p,curProductionState->m_restrictstate),SetAny);
       if (!follows)
         continue;
-      reducebysymbols_t *reducebysymbols = &MapAny_findT(&This->solution->m_reductions,&stateIdx,reducebysymbols_t);
+      reducebysymbols_t *reducebysymbols = &MapAny_findT(&solution->m_reductions,&stateIdx,reducebysymbols_t);
       if (!reducebysymbols) {
-        MapAny_insert(&This->solution->m_reductions, &stateIdx, &emptyreducebysymbols);
-        reducebysymbols = &MapAny_findT(&This->solution->m_reductions, &stateIdx, reducebysymbols_t);
+        MapAny_insert(&solution->m_reductions, &stateIdx, &emptyreducebysymbols);
+        reducebysymbols = &MapAny_findT(&solution->m_reductions, &stateIdx, reducebysymbols_t);
       }
       SetAny *productionFollows = &MapAny_findT(reducebysymbols,&curProductionState->m_p,SetAny);
       if (!productionFollows) {
@@ -479,18 +498,18 @@ void FirstAndFollowComputer_ComputeStatesAndActions(FirstAndFollowComputer *This
   Scope_Pop();
 }
 
-void FirstAndFollowComputer_PrintRules(const FirstAndFollowComputer *This) {
+void PrintRules(const ParserDef *parser, FILE *out) {
   int i = 1;
-  for( int cur = 0, end = VectorAny_size(&This->parser->m_productions); cur != end; ++cur ) {
-    const Production *curP = VectorAny_ArrayOpConstT(&This->parser->m_productions,cur,Production*);
-    fprintf(This->out, "#%d ", i++);
-    Production_print(curP,This->out,&This->parser->m_tokdefs,-1,0);
-    fputs("\n",This->out);
+  for( int cur = 0, end = VectorAny_size(&parser->m_productions); cur != end; ++cur ) {
+    const Production *curP = VectorAny_ArrayOpConstT(&parser->m_productions,cur,Production*);
+    fprintf(out, "#%d ", i++);
+    Production_print(curP,out,&parser->m_tokdefs,-1,0);
+    fputs("\n",out);
   }
-  fputs("\n",This->out);
+  fputs("\n",out);
 }
 
-void FirstAndFollowComputer_PrintStatesAndActions(const FirstAndFollowComputer *This) {
+void LR_PrintStatesAndActions(const ParserDef *parser, const LRParserSolution *solution, FILE *out) {
   SetAny /*<int>*/ symbols;
   SetAny /*<int>*/ shiftsymbols;
   SetAny /*<Production*>*/ emptyproductionset;
@@ -506,40 +525,40 @@ void FirstAndFollowComputer_PrintStatesAndActions(const FirstAndFollowComputer *
   VectorAny_init(&reduces,getPointerElement(),true);
   VectorAny_init(&symreductions,getPointerElement(),true);
 
-  const MapAny /*<int,SymbolDef>*/ *tokens = &This->parser->m_tokdefs;
-  fprintf(This->out, "%d states\n\n", VectorAny_size(This->solution->m_states));
-  for( int i = 0, n = VectorAny_size(&This->solution->m_states); i != n; ++i ) {
+  const MapAny /*<int,SymbolDef>*/ *tokens = &parser->m_tokdefs;
+  fprintf(out, "%d states\n\n", VectorAny_size(&solution->m_states));
+  for( int i = 0, n = VectorAny_size(&solution->m_states); i != n; ++i ) {
     SetAny_clear(&symbols);
     SetAny_clear(&shiftsymbols);
     MapAny_clear(&reductions);
 
-    fprintf(This->out, "State %d:\n", i);
-    const state_t *state = &VectorAny_ArrayOpConstT(&This->solution->m_states,i,state_t);
-    state_t_print(state,This->out,tokens);
-    const shifttosymbols_t *shifttosymbols = &MapAny_findConstT(&This->solution->m_shifts,&i,shifttosymbols_t);
+    fprintf(out, "State %d:\n", i);
+    const state_t *state = &VectorAny_ArrayOpConstT(&solution->m_states,i,state_t);
+    state_t_print(state,out,tokens);
+    const shifttosymbols_t *shifttosymbols = &MapAny_findConstT(&solution->m_shifts,&i,shifttosymbols_t);
     if( shifttosymbols ) {
       for( int curshift = 0, endshift = MapAny_size(shifttosymbols); curshift != endshift; ++curshift ) {
         const int *tostate = 0;
         const SetAny /*<int>*/ *onsymbols = 0;
         MapAny_getByIndexConst(shifttosymbols,curshift,&tostate,&onsymbols);
-        fprintf(This->out, "shift to state %d on ", *tostate);
+        fprintf(out, "shift to state %d on ", *tostate);
         bool bFirst = true;
         for( int cursym = 0, endsym = SetAny_size(onsymbols); cursym != endsym; ++cursym ) {
           int onsymbol = SetAny_getByIndexConstT(onsymbols,cursym,int);
           if( bFirst )
             bFirst = false;
           else
-            fputs(", ", This->out);
-          fputs(String_Chars(&MapAny_findConstT(tokens,&onsymbol,SymbolDef).m_name), This->out);
+            fputs(", ", out);
+          fputs(String_Chars(&MapAny_findConstT(tokens,&onsymbol,SymbolDef).m_name), out);
           SetAny_insert(&shiftsymbols,&onsymbol,0);
           SetAny_insert(&symbols,&onsymbol,0);
         }
-        fputs("\n",This->out);
+        fputs("\n",out);
       }
     }
     //typedef MapAny /*<int,reducebysymbols_t>*/ reducemap_t;
     //int *reduceby reducemap_t::const_iterator reduceiter = 
-    const reducebysymbols_t *reducebysymbols = &MapAny_findConstT(&This->solution->m_reductions,&i,reducebysymbols_t);
+    const reducebysymbols_t *reducebysymbols = &MapAny_findConstT(&solution->m_reductions,&i,reducebysymbols_t);
     if( reducebysymbols ) {
       VectorAny_clear(&reduces);
       for( int curreduce = 0, endreduce = MapAny_size(reducebysymbols); curreduce != endreduce; ++curreduce ) {
@@ -554,10 +573,10 @@ void FirstAndFollowComputer_PrintStatesAndActions(const FirstAndFollowComputer *
         Production *p = VectorAny_ArrayOpT(&reduces,curp,Production*);
         const SetAny /*<int>*/ *syms = &MapAny_findConstT(reducebysymbols,&p,SetAny);
         if( p->m_rejectable )
-          fputs("(rejectable) ", This->out);
-        fputs("reduce by production [", This->out);
-        Production_print(p,This->out,tokens,-1,0);
-        fputs("] on ", This->out);
+          fputs("(rejectable) ", out);
+        fputs("reduce by production [", out);
+        Production_print(p,out,tokens,-1,0);
+        fputs("] on ", out);
         bool bFirst = true;
         for( int cursym = 0, endsym = SetAny_size(syms); cursym != endsym; ++cursym ) {
           int curSymbol = SetAny_getByIndexConstT(syms,cursym,int);
@@ -565,8 +584,8 @@ void FirstAndFollowComputer_PrintStatesAndActions(const FirstAndFollowComputer *
           if( bFirst )
             bFirst = false;
           else
-            fputs(", ", This->out);
-          fputs(symstr, This->out);
+            fputs(", ", out);
+          fputs(symstr, out);
           SetAny *reductionsymbols = &MapAny_findT(&reductions, &curSymbol, SetAny);
           if (!reductionsymbols) {
             MapAny_insert(&reductions, &curSymbol, &emptyproductionset);
@@ -575,16 +594,16 @@ void FirstAndFollowComputer_PrintStatesAndActions(const FirstAndFollowComputer *
           SetAny_insert(reductionsymbols,&p,0);
           SetAny_insert(&symbols,&curSymbol,0);
         }
-        fputs("\n",This->out);
+        fputs("\n",out);
       }
     }
     for( int cursym = 0, endsym = SetAny_size(&symbols); cursym != endsym; ++cursym ) {
       int sym = SetAny_getByIndexConstT(&symbols,cursym,int);
-      if( ! MapAny_find(&reductions,&sym) )
+      if( ! MapAny_contains(&reductions,&sym) )
         continue; // there can be no conflicts if there are no reductions
       const char *symstr = (sym==-1) ? "$" : String_Chars(&MapAny_findConstT(tokens,&sym,SymbolDef).m_name);
-      if( ! SetAny_contains(&shiftsymbols,&sym) )
-        fprintf(This->out, "shift/reduce conflict on %s\n", symstr);
+      if( SetAny_contains(&shiftsymbols,&sym) )
+        fprintf(out, "shift/reduce conflict on %s\n", symstr);
       VectorAny_clear(&symreductions); /*<const Production*>*/
       // MapAny /*<int,Set<const Production*> > */ reductions;
       const SetAny /*<const Production*>*/ *reduceProductions = &MapAny_findConstT(&reductions,&sym,SetAny);
@@ -592,15 +611,15 @@ void FirstAndFollowComputer_PrintStatesAndActions(const FirstAndFollowComputer *
       for( int r0 = 0; r0 < VectorAny_size(&symreductions); ++r0 )
         for( int r1 = r0+1; r1 < VectorAny_size(&symreductions); ++r1 )
           if( ! VectorAny_ArrayOpConstT(&symreductions,r0,Production*)->m_rejectable && ! VectorAny_ArrayOpConstT(&symreductions,r1,Production*)->m_rejectable )
-            fprintf(This->out, "reduce/reduce conflict on %s\n", symstr);
+            fprintf(out, "reduce/reduce conflict on %s\n", symstr);
     }
-    fputs("\n",This->out);
+    fputs("\n",out);
   }
-  fputs("\n",This->out);
+  fputs("\n",out);
   Scope_Pop();
 }
 
-int FirstAndFollowComputer_PrintConflicts(const FirstAndFollowComputer *This) {
+int LR_PrintConflicts(ParserDef *parser, LRParserSolution *solution, FILE *out) {
   SetAny /*<int>*/ symbols;
   SetAny /*<int>*/ shiftsymbols;
   SetAny /*<Production*>*/ emptyproductionset;
@@ -615,13 +634,13 @@ int FirstAndFollowComputer_PrintConflicts(const FirstAndFollowComputer *This) {
   VectorAny_init(&symreductions,getPointerElement(),true);
 
   int nconflicts = 0;
-  const MapAny /*<int,SymbolDef>*/ *tokens = &This->parser->m_tokdefs;
-  for( int i = 0, n = VectorAny_size(&This->solution->m_states); i != n; ++i ) {
+  const MapAny /*<int,SymbolDef>*/ *tokens = &parser->m_tokdefs;
+  for( int i = 0, n = VectorAny_size(&solution->m_states); i != n; ++i ) {
     SetAny_clear(&symbols);
     SetAny_clear(&shiftsymbols);
     MapAny_clear(&reductions);
-    const state_t *state = &VectorAny_ArrayOpConstT(&This->solution->m_states,i,state_t);
-    shifttosymbols_t *shifttosymbols = &MapAny_findT(&This->solution->m_shifts,&i,shifttosymbols_t);
+    const state_t *state = &VectorAny_ArrayOpConstT(&solution->m_states,i,state_t);
+    shifttosymbols_t *shifttosymbols = &MapAny_findT(&solution->m_shifts,&i,shifttosymbols_t);
     if( shifttosymbols ) {
       for( int curshift = 0, endshift = MapAny_size(shifttosymbols); curshift != endshift; ++curshift ) {
         const int *shiftto = 0;
@@ -634,7 +653,7 @@ int FirstAndFollowComputer_PrintConflicts(const FirstAndFollowComputer *This) {
         }
       }
     }
-    const reducebysymbols_t *reducebysymbols = &MapAny_findConstT(&This->solution->m_reductions,&i,reducebysymbols_t);
+    const reducebysymbols_t *reducebysymbols = &MapAny_findConstT(&solution->m_reductions,&i,reducebysymbols_t);
     if( reducebysymbols ) {
       for( int curreduce = 0, endreduce = MapAny_size(reducebysymbols); curreduce != endreduce; ++curreduce ) {
         const Production *production = 0;
@@ -690,31 +709,67 @@ int FirstAndFollowComputer_PrintConflicts(const FirstAndFollowComputer *This) {
   return nconflicts;
 }
 
-int FirstAndFollowComputer_SolveParser(FirstAndFollowComputer *This) {
-  FirstAndFollowComputer_ComputeFirsts(This);
-  FirstAndFollowComputer_ComputeFollows(This);
-  FirstAndFollowComputer_ComputeStatesAndActions(This);
-  int nconflicts = FirstAndFollowComputer_PrintConflicts(This);
-  if( This->verbosity >= 1 ) {
-    FirstAndFollowComputer_PrintRules(This);
-    FirstAndFollowComputer_PrintStatesAndActions(This);
-  }
-  return nconflicts;
+void FirstsAndFollows_Compute(FirstsAndFollows *This, ParserDef *parser, FILE *vout, int verbosity) {
+  FirstAndFollowState firstAndFollowState;
+  Scope_Push();
+  FirstAndFollowState_init(&firstAndFollowState, This, parser, vout, verbosity, true);
+  FirstAndFollowState_ComputeFirsts(&firstAndFollowState);
+  FirstAndFollowState_ComputeFollows(&firstAndFollowState);
+  Scope_Pop();
 }
 
-int SolveParser(ParserDef *parser, ParserSolution *solution, FILE *vout, int verbosity, int timed) {
+void FirstsAndFollows_init(FirstsAndFollows *This, bool onstack) {
+  MapAny_init(&This->m_firsts, &ProductionAndRestrictStateElement, getSetAnyElement(), false);
+  MapAny_init(&This->m_follows, &ProductionAndRestrictStateElement, getSetAnyElement(), false);
+  if (onstack)
+    Push_Destroy(This, FirstsAndFollows_destroy);
+}
+
+void FirstsAndFollows_destroy(FirstsAndFollows *This) {
+  MapAny_destroy(&This->m_firsts);
+  MapAny_destroy(&This->m_follows);
+}
+
+void LRParserSolution_init(LRParserSolution *This, bool onstack) {
+  FirstsAndFollows_init(&This->m_firstsAndFollows, false);
+  VectorAny_init(&This->m_states, &StateElement, false);
+  MapAny_init(&This->m_shifts, getIntElement(), getMapAnyElement(), false);
+  MapAny_init(&This->m_reductions, getIntElement(), getMapAnyElement(), false);
+  if( onstack )
+    Push_Destroy(This, LRParserSolution_destroy);
+}
+
+void LRParserSolution_destroy(LRParserSolution *This) {
+  FirstsAndFollows_destroy(&This->m_firstsAndFollows);
+  VectorAny_destroy(&This->m_states);
+  MapAny_destroy(&This->m_shifts);
+  MapAny_destroy(&This->m_reductions);
+}
+
+void LLParserSolution_init(LLParserSolution *This, bool onstack) {
+  FirstsAndFollows_init(&This->m_firstsAndFollows, false);
+  if (onstack)
+    Push_Destroy(This, LLParserSolution_destroy);
+}
+
+void LLParserSolution_destroy(LLParserSolution *This) {
+  FirstsAndFollows_destroy(&This->m_firstsAndFollows);
+}
+
+int LR_SolveParser(ParserDef *parser, LRParserSolution *solution, FILE *vout, int verbosity, int timed) {
   if( ! ParserDef_getStartProduction(parser) ) {
     fputs("The grammar definition requires a START production",stderr);
     return -1;
   }
   ticks_t start = getSystemTicks();
   ParserDef_computeRestrictAutomata(parser);
-  MapAny /*< ProductionsAtKey,Vector<productionandrestrictstate_t> >*/ productionsAtResults;
-  FirstAndFollowComputer firstAndFollowComputer;
-  Scope_Push();
-  MapAny_init(&productionsAtResults, &ProductionsAtKeyElement, getVectorAnyElement(),true);
-  FirstAndFollowComputer_init(&firstAndFollowComputer,parser,solution,vout,verbosity,&productionsAtResults,true);
-  int result = FirstAndFollowComputer_SolveParser(&firstAndFollowComputer);
+  FirstsAndFollows_Compute(&solution->m_firstsAndFollows, parser, vout, verbosity);
+  LR_ComputeStatesAndActions(parser,solution,vout,verbosity);
+  int nconflicts = LR_PrintConflicts(parser,solution,vout);
+  if (verbosity >= 1) {
+    PrintRules(parser,vout);
+    LR_PrintStatesAndActions(parser,solution,vout);
+  }
   ticks_t stop = getSystemTicks();
   if( timed ) {
     printf("Tokens %d\n", VectorAny_size(&parser->m_tokens));
@@ -722,6 +777,18 @@ int SolveParser(ParserDef *parser, ParserSolution *solution, FILE *vout, int ver
     printf("States %d\n", VectorAny_size(&solution->m_states));
     printf("Duration %.6f\n", (double)(stop-start)/(double)getSystemTicksFreq());
   }
-  Scope_Pop();
-  return result;
+  return nconflicts;
+}
+
+int LL_SolveParser(ParserDef *parser, LLParserSolution *solution, FILE *vout, int verbosity, int timed) {
+  ticks_t start = getSystemTicks();
+  ParserDef_computeRestrictAutomata(parser);
+  FirstsAndFollows_Compute(&solution->m_firstsAndFollows, parser, vout, verbosity);
+  ticks_t stop = getSystemTicks();
+  if (timed) {
+    printf("Tokens %d\n", VectorAny_size(&parser->m_tokens));
+    printf("Productions %d\n", VectorAny_size(&parser->m_productions));
+    printf("Duration %.6f\n", (double)(stop - start) / (double)getSystemTicksFreq());
+  }
+  return 0;
 }

@@ -36,6 +36,10 @@ void parseArgs(int argc, char *argv[], int *pverbosity, int *ptimed, LanguageOut
     options->do_pound_line = false;
   if (getarg(argc, argv, "--timed"))
     timed = 1;
+  if (getarg(argc, argv, "--lr"))
+    options->m_parserType = ParserType_LR;
+  if (getarg(argc, argv, "--ll"))
+    options->m_parserType = ParserType_LL;
   for (int i = 1; i < argc; ++i) {
     if (argv[i][0] == '-')
       continue;
@@ -50,7 +54,7 @@ int main(int argc, char *argv[]) {
   int verbosity = 0;
   int timed = 0;
   const char *fname = 0;
-  LanguageOutputOptions options = { 0, true };
+  LanguageOutputOptions options = { 0, true, ParserType_LR };
 
   parseArgs(argc, argv, &verbosity, &timed, &options, &fname);
 
@@ -58,6 +62,8 @@ int main(int argc, char *argv[]) {
     fputs("usage : parser [-v[v[v]]] [--minnt=int] [--no-pound-line] [--timed] filename\n"
           "   -v          : verbosity, 1 through 3 times\n"
           "--minnt        : minimum nonterminal value, if the default output is too low\n"
+          "--lr           : output an LR parser\n"
+          "--ll           : output an LL parser\n"
           "-no-pound-line : turn off #line directives in the output\n", stderr);
     return -1;
   }
@@ -68,7 +74,8 @@ int main(int argc, char *argv[]) {
   FILE *vout = stdout;
   ParserDef parser;
   FileTokBuf tokbuf;
-  ParserSolution solution;
+  LRParserSolution solution;
+  LLParserSolution llsolution;
   ParseError *pe = 0;
   int ret = 0;
 
@@ -86,9 +93,16 @@ int main(int argc, char *argv[]) {
     Push_Destroy(foutname, free);
     ParserDef_init(&parser,vout,verbosity,true);
     FileTokBuf_init(&tokbuf,fin,fname,true);
-    ParserSolution_init(&solution, true);
+    LRParserSolution_init(&solution, true);
+    LLParserSolution_init(&llsolution, true);
     ParseParser(&tokbuf.m_tokbuf,&parser,vout,verbosity);
-    int n = SolveParser(&parser, &solution, vout, verbosity, timed);
+    int n = 0;
+
+    if (options.m_parserType == ParserType_LR)
+      n = LR_SolveParser(&parser, &solution, vout, verbosity, timed);
+    else if (options.m_parserType == ParserType_LL)
+      n = LL_SolveParser(&parser, &llsolution, vout, verbosity, timed);
+
     if( n != 0 ) {
       Scope_Pop();
       return n;
@@ -100,7 +114,12 @@ int main(int argc, char *argv[]) {
       return -1;
     }
     Push_Destroy(fout, fclose);
-    OutputParserSolution(fout, &parser, &solution, &options);
+
+    if (options.m_parserType == ParserType_LR)
+      OutputLRParserSolution(fout, &parser, &solution, &options);
+    else if (options.m_parserType == ParserType_LL)
+      OutputLLParserSolution(fout, &parser, &llsolution, &options);
+
   } else if( getParseError(&pe) ) {
     if( pe->line != -1 )
       fprintf(stderr, "%s(%d:%d) : %s\n", String_Chars(&pe->file), pe->line, pe->col, String_Chars(&pe->err));
