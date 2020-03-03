@@ -434,21 +434,70 @@ void RestrictAutomata_Compact(const RestrictAutomata *This, RestrictAutomata *re
   Scope_Pop();
 }
 
-// For each transition symbol a along S0->S1 where S1 has restriction r, add restriction r@a to output S0.
-// For each transition symbol a along S0->S1 where S1 has transition symbol b along S1->*, add transition symbol a@b along S0->S1.
+// For each transition symbol A along S0->S1 where S1 is an end state, add restriction -/->A to S0
+// remove transitions used during the above step
+void RestrictAutomata_RestrictionFixups(const RestrictAutomata *This, RestrictAutomata *restrictAutomataOut) {
+  SetAny /*<Restriction>*/ toSymbols;
+  SetAny /*<int>*/ toStatesEnd;
+  SetAny /*<int>*/ toStatesNoEnd;
+  RestrictAutomata restrictAutomataTmp;
+  Restriction r;
+
+  Scope_Push();
+  SetAny_init(&toSymbols, &RestrictionElement, true);
+  SetAny_init(&toStatesEnd, getIntElement(), true);
+  SetAny_init(&toStatesNoEnd, getIntElement(), true);
+  Restriction_init(&r, true);
+  RestrictAutomata_init(&restrictAutomataTmp, true);
+
+  restrictAutomataTmp.m_startState = This->m_startState;
+  restrictAutomataTmp.m_nextstate = This->m_nextstate;
+  MapAny_Assign(&restrictAutomataTmp.m_emptytransitions, &This->m_emptytransitions);
+
+  for (int curtrns = 0, endtrns = MapAny_size(&This->m_transitions); curtrns < endtrns; ++curtrns) {
+    const int *pfrom = 0;
+    const MapAny /*<Restriction,Set<int>>*/ *restrictiontostatesmap = 0;
+    MapAny_getByIndexConst(&This->m_transitions, curtrns, &pfrom, &restrictiontostatesmap);
+    int fromState = *pfrom;
+
+    for (int curres = 0, endres = MapAny_size(restrictiontostatesmap); curres < endres; ++curres) {
+      const Restriction *tSymbol = 0;
+      const SetAny /*<int>*/ *toStates = 0;
+      MapAny_getByIndexConst(restrictiontostatesmap, curres, &tSymbol, &toStates);
+      SetAny_intersection(&toStatesEnd, toStates, &This->m_endStates);
+      SetAny_Assign(&toStatesNoEnd, toStates);
+      if( SetAny_size(&toStatesEnd) > 0 ) {
+        SetAny_insertMany(&restrictAutomataTmp.m_endStates, SetAny_ptr(&toStatesEnd), SetAny_size(&toStatesEnd));
+        for (int cursym = 0, endsym = SetAny_size(&toStatesEnd); cursym < endsym; ++cursym) {
+          int toState = SetAny_getByIndexConstT(&toStatesEnd, cursym, int);
+          Restriction_clear(&r);
+          ProductionDescriptor_UnDottedProductionDescriptor(&tSymbol->m_restricted, &r.m_restricted);
+          RestrictAutomata_addTransition(&restrictAutomataTmp, fromState, toState, &r);
+        }
+      }
+      if( SetAny_size(&toStatesNoEnd) > 0 )
+        RestrictAutomata_addMultiStateTransition(&restrictAutomataTmp, fromState, &toStatesNoEnd, tSymbol);
+    }
+  }
+
+  RestrictAutomata_Compact(&restrictAutomataTmp, restrictAutomataOut);
+
+  Scope_Pop();
+}
+
+// For each transition symbol A along S0->S1 where S1 has restriction R, add restriction R@A (rx AR) to S0.
+// For each transition symbol A along S0->S1 where S1 has transition symbol B along S1->S2, add transition symbol A@B (rx BA) to S0->S1.
+// remove transitions used during the above steps
 void RestrictAutomata_PlacementFixups(const RestrictAutomata *This, RestrictAutomata *restrictAutomataOut) {
-  ProductionDescriptors emptytransitions;
   SetAny /*<Restriction>*/ tosymbols;
   Restriction r;
   RestrictAutomata restrictAutomataTmp;
 
   Scope_Push();
-  ProductionDescriptors_init(&emptytransitions, true);
   SetAny_init(&tosymbols,&RestrictionElement,true);
   Restriction_init(&r, true);
   RestrictAutomata_init(&restrictAutomataTmp,true);
 
-  RestrictAutomata_clear(&restrictAutomataTmp);
   restrictAutomataTmp.m_startState = This->m_startState;
   restrictAutomataTmp.m_nextstate = This->m_nextstate;
   SetAny_Assign(&restrictAutomataTmp.m_endStates, &This->m_endStates);
@@ -461,27 +510,27 @@ void RestrictAutomata_PlacementFixups(const RestrictAutomata *This, RestrictAuto
     int fromState = *pfrom;
 
     for (int curres = 0, endres = MapAny_size(restrictiontostatesmap); curres < endres; ++curres) {
-      const Restriction *fromsymbol = 0;
-      const SetAny /*<int>*/ *tostates = 0;
-      MapAny_getByIndexConst(restrictiontostatesmap, curres, &fromsymbol, &tostates);
+      const Restriction *tSymbol = 0;
+      const SetAny /*<int>*/ *toStates = 0;
+      MapAny_getByIndexConst(restrictiontostatesmap, curres, &tSymbol, &toStates);
 
-      // For each transition symbol a along S0->S1 where S1 has transition symbol b along S1->*, add transition symbol a@b along S0->S1.
-      ProductionDescriptor_Assign(&r.m_at, &fromsymbol->m_restricted);
-      RestrictAutomata_SymbolsFromStates(This, tostates, &tosymbols);
+      // For each transition symbol A along S0->S1 where S1 has transition symbol B along S1->S2, add transition symbol A@B (rx BA) to S0->S1.
+      ProductionDescriptor_Assign(&r.m_at, &tSymbol->m_restricted);
+      RestrictAutomata_SymbolsFromStates(This, toStates, &tosymbols);
       for (int cursym = 0, endsym = SetAny_size(&tosymbols); cursym < endsym; ++cursym) {
         const Restriction *tosymbol = &SetAny_getByIndexConstT(&tosymbols, cursym, Restriction);
         ProductionDescriptor_UnDottedProductionDescriptor(&tosymbol->m_restricted, &r.m_restricted);
-        RestrictAutomata_addMultiStateTransition(&restrictAutomataTmp, fromState,tostates,&r);
+        RestrictAutomata_addMultiStateTransition(&restrictAutomataTmp, fromState, toStates,&r);
       }
 
-      // For each transition symbol a along S0->S1 where S1 has restriction r, add restriction r@a to output S0.
-      ProductionDescriptor_Assign(&r.m_at, &fromsymbol->m_restricted);
-      for( int curtostate = 0, endtostate = SetAny_size(tostates); curtostate != endtostate; ++curtostate ) {
-        int tostate = SetAny_getByIndexConstT(tostates,curtostate,int);
-        const SetAny /*<Restriction>*/ *torestrictions = &MapAny_findConstT(&This->m_statetorestrictions, &tostate, SetAny);
-        for (int ridx = 0, endridx = SetAny_size(torestrictions); ridx < endridx; ++ridx) {
-          const Restriction *torestriction = &SetAny_getByIndexConstT(torestrictions, ridx, Restriction);
-          ProductionDescriptor_UnDottedProductionDescriptor(&torestriction->m_restricted, &r.m_restricted);
+      // For each transition symbol A along S0->S1 where S1 has restriction R, add restriction R@A (rx AR) to S0.
+      ProductionDescriptor_Assign(&r.m_at, &tSymbol->m_restricted);
+      for( int curtostate = 0, endtostate = SetAny_size(toStates); curtostate != endtostate; ++curtostate ) {
+        int toState = SetAny_getByIndexConstT(toStates,curtostate,int);
+        const SetAny /*<Restriction>*/ *toRestrictions = &MapAny_findConstT(&This->m_statetorestrictions, &toState, SetAny);
+        for (int ridx = 0, endridx = SetAny_size(toRestrictions); ridx < endridx; ++ridx) {
+          const Restriction *toRestriction = &SetAny_getByIndexConstT(toRestrictions, ridx, Restriction);
+          ProductionDescriptor_UnDottedProductionDescriptor(&toRestriction->m_restricted, &r.m_restricted);
           RestrictAutomata_addRestriction(&restrictAutomataTmp,fromState,&r);
           RestrictAutomata_addEndState(&restrictAutomataTmp,fromState);
         }
@@ -546,15 +595,15 @@ void StringToInt_2_IntToString(const MapAny /*<String,int>*/ *src, MapAny /*<int
 }
 
 void ParserDef_computeRestrictAutomata(ParserDef *This) {
-  RestrictAutomata restrictNFA, restrictDFA;
+  RestrictAutomata restrictA, restrictB;
   Restriction restriction;
 
   Scope_Push();
-  RestrictAutomata_init(&restrictNFA, true);
-  RestrictAutomata_init(&restrictDFA, true);
+  RestrictAutomata_init(&restrictA, true);
+  RestrictAutomata_init(&restrictB, true);
   Restriction_init(&restriction, true);
 
-  // Expand and combine the rules
+  // Expand rules
   ParserDef_expandAssocRules(This);
   ParserDef_expandPrecRules(This);
   if( This->m_verbosity > 2 ) {
@@ -564,46 +613,46 @@ void ParserDef_computeRestrictAutomata(ParserDef *This) {
       fputs("\n",This->m_vout);
     }
   }
-  // Turn the regular expressions into a nondeterministic restrict automata
-  int startState = RestrictAutomata_newstate(&restrictNFA);
-  restrictNFA.m_startState = startState;
+  // Turn the regular expressions into a nondeterministic automata
+  int startState = RestrictAutomata_newstate(&restrictA);
+  restrictA.m_startState = startState;
   for (int cur = 0, end = VectorAny_size(&This->m_restrictrules); cur != end; ++cur) {
     RestrictRule *rr = VectorAny_ArrayOpT(&This->m_restrictrules, cur, RestrictRule*);
-    int endState = RestrictRegex_addToNfa(rr->m_rx, &restrictNFA, startState);
-    RestrictAutomata_addEndState(&restrictNFA, endState);
-    Restriction_clear(&restriction);
-    for (int currestriction = 0, endrestriction = ProductionDescriptors_size(rr->m_restricted); currestriction != endrestriction; ++currestriction) {
-      const ProductionDescriptor *pr = &ProductionDescriptors_getByIndexConst(rr->m_restricted, currestriction);
-      ProductionDescriptor_Assign(&restriction.m_restricted,pr);
-      RestrictAutomata_addRestriction(&restrictNFA, endState, &restriction);
-    }
+    int endState = RestrictRegex_addToNfa(rr->m_rx, &restrictA, startState);
+    RestrictAutomata_addEndState(&restrictA, endState);
   }
+  if (This->m_verbosity > 2) {
+    fputs("non-deterministic restrict automata (wo/restrictions):\n", This->m_vout);
+    RestrictAutomata_print(&restrictA, This->m_vout, &This->m_tokdefs);
+  }
+  // The state preceeding an endstates gets the restriction.
+  RestrictAutomata_RestrictionFixups(&restrictA, &restrictB);
   if( This->m_verbosity > 2 ) {
-    fputs("non-deterministic restrict automata (no start-state epsilons):\n", This->m_vout);
-    RestrictAutomata_print(&restrictNFA,This->m_vout,&This->m_tokdefs);
+    fputs("non-deterministic restrict automata (w/restrictions):\n", This->m_vout);
+    RestrictAutomata_print(&restrictB,This->m_vout,&This->m_tokdefs);
   }
   // Make the automata deterministic.
-  RestrictAutomata_toDeterministicRestrictAutomata(&restrictNFA,&restrictDFA);
+  RestrictAutomata_toDeterministicRestrictAutomata(&restrictB,&restrictA);
   if (This->m_verbosity > 2) {
     fputs("deterministic restrict automata (wo/placement-fixups):\n", This->m_vout);
-    RestrictAutomata_print(&restrictDFA, This->m_vout, &This->m_tokdefs);
+    RestrictAutomata_print(&restrictA, This->m_vout, &This->m_tokdefs);
   }
   // Add the placement fixups (may add epsilons)
-  RestrictAutomata_PlacementFixups(&restrictDFA,&restrictNFA);
+  RestrictAutomata_PlacementFixups(&restrictA,&restrictB);
   if (This->m_verbosity > 2) {
     fputs("deterministic restrict automata (w/placement-fixups):\n", This->m_vout);
-    RestrictAutomata_print(&restrictNFA, This->m_vout, &This->m_tokdefs);
+    RestrictAutomata_print(&restrictB, This->m_vout, &This->m_tokdefs);
   }
   // Add the epsilons to transition the start state
-  RestrictAutomata_AddStartStateEpsilons(&restrictNFA);
+  RestrictAutomata_AddStartStateEpsilons(&restrictB);
   if (This->m_verbosity > 2) {
     fputs("non-deterministic restrict automata (with start-state epsilons):\n", This->m_vout);
-    RestrictAutomata_print(&restrictNFA, This->m_vout, &This->m_tokdefs);
+    RestrictAutomata_print(&restrictB, This->m_vout, &This->m_tokdefs);
   }
   // Make the automata deterministic again.
-  RestrictAutomata_toDeterministicRestrictAutomata(&restrictNFA, &restrictDFA);
+  RestrictAutomata_toDeterministicRestrictAutomata(&restrictB, &restrictA);
   // Finished
-  RestrictAutomata_Assign(&This->m_restrict, &restrictDFA);
+  RestrictAutomata_Assign(&This->m_restrict, &restrictA);
   if( This->m_verbosity > 2 ) {
     fputs("deterministic restrict automata (final):\n", This->m_vout);
       RestrictAutomata_print(&This->m_restrict,This->m_vout,&This->m_tokdefs);

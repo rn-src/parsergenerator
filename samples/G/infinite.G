@@ -2,7 +2,7 @@
 
 stmt : IF stmt
      | IF stmt ELSE stmt
-     | ID ;
+     | OTHER ;
 
-RESTRICT [stmt: IF stmt] @ [stmt : IF .stmt ELSE stmt][stmt : IF stmt ELSE.stmt]* ;
+RESTRICT [stmt : IF .stmt ELSE stmt][stmt : IF stmt ELSE.stmt]*[stmt: IF stmt] ;
 

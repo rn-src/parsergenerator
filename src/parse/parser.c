@@ -386,6 +386,10 @@ void ProductionDescriptor_UnDottedProductionDescriptor(const ProductionDescripto
 }
 
 void ProductionDescriptor_DottedProductionDescriptor(const ProductionDescriptor *This, ProductionDescriptor *out, int nt, Assoc assoc)  {
+  if( assoc == AssocNull ) {
+    ProductionDescriptor_UnDottedProductionDescriptor(This,out);
+    return;
+  }
   int ntat=0, ntcnt=0;
   int dots=0, dotcnt=0;
   ntcnt = ProductionDescriptor_appearancesOf(This,nt,&ntat);
@@ -496,6 +500,8 @@ ProductionRegex *ProductionDescriptors_ProductionRegex(const ProductionDescripto
     else
       pr = rxbinary(BinaryOp_Or, pr, rxpd(pddotted));
   }
+  if( ProductionDescriptors_size(This) > 1 )
+    pr->m_paren = true;
   return pr;
 }
 
@@ -623,9 +629,9 @@ void ProductionRegex_print(ProductionRegex *This, FILE *out, const MapAny /*<int
 }
 
 void RestrictRule_print(const RestrictRule *This, FILE *out, const MapAny /*<int,SymbolDef>*/ *tokens) {
-  fputs("RESTRICT ",out);
-  ProductionDescriptors_print(This->m_restricted, out, tokens);
-  fputs(" @ ", out);
+  if( This->m_restricted )
+    ProductionDescriptors_print(This->m_restricted, out, tokens);
+  fputs(" -/-> ", out);
   ProductionRegex_print(This->m_rx,out,tokens);
 }
 
@@ -712,6 +718,7 @@ void ParserDef_init(ParserDef *This, FILE *vout, int verbosity, bool onstack) {
   MapAny_init(&This->m_tokdefs, getIntElement(), &SymbolDefElement,false);
   VectorAny_init(&This->m_productions, getPointerElement(),false);
   VectorAny_init(&This->m_restrictrules, getPointerElement(),false);
+  VectorAny_init(&This->m_restrictrxs, getPointerElement(), false);
   VectorAny_init(&This->m_assocrules, getPointerElement(),false);
   VectorAny_init(&This->m_precrules, getPointerElement(),false);
   RestrictAutomata_init(&This->m_restrict,false);
@@ -944,9 +951,8 @@ void ParserDef_expandAssocRules(ParserDef *This) {
       fputs("\n", This->m_vout);
     }
     RestrictRule *rr = (RestrictRule*)zalloc(sizeof(RestrictRule));
-    rr->m_rx = ProductionDescriptors_ProductionRegex(rule->m_pds, rule->m_assoc);
-    rr->m_restricted = ProductionDescriptors_clone(rule->m_pds);
-    rr->m_auto = true;
+    rr->m_restricted = 0;
+    rr->m_rx = rxbinary(BinaryOp_Concat, ProductionDescriptors_ProductionRegex(rule->m_pds, rule->m_assoc), ProductionDescriptors_ProductionRegex(rule->m_pds, AssocNull));
     ParserDef_addRestrictRule(This, rr);
   }
 }
@@ -968,9 +974,8 @@ void ParserDef_expandPrecRules(ParserDef *This) {
       ProductionDescriptors *pds = PrecedenceRule_ArrayOp(precrule,endpr-curpr-1);
       if( curpr > 0 ) {
         RestrictRule *dr = (RestrictRule*)zalloc(sizeof(RestrictRule));
-        dr->m_rx = ProductionDescriptors_ProductionRegex(pds, AssocNon);
-        dr->m_restricted = ProductionDescriptors_clone(&descriptors);
-        dr->m_auto = true;
+        dr->m_restricted = 0;
+        dr->m_rx = rxbinary(BinaryOp_Concat, ProductionDescriptors_ProductionRegex(pds, AssocNon), ProductionDescriptors_ProductionRegex(&descriptors, AssocNull));
         ParserDef_addRestrictRule(This, dr);
       }
       ProductionDescriptors_insertMany(&descriptors,ProductionDescriptors_ptr(pds),ProductionDescriptors_size(pds));
@@ -979,12 +984,31 @@ void ParserDef_expandPrecRules(ParserDef *This) {
   Scope_Pop();
 }
 
+void ParserDef_getProductionsOfNt(const ParserDef *This, int nt, VectorAny /*<Production*>*/ *productions) {
+  VectorAny_clear(productions);
+  for( int i = 0, n = VectorAny_size(&This->m_productions); i < n; ++i ) {
+    const Production *p = VectorAny_ArrayOpConstT(&This->m_productions, i, Production*);
+    if( p->m_nt == nt )
+      VectorAny_push_back(productions,&p);
+  }
+}
+
 void ParserDef_addRestrictRule(ParserDef *This, RestrictRule *rule) {
   static int i = 1;
   VectorAny_push_back(&This->m_restrictrules,&rule);
   if( This->m_verbosity > 2 ) {
     fprintf(This->m_vout, "added (add # %d)\n", i++);
     RestrictRule_print(rule,This->m_vout,&This->m_tokdefs);
+    fputs("\n", This->m_vout);
+  }
+}
+
+void ParserDef_addRestrictRx(ParserDef *This, ProductionRegex *rx) {
+  static int i = 1;
+  VectorAny_push_back(&This->m_restrictrxs, &rx);
+  if (This->m_verbosity > 2) {
+    fprintf(This->m_vout, "added rx (add # %d)\n", i++);
+    ProductionRegex_print(rx, This->m_vout, &This->m_tokdefs);
     fputs("\n", This->m_vout);
   }
 }
@@ -1532,7 +1556,7 @@ static bool ParseRepeat(Tokenizer *toks, int *plow, int *phigh) {
 static ProductionRegex *ParseRxSimple(Tokenizer *toks, ParserDef *parser) {
   int c = toks->peek(toks);
 
-  if( c == -1 || c == PARSERTOK_AT || c == PARSERTOK_PLUS || c == PARSERTOK_STAR || c == PARSERTOK_QUESTION || c == PARSERTOK_RPAREN )
+  if( c == -1 || c == PARSERTOK_SEMI || c == PARSERTOK_PLUS || c == PARSERTOK_STAR || c == PARSERTOK_QUESTION || c == PARSERTOK_RPAREN )
     return 0;
 
   if( c == PARSERTOK_LPAREN ) {
@@ -1621,18 +1645,12 @@ static ProductionRegex *ParseRx(Tokenizer *toks, ParserDef *parser) {
   return ParseRxOr(toks,parser);
 }
 
-static RestrictRule *ParseRestrictRule(Tokenizer *toks, ParserDef *parser) {
-  if( toks->peek(toks) != PARSERTOK_RESTRICT )
+static ProductionRegex *ParseRestrictRx(Tokenizer *toks, ParserDef *parser) {
+  if( toks->peek(toks) != PARSERTOK_NOTARROW )
     return 0;
   toks->discard(toks);
-  RestrictRule *rule = (RestrictRule*)zalloc(sizeof(RestrictRule));
-  rule->m_restricted = ParseProductions(toks, parser);
-  if( toks->peek(toks) != PARSERTOK_AT )
-    error(toks,"expected '@' in restrict rule");
-  toks->discard(toks);
-  rule->m_rx = ParseRx(toks, parser);
-  rule->m_auto = false;
-  return rule;
+  ProductionRegex *rx = ParseRx(toks, parser);
+  return rx;
 }
 
 static bool ParseParsePart(Tokenizer *toks, ParserDef *parser) {
@@ -1644,9 +1662,9 @@ static bool ParseParsePart(Tokenizer *toks, ParserDef *parser) {
   } else if( toks->peek(toks) == PARSERTOK_PRECEDENCE ) {
     PrecedenceRule *p = ParsePrecedenceRule(toks,parser);
     VectorAny_push_back(&parser->m_precrules,&p);
-  } else if( toks->peek(toks) == PARSERTOK_RESTRICT ) {
-    RestrictRule *d = ParseRestrictRule(toks,parser);
-    ParserDef_addRestrictRule(parser,d);
+  } else if( toks->peek(toks) == PARSERTOK_NOTARROW ) {
+    ProductionRegex *rx = ParseRestrictRx(toks,parser);
+    ParserDef_addRestrictRx(parser,rx);
   } else if( toks->peek(toks) == PARSERTOK_REJECTABLE  || toks->peek(toks) == PARSERTOK_START || toks->peek(toks) == PARSERTOK_ID ) {
     VectorAny /*<Production*>*/ productions;
     Scope_Push();

@@ -8,13 +8,13 @@ CFLAGS=/nologo /Zi /Od /EHsc /DWIN32 /MD /I.
 
 all: parser.exe
 
-parser.exe: $(OBJS)
+parser.exe: parsertokL.h $(OBJS)
 	@echo linking...
 	@link /nologo /DEBUG /SUBSYSTEM:CONSOLE /OUT:parser.exe $(OBJS)
 #	@link /nologo /SUBSYSTEM:CONSOLE /OUT:parser.exe $(OBJS)
 
-#../tok/tinytemplates.obj: ../tok/tinytemplates.c
-#	@cl /nologo /c $(CFLAGS) ../tok/tinytemplates.c /Fo../tok/tinytemplates.obj
+parsertokL.h: parsertok.L
+	@..\tok\tokenizer.exe parsertok.L --prefix=PARSERTOK
 
 {../tok}.c{../tok}.obj:
 	@cl /nologo /c $(CFLAGS) $< /Fo$@
@@ -28,4 +28,4 @@ clean:
 	@-del ..\tok\tok.obj > NUL 2>&1
 	@-del *.obj > NUL 2>&1
 	@-del *.pdb > NUL 2>&1
-
+	@-del parsertokL.h > NUL 2>&1

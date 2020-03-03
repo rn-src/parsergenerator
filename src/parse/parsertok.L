@@ -4,23 +4,22 @@
         START      /<start>/
         EXTRA      /<extra>/
         ERROR      /<error>/
-        RESTRICT   /RESTRICT/
         PRECEDENCE /PRECEDENCE/
         REJECTABLE /REJECTABLE/
         TYPEDEFTOK /TYPEDEFTOK/
         LEFTASSOC  /LEFT-ASSOCIATIVE/
         RIGHTASSOC /RIGHT-ASSOCIATIVE/
         NONASSOC   /NON-ASSOCIATIVE/
-        ID         /[[:alpha:]_][[:alnum:]_]*/
         INT        /[[:digit:]]+/
-        COLON      /:/
-		COMMA      /\,/
+        COLON      /:|->/
+        NOTARROW   /-\/->|RESTRICT/
+        COMMA      /\,/
         SEMI       /;/
+        ID         /[[:alpha:]_][[:alnum:]_]*/
 push b  LBRACE     /\{/
         RBRACE     /\}/
         LBRKT      /\[/
         RBRKT      /\]/
-        AT         /@/
         LT         /</
         GT         />/
         DOT        /\./

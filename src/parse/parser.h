@@ -120,6 +120,7 @@ struct ProductionState {
 };
 
 enum Assoc {
+  AssocNull,
   AssocLeft,
   AssocRight,
   AssocNon
@@ -240,7 +241,6 @@ void RestrictRule_print(const RestrictRule *This, FILE *out, const MapAny /*<int
 struct RestrictRule {
   ProductionRegex *m_rx;
   ProductionDescriptors *m_restricted;
-  bool m_auto;
 };
 
 struct AssociativeRule;
@@ -340,8 +340,10 @@ void ParserDef_computeRestrictAutomata(ParserDef *This);
 SymbolType ParserDef_getSymbolType(const ParserDef *This, int tok);
 void ParserDef_print(const ParserDef *This, FILE *out);
 void ParserDef_addRestrictRule(ParserDef *This, RestrictRule *rule);
+void ParserDef_addRestrictRx(ParserDef *This, ProductionRegex *rx);
 void ParserDef_expandAssocRules(ParserDef *This);
 void ParserDef_expandPrecRules(ParserDef *This);
+void ParserDef_getProductionsOfNt(const ParserDef *This, int nt, VectorAny /*<Production*>*/ *productions);
 
 struct ParserDef {
   int m_nextsymbolid;
@@ -352,6 +354,7 @@ struct ParserDef {
   MapAny /*<int,SymbolDef>*/ m_tokdefs;
   VectorAny /*<Production*>*/ m_productions;
   VectorAny /*<RestrictRule*>*/ m_restrictrules;
+  VectorAny /*<RestrictRule*>*/ m_restrictrxs;
   VectorAny /*<AssociativeRule*>*/ m_assocrules;
   VectorAny /*<PrecedenceRule*>*/ m_precrules;
   RestrictAutomata m_restrict;
