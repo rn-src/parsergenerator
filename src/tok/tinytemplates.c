@@ -62,7 +62,6 @@ void Scope_Pop() {
   DestructorNode *node = getDestroyerTail();
   DestructorNode *prev = 0;
   while( node->nodeType != NODE_SCOPE && node->nodeType != NODE_ROOT) {
-    _heapchk();
     prev = node->prev;
     if( node->nodeType == NODE_DESTROYER ) {
       node->destroyer(node->vpstack);
@@ -119,7 +118,7 @@ typedef struct strkernel strkernel;
 void String_init(String *This,bool onstack) {
   memset(This,0,sizeof(String));
   if( onstack )
-    Push_Destroy(This,String_clear);
+    Push_Destroy(This,(vpstack_destroyer)String_clear);
 }
 
 String *String_new() {
@@ -551,7 +550,7 @@ void VectorAny_init(VectorAny *This, const ElementOps *ops, bool onstack) {
   This->m_capacity = 0;
   This->m_ops = ops;
   if( onstack )
-    Push_Destroy(This,VectorAny_destroy);
+    Push_Destroy(This,(vpstack_destroyer)VectorAny_destroy);
 }
 
 bool VectorAny_empty(const VectorAny *This) {
@@ -689,9 +688,11 @@ static bool lt_slong(const unsigned long *lhs, const unsigned long *rhs) {
 static bool lt_slonglong(const unsigned long long *lhs, const unsigned long long *rhs) {
   return *lhs < *rhs;
 }
+#if 0
 static bool lt_uchar(const unsigned char *lhs, const unsigned char *rhs) {
   return *lhs < *rhs;
 }
+#endif
 static bool lt_ushort(const unsigned short *lhs, const unsigned short *rhs) {
   return *lhs < *rhs;
 }
@@ -919,7 +920,6 @@ void SetAny_erase(SetAny *This, const void *value) {
 }
 
 void SetAny_eraseMany(SetAny *This, const void *value, int count) {
-  bool found = false;
   int elementSize = This->m_values.m_ops->elementSize;
   for( int i = 0; i < count; ++i )
     SetAny_erase(This,(char*)value+i*elementSize);
@@ -931,7 +931,7 @@ void SetAny_eraseAtIndex(SetAny *This, int i) {
 
 bool SetAny_contains(const SetAny *This, const void *value) {
   bool found = false;
-  int i = SetAny_findIndex(This,value,&found);
+  SetAny_findIndex(This,value,&found);
   return found;
 }
 
@@ -1008,7 +1008,7 @@ void MapAny_init(MapAny *This, const ElementOps *keyops, const ElementOps *value
   SetAny_init(&This->m_keys,keyops,false);
   VectorAny_init(&This->m_values,valueops,false);
   if( onstack )
-    Push_Destroy(This,MapAny_destroy);
+    Push_Destroy(This,(vpstack_destroyer)MapAny_destroy);
 }
 
 void MapAny_destroy(MapAny *This) {
@@ -1072,7 +1072,7 @@ void MapAny_erase(MapAny *This, const void *key) {
 
 bool MapAny_contains(const MapAny *This, const void *value) {
   bool found = false;
-  int i = SetAny_findIndex(&This->m_keys,value,&found);
+  SetAny_findIndex(&This->m_keys,value,&found);
   return found;
 }
 

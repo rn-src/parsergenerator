@@ -143,6 +143,8 @@ const void *VectorAny_ptrConst(const VectorAny *This);
 bool VectorAny_LessThan(const VectorAny *lhs, const VectorAny *rhs);
 bool VectorAny_Equal(const VectorAny *lhs, const VectorAny *rhs);
 void VectorAny_Assign(VectorAny *lhs, const VectorAny *rhs);
+int VectorAny_size(const VectorAny *This);
+bool VectorAny_empty(const VectorAny *This);
 
 struct VectorAny {
   void *m_p;

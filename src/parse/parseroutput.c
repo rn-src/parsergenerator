@@ -97,7 +97,7 @@ static void PrintSymbolType(FILE *out, const ParserDef *parser, const LanguageOu
     // Map<int,SymbolDef>::const_iterator
     const int *tokid = 0;
     const SymbolDef *symdef = 0;
-    MapAny_getByIndexConst(&parser->m_tokdefs, cursymbol, &tokid, &symdef);
+    MapAny_getByIndexConst(&parser->m_tokdefs, cursymbol, (const void**)&tokid, (const void**)&symdef);
     if (!String_length(&symdef->m_semantictype) || symdef->m_tokid == ParserDef_getStartNt(parser) || symdef->m_tokid == ParserDef_getExtraNt(parser))
       continue;
     if (!MapAny_find(tfields, &symdef->m_semantictype)) {
@@ -125,7 +125,7 @@ static void AssignTokenValues(const ParserDef *parser, MapAny /*<int,int>*/ *pid
   for (int curtok = 0, endtok = MapAny_size(&parser->m_tokdefs); curtok != endtok; ++curtok) {
     const int *tokid = 0;
     const SymbolDef *tok = 0;
-    MapAny_getByIndexConst(&parser->m_tokdefs, curtok, &tokid, &tok);
+    MapAny_getByIndexConst(&parser->m_tokdefs, curtok, (const void**)&tokid, (const void**)&tok);
     if (tok->m_symboltype == SymbolTypeTerminal)
       ++terminals;
     else if (tok->m_symboltype == SymbolTypeNonterminal) {
@@ -143,7 +143,7 @@ static void PrintTokenConstants(FILE *out, const ParserDef *parser, const Langua
   for (int curtok = 0, endtok = MapAny_size(&parser->m_tokdefs); curtok != endtok; ++curtok) {
     const int *tokid = 0;
     const SymbolDef *tok = 0;
-    MapAny_getByIndexConst(&parser->m_tokdefs, curtok, &tokid, &tok);
+    MapAny_getByIndexConst(&parser->m_tokdefs, curtok, (const void**)&tokid, (const void**)&tok);
     if (tok->m_symboltype == SymbolTypeNonterminal) {
       lang->outDecl(lang, out, "const int", String_Chars(&tok->m_name));
       fputs(" = ", out);
@@ -249,7 +249,7 @@ static void OutputLRParser(FILE *out, const ParserDef *parser, const LRParserSol
       for( int curshift = 0, endshift = MapAny_size(shifttosymbols); curshift != endshift; ++curshift ) {
         const int *tokid = 0;
         const SetAny /*<int>*/ *curShiftSymbols = 0;
-        MapAny_getByIndexConst(shifttosymbols,curshift,&tokid,&curShiftSymbols);
+        MapAny_getByIndexConst(shifttosymbols,curshift,(const void**)&tokid,(const void**)&curShiftSymbols);
         if( SetAny_size(curShiftSymbols) == 0 )
           continue;
         if( first )
@@ -285,7 +285,7 @@ static void OutputLRParser(FILE *out, const ParserDef *parser, const LRParserSol
       for( int curreduce = 0, endreduce = MapAny_size(reducebysymbols); curreduce != endreduce; ++curreduce ) {
         const Production **reduceby = 0;
         const SetAny /*<int>*/ *reducesymbols = 0;
-        MapAny_getByIndexConst(reducebysymbols,curreduce,(const void**)&reduceby,&reducesymbols);
+        MapAny_getByIndexConst(reducebysymbols,curreduce,(const void**)&reduceby,(const void**)&reducesymbols);
         VectorAny_push_back(&reduces,reduceby);
       }
       if( VectorAny_size(&reduces) > 1 )
@@ -400,7 +400,7 @@ static void OutputLRParser(FILE *out, const ParserDef *parser, const LRParserSol
   for( int curtok = 0, endtok = MapAny_size(&parser->m_tokdefs); curtok != endtok; ++curtok ) {
     const int *tokid = 0;
     const SymbolDef *tokdef = 0;
-    MapAny_getByIndexConst(&parser->m_tokdefs,curtok,&tokid,&tokdef);
+    MapAny_getByIndexConst(&parser->m_tokdefs,curtok,(const void**)&tokid,(const void**)&tokdef);
     if( tokdef->m_symboltype != SymbolTypeNonterminal )
       continue;
     if( first )
@@ -537,7 +537,7 @@ static void OutputLLParser(FILE *out, const ParserDef *parser, const LLParserSol
   for (int curtok = 0, endtok = MapAny_size(&parser->m_tokdefs); curtok < endtok; ++curtok) {
     const int *tok = 0;
     const SymbolDef *tokdef = 0;
-    MapAny_getByIndexConst(&parser->m_tokdefs,curtok,&tok,&tokdef);
+    MapAny_getByIndexConst(&parser->m_tokdefs,curtok,(const void**)&tok,(const void**)&tokdef);
     if( tokdef->m_symboltype != SymbolTypeNonterminal )
       continue;
     ParserDef_getProductionsOfNt(parser,tokdef->m_tokid,&productions);

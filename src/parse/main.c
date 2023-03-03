@@ -76,7 +76,7 @@ int main(int argc, char *argv[]) {
   FileTokBuf tokbuf;
   LRParserSolution solution;
   LLParserSolution llsolution;
-  ParseError *pe = 0;
+  const ParseError *pe = 0;
   int ret = 0;
 
   Scope_Push();
@@ -88,7 +88,7 @@ int main(int argc, char *argv[]) {
       Scope_Pop();
       return -1;
     }
-    Push_Destroy(fin, fclose);
+    Push_Destroy(fin, (vpstack_destroyer)fclose);
     foutname = makeFOutName(fname);
     Push_Destroy(foutname, free);
     ParserDef_init(&parser,vout,verbosity,true);
@@ -113,7 +113,7 @@ int main(int argc, char *argv[]) {
       Scope_Pop();
       return -1;
     }
-    Push_Destroy(fout, fclose);
+    Push_Destroy(fout, (vpstack_destroyer)fclose);
 
     if (options.m_parserType == ParserType_LR)
       OutputLRParserSolution(fout, &parser, &solution, &options);

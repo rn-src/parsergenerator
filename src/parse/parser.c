@@ -1,15 +1,15 @@
 #include "parser.h"
 #include "parsertokL.h"
 
-ElementOps ActionItemElement = { sizeof(ActionItem), false, false, ActionItem_init, ActionItem_destroy, 0, 0, ActionItem_Assign, 0 }; // This definition only suitable for VectorAny
-ElementOps ProductionDescriptorElement = { sizeof(ProductionDescriptor), false, false, ProductionDescriptor_init, ProductionDescriptor_destroy, ProductionDescriptor_LessThan, ProductionDescriptor_Equal, ProductionDescriptor_Assign, 0 };
-ElementOps ProductionDescriptorsElement = { sizeof(ProductionDescriptors), false, false, ProductionDescriptors_init, ProductionDescriptors_destroy, ProductionDescriptors_LessThan, ProductionDescriptors_Equal, ProductionDescriptors_Assign, 0 };
-ElementOps SymbolDefElement = { sizeof(ProductionDescriptor), false, false, SymbolDef_init, SymbolDef_destroy, SymbolDef_LessThan, SymbolDef_Equal, SymbolDef_Assign, 0 };
+ElementOps ActionItemElement = { sizeof(ActionItem), false, false, (elementInit)ActionItem_init, (elementDestroy)ActionItem_destroy, 0, 0, (elementAssign)ActionItem_Assign, 0 }; // This definition only suitable for VectorAny
+ElementOps ProductionDescriptorElement = { sizeof(ProductionDescriptor), false, false, (elementInit)ProductionDescriptor_init, (elementDestroy)ProductionDescriptor_destroy, (elementLessThan)ProductionDescriptor_LessThan, (elementEqual)ProductionDescriptor_Equal, (elementAssign)ProductionDescriptor_Assign, 0 };
+ElementOps ProductionDescriptorsElement = { sizeof(ProductionDescriptors), false, false, (elementInit)ProductionDescriptors_init, (elementDestroy)ProductionDescriptors_destroy, (elementLessThan)ProductionDescriptors_LessThan, (elementEqual)ProductionDescriptors_Equal, (elementAssign)ProductionDescriptors_Assign, 0 };
+ElementOps SymbolDefElement = { sizeof(ProductionDescriptor), false, false, (elementInit)SymbolDef_init, (elementDestroy)SymbolDef_destroy, (elementLessThan)SymbolDef_LessThan, (elementEqual)SymbolDef_Equal, (elementAssign)SymbolDef_Assign, 0 };
 ElementOps ProductionAndRestrictStateElement = { sizeof(productionandrestrictstate_t), false, false, 0, 0, 0, 0, 0, 0 };
-ElementOps ProductionStateElement = { sizeof(ProductionState), false, false, 0, 0, ProductionState_LessThan, ProductionState_Equal, 0, 0 };
-ElementOps StateElement = { sizeof(state_t), false, false, state_t_init, state_t_destroy, state_t_LessThan, state_t_Equal, state_t_Assign, 0 };
-ElementOps RestrictionElement = { sizeof(Restriction), false, false, Restriction_init, Restriction_destroy, Restriction_LessThan, Restriction_Equal, Restriction_Assign, 0 };
-ElementOps ProductionsAtKeyElement = { sizeof(ProductionsAtKey), false, false, 0, 0, ProductionsAtKey_LessThan, ProductionsAtKey_Equal, 0, 0 };
+ElementOps ProductionStateElement = { sizeof(ProductionState), false, false, 0, 0, (elementLessThan)ProductionState_LessThan, (elementEqual)ProductionState_Equal, 0, 0 };
+ElementOps StateElement = { sizeof(state_t), false, false, (elementInit)state_t_init, (elementDestroy)state_t_destroy, (elementLessThan)state_t_LessThan, (elementEqual)state_t_Equal, (elementAssign)state_t_Assign, 0 };
+ElementOps RestrictionElement = { sizeof(Restriction), false, false, (elementInit)Restriction_init, (elementDestroy)Restriction_destroy, (elementLessThan)Restriction_LessThan, (elementEqual)Restriction_Equal, (elementAssign)Restriction_Assign, 0 };
+ElementOps ProductionsAtKeyElement = { sizeof(ProductionsAtKey), false, false, 0, 0, (elementLessThan)ProductionsAtKey_LessThan, (elementEqual)ProductionsAtKey_Equal, 0, 0 };
 
 void *zalloc(size_t len) {
   void *ret = malloc(len);
@@ -81,7 +81,7 @@ void ActionItem_init(ActionItem *This, bool onstack) {
   String_init(&This->m_str,false);
   This->m_dollarnum = -1;
   if( onstack )
-    Push_Destroy(This,ActionItem_destroy);
+    Push_Destroy(This,(vpstack_destroyer)ActionItem_destroy);
 }
 
 void ActionItem_destroy(ActionItem *This) {
@@ -124,7 +124,7 @@ void Production_init(Production *This, bool rejectable, int nt, const VectorAny 
   String_init(&This->m_filename,false);
   String_AssignString(&This->m_filename,filename);
   if( onstack )
-    Push_Destroy(This,Production_destroy);
+    Push_Destroy(This,(vpstack_destroyer)Production_destroy);
 }
 
 Production *Production_clone(const Production *This) {
@@ -188,7 +188,7 @@ void SymbolDef_init(SymbolDef *This, bool onstack) {
   String_init(&This->m_semantictype,false);
   This->m_p = 0;
   if( onstack )
-    Push_Destroy(This,SymbolDef_destroy);
+    Push_Destroy(This,(vpstack_destroyer)SymbolDef_destroy);
 }
 
 void SymbolDef_destroy(SymbolDef *This) {
@@ -255,7 +255,7 @@ void ProductionDescriptor_init(ProductionDescriptor *This, bool onstack) {
   This->m_dots = 0;
   This->m_dotcnt = 0;
   if( onstack )
-    Push_Destroy(This,ProductionDescriptor_destroy);
+    Push_Destroy(This,(vpstack_destroyer)ProductionDescriptor_destroy);
 }
 
 void ProductionDescriptor_destroy(ProductionDescriptor *This) {
@@ -563,7 +563,7 @@ void ProductionRegex_init(ProductionRegex *This, bool onstack) {
   This->m_pd = 0;
   This->m_paren = false;
   if (onstack)
-    Push_Destroy(This, ProductionRegex_destroy);
+    Push_Destroy(This, (vpstack_destroyer)ProductionRegex_destroy);
 }
 
 void ProductionRegex_destroy(ProductionRegex *This) {
@@ -677,6 +677,8 @@ void AssociativeRule_print(const AssociativeRule *This, FILE *out, const MapAny 
   case AssocNon:
     fputs("NON-ASSOCIATIVE ", out);
     break;
+  case AssocNull:
+    break;
   }
   ProductionDescriptors_print(This->m_pds,out,tokens);
 }
@@ -724,7 +726,7 @@ void ParserDef_init(ParserDef *This, FILE *vout, int verbosity, bool onstack) {
   RestrictAutomata_init(&This->m_restrict,false);
   MapAny_init(&This->productionsAtResults, &ProductionsAtKeyElement, getVectorAnyElement(), false);
   if( onstack )
-    Push_Destroy(This,ParserDef_destroy);
+    Push_Destroy(This,(vpstack_destroyer)ParserDef_destroy);
 }
 
 void ParserDef_destroy(ParserDef *This) {
@@ -1307,7 +1309,7 @@ static void ParseTypedefRule(Tokenizer *toks, ParserDef *parser) {
   }
   Scope_Pop();
 }
-
+#if 0
 static ProductionDescriptors *ParseProductionDescriptors(Tokenizer *toks, ParserDef *parser) {
   ProductionDescriptor *pd = ParseProductionDescriptor(toks,parser);
   ProductionDescriptors *pds = (ProductionDescriptors*)zalloc(sizeof(ProductionDescriptors));
@@ -1323,7 +1325,7 @@ static ProductionDescriptors *ParseProductionDescriptors(Tokenizer *toks, Parser
   }
   return pds;
 }
-
+#endif
 static ProductionDescriptors *ParseProductions(Tokenizer *toks, ParserDef *parser);
 
 static void checkProductionDescriptorsSameNonterminal(Tokenizer *toks, ProductionDescriptors *p, int lastnt, const char *name) {
@@ -1341,7 +1343,6 @@ static void checkProductionDescriptorsSameNonterminal(Tokenizer *toks, Productio
     errorString(toks,&err);
     Scope_Pop();
   }
-  int dottednt = -1;
   for( int cur = 0, end = ProductionDescriptors_size(p); cur != end; ++cur ) {
     const ProductionDescriptor *pd = &ProductionDescriptors_getByIndexConst(p,cur);
     if( nt != pd->m_nt ) {
@@ -1356,7 +1357,7 @@ static void checkProductionDescriptorsSameNonterminal(Tokenizer *toks, Productio
     }
   }
 }
-
+#if 0
 static int checkProductionDescriptorsSameNonterminalAndDotsAgree(Tokenizer *toks, ProductionDescriptors *p, int lastnt, const char *name) {
 	VectorAny /*<int>*/ symbolsAtDots;
   Scope_Push();
@@ -1398,7 +1399,7 @@ static int checkProductionDescriptorsSameNonterminalAndDotsAgree(Tokenizer *toks
   Scope_Pop();
   return dottednt;
 }
-
+#endif
 static AssociativeRule *ParseAssociativeRule(Tokenizer *toks, ParserDef *parser) {
   if( toks->peek(toks) != PARSERTOK_LEFTASSOC && toks->peek(toks) != PARSERTOK_RIGHTASSOC && toks->peek(toks) != PARSERTOK_NONASSOC )
     error(toks,"expected LEFT-ASSOCIATIVE or RIGHT-ASSOCITIVE or NON-ASSOCIATIVE");
@@ -1713,7 +1714,7 @@ void ParseParser(TokBuf *tokbuf, ParserDef *parser, FILE *vout, int verbosity) {
   for( int cur = 0, end = MapAny_size(&parser->m_tokdefs); cur != end; ++cur ) {
     int *tok = 0;
     SymbolDef *curdef = 0;
-    MapAny_getByIndex(&parser->m_tokdefs,cur,&tok,&curdef);
+    MapAny_getByIndex(&parser->m_tokdefs,cur,(const void**)&tok,(void**)&curdef);
     if( curdef->m_symboltype == SymbolTypeUnknown )
       curdef->m_symboltype = SymbolTypeTerminal;
   }

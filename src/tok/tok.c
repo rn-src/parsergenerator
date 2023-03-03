@@ -1,6 +1,6 @@
 #include "tok.h"
 
-ElementOps StackTokBufItemElement = {sizeof(StackTokBufItem), false, false, StackTokBufItem_init, StackTokBufItem_destroy, 0, 0, StackTokBufItem_Assign, 0};
+ElementOps StackTokBufItemElement = {sizeof(StackTokBufItem), false, false, (elementInit)StackTokBufItem_init, (elementDestroy)StackTokBufItem_destroy, 0, 0, (elementAssign)StackTokBufItem_Assign, 0};
 
 void StackTokBufItem_init(StackTokBufItem *This, bool onstack) {
   This->tokbuf = 0;
@@ -8,7 +8,7 @@ void StackTokBufItem_init(StackTokBufItem *This, bool onstack) {
   This->lineno = 0;
   String_init(&This->filename,false);
   if( onstack )
-    Push_Destroy(This,StackTokBufItem_destroy);
+    Push_Destroy(This,(vpstack_destroyer)StackTokBufItem_destroy);
 }
 
 void StackTokBufItem_destroy(StackTokBufItem *This) {
@@ -34,7 +34,7 @@ void Token_init(Token *This, bool onstack) {
   This->m_col = -1;
   This->m_sym = -1;
   if( onstack )
-    Push_Destroy(This,Token_destroy);
+    Push_Destroy(This,(vpstack_destroyer)Token_destroy);
 }
 
 void Token_destroy(Token *This) {
@@ -85,7 +85,7 @@ void StackTokBuf_init(StackTokBuf *This, bool onstack) {
   This->m_tokbuf.filename = (TokBuf_filename)StackTokBuf_filename;
   This->m_tokbuf.getParsePos = (TokBuf_getParsePos)StackTokBuf_getParsePos;
   if (onstack)
-    Push_Destroy(This, StackTokBuf_destroy);
+    Push_Destroy(This, (vpstack_destroyer)StackTokBuf_destroy);
 }
 
 void StackTokBuf_destroy(StackTokBuf *This) {
@@ -191,7 +191,7 @@ static int FileTokBuf_peekc(FileTokBuf *This, int n);
 static void FileTokBuf_discard(FileTokBuf *This, int n);
 static int FileTokBuf_line(const FileTokBuf *This);
 static int FileTokBuf_col(const FileTokBuf *This);
-static FileTokBuf_filename(const FileTokBuf *This, String *sout);
+static void FileTokBuf_filename(const FileTokBuf *This, String *sout);
 static void FileTokBuf_getParsePos(FileTokBuf *This, VectorAny /*<ParsePos>*/ *fNames);
 
 void FileTokBuf_init(FileTokBuf *This, FILE *in, const char *fname, bool onstack) {
@@ -211,7 +211,7 @@ void FileTokBuf_init(FileTokBuf *This, FILE *in, const char *fname, bool onstack
   String_init(&This->m_filename, false);
   String_AssignChars(&This->m_filename, fname);
   if (onstack)
-    Push_Destroy(This, FileTokBuf_destroy);
+    Push_Destroy(This, (vpstack_destroyer)FileTokBuf_destroy);
 }
 
 void FileTokBuf_destroy(FileTokBuf *This) {
@@ -283,7 +283,7 @@ static int FileTokBuf_col(const FileTokBuf *This)  {
   return This->m_col;
 }
 
-static FileTokBuf_filename(const FileTokBuf *This, String *sout) {
+static void FileTokBuf_filename(const FileTokBuf *This, String *sout) {
   String_AssignString(sout, &This->m_filename);
 }
 
@@ -308,7 +308,7 @@ static void TokBufTokenizer_filename(const TokBufTokenizer *This, String *filena
 static const char *TokBufTokenizer_tokid2str(const TokBufTokenizer *This, int tok);
 static void TokBufTokenizer_getParsePos(const TokBufTokenizer *This, VectorAny /*<ParsePos>*/ *parsepos);
 
-TokBufTokenizer_init(TokBufTokenizer *This, TokBuf *tokbuf, TokenInfo *tokinfo, bool onstack) {
+void TokBufTokenizer_init(TokBufTokenizer *This, TokBuf *tokbuf, TokenInfo *tokinfo, bool onstack) {
   This->m_tokenizer.peek = (Tokenizer_peek)TokBufTokenizer_peek;
   This->m_tokenizer.discard = (Tokenizer_discard)TokBufTokenizer_discard;
   This->m_tokenizer.length = (Tokenizer_length)TokBufTokenizer_length;
@@ -334,10 +334,10 @@ TokBufTokenizer_init(TokBufTokenizer *This, TokBuf *tokbuf, TokenInfo *tokinfo, 
   int zero = 0;
   VectorAny_push_back(&This->m_stack, &zero);
   if (onstack)
-    Push_Destroy(This, TokBufTokenizer_destroy);
+    Push_Destroy(This, (vpstack_destroyer)TokBufTokenizer_destroy);
 }
 
-TokBufTokenizer_destroy(TokBufTokenizer *This) {
+void TokBufTokenizer_destroy(TokBufTokenizer *This) {
   VectorAny_destroy(&This->m_stack);
 }
 

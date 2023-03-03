@@ -143,8 +143,8 @@ struct Tokenizer {
 struct TokBufTokenizer;
 typedef struct TokBufTokenizer TokBufTokenizer;
 
-TokBufTokenizer_init(TokBufTokenizer *This, TokBuf *tokbuf, TokenInfo *tokinfo, bool onstack);
-TokBufTokenizer_destroy(TokBufTokenizer *This);
+void TokBufTokenizer_init(TokBufTokenizer *This, TokBuf *tokbuf, TokenInfo *tokinfo, bool onstack);
+void TokBufTokenizer_destroy(TokBufTokenizer *This);
 
 struct TokBufTokenizer {
   Tokenizer m_tokenizer;

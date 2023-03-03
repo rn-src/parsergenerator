@@ -195,7 +195,7 @@ typedef struct PrecedenceRule PrecedenceRule;
 void PrecedenceRule_init(PrecedenceRule *This, bool onstack);
 void PrecedenceRule_destroy(PrecedenceRule *This);
 void PrecedenceRule_print(const PrecedenceRule *This, FILE *out, const MapAny /*<int,SymbolDef>*/ *tokens);
-#define PrecedenceRule_size(This) VectorAny_size(This)
+#define PrecedenceRule_size(This) VectorAny_size((VectorAny*)This)
 #define PrecedenceRule_ArrayOp(This,i) VectorAny_ArrayOpT(&This->m_productionDescriptors,i,ProductionDescriptors*)
 #define PrecedenceRule_ArrayOpConst(This,i) VectorAny_ArrayOpConstT(&This->m_productionDescriptors,i,ProductionDescriptors*)
 void PrecedenceRule_push_back(PrecedenceRule *This, ProductionDescriptors *part);
@@ -441,6 +441,8 @@ struct LanguageOutputOptions {
 void ParseParser(TokBuf *tokbuf, ParserDef *parser, FILE *vout, int verbosity);
 int LR_SolveParser(ParserDef *parser, LRParserSolution *solution, FILE *vout, int verbosity, int timed);
 void OutputLRParserSolution(FILE *out, const ParserDef *parser, const LRParserSolution *solution, LanguageOutputOptions *options);
+int LL_SolveParser(ParserDef *parser, LLParserSolution *solution, FILE *vout, int verbosity, int timed);
+void OutputLLParserSolution(FILE *out, const ParserDef *parser, const LLParserSolution *solution, LanguageOutputOptions *options);
 
 #endif /* __parser_h */
 

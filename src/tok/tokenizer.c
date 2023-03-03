@@ -5,9 +5,9 @@
 #include "tokenizer.h"
 
 ElementOps ActionElement = {sizeof(Action), false, false, 0, 0, 0, 0, 0, 0};
-ElementOps TransitionElement = {sizeof(Transition), false, false, Transition_init, 0, Transition_LessThan, Transition_Equal, 0, 0};
-ElementOps CharSetElement = {sizeof(CharSet), false, false, CharSet_init, CharSet_destroy, CharSet_LessThan, CharSet_Equal, CharSet_Assign, 0};
-ElementOps CharRangeElement = {sizeof(CharRange), false, false, 0, 0, CharRange_LessThan, 0, 0, 0};
+ElementOps TransitionElement = {sizeof(Transition), false, false, (elementInit)Transition_init, 0, (elementLessThan)Transition_LessThan, (elementEqual)Transition_Equal, 0, 0};
+ElementOps CharSetElement = {sizeof(CharSet), false, false, (elementInit)CharSet_init, (elementDestroy)CharSet_destroy, (elementLessThan)CharSet_LessThan, (elementEqual)CharSet_Equal, (elementAssign)CharSet_Assign, 0};
+ElementOps CharRangeElement = {sizeof(CharRange), false, false, 0, 0, (elementLessThan)CharRange_LessThan, 0, 0, 0};
 ElementOps TokenElement = {sizeof(Token), false, false, (elementInit)Token_init, (elementDestroy)Token_destroy, (elementLessThan)Token_LessThan, (elementEqual)Token_Equal, (elementAssign)Token_Assign, 0};
 
 // rx : simplerx | rx rx | rx '+' | rx '*' | rx '?' | rx '|' rx | '(' rx ')' | rx '{' number '}' | rx '{' number ',' '}' | rx '{' number ',' number '}' | rx '{' ',' number '}'
@@ -35,7 +35,7 @@ void Token_init(Token *This, bool onstack) {
   String_init(&This->m_name, false);
   MapAny_init(&This->m_actions, getIntElement(), &ActionElement, false);
   if( onstack )
-    Push_Destroy(This,Token_destroy);
+    Push_Destroy(This,(vpstack_destroyer)Token_destroy);
 }
 
 void Token_destroy(Token *This) {
@@ -117,7 +117,7 @@ void TokStream_init(TokStream *This, FILE *in, bool onstack) {
   This->m_pos = 0;
   This->m_line = This->m_col = 1;
   if( onstack )
-    Push_Destroy(This,TokStream_destroy);
+    Push_Destroy(This,(vpstack_destroyer)TokStream_destroy);
 }
 void TokStream_destroy(TokStream *This) {
   if( This->m_buf )
@@ -252,7 +252,7 @@ bool CharRange_OverlapsRange(const CharRange *This, int low, int high) {
 void CharSet_init(CharSet *This, bool onstack) {
   VectorAny_init(&This->m_ranges,&CharRangeElement, false);
   if( onstack )
-    Push_Destroy(This,CharSet_destroy);
+    Push_Destroy(This,(vpstack_destroyer)CharSet_destroy);
 }
 
 void CharSet_destroy(CharSet *This) {
@@ -465,7 +465,7 @@ void Nfa_init(Nfa *This, bool onstack) {
   MapAny_init(&This->m_state2token, getIntElement(), getIntElement(),false);
   MapAny_init(&This->m_tokendefs, getIntElement(), &TokenElement,false);
   if(onstack)
-    Push_Destroy(This,Nfa_destroy);
+    Push_Destroy(This,(vpstack_destroyer)Nfa_destroy);
 }
 
 void Nfa_destroy(Nfa *This) {
@@ -492,7 +492,7 @@ void Nfa_addNfa(Nfa *This, const Nfa *nfa) {
   for( int cur = 0, end = MapAny_size(&nfa->m_transitions); cur != end; ++cur ) {
     const Transition *key = 0;
     const CharSet *value = 0;
-    MapAny_getByIndexConst(&nfa->m_transitions,cur,&key,&value);
+    MapAny_getByIndexConst(&nfa->m_transitions,cur,(const void**)&key,(const void**)&value);
     Transition nextKey;
     MapAny_insert(&This->m_transitions,Transition_SetFromTo(&nextKey,key->m_from+states,key->m_to+states),value);
   }
@@ -503,14 +503,14 @@ void Nfa_addNfa(Nfa *This, const Nfa *nfa) {
   }
   for( int cur = 0, end = MapAny_size(&nfa->m_state2token); cur != end; ++cur ) {
     const int *key = 0, *value = 0;
-    MapAny_getByIndexConst(&nfa->m_state2token,cur,&key,&value);
+    MapAny_getByIndexConst(&nfa->m_state2token,cur,(const void**)&key,(const void**)&value);
     int updatedState = *key+states;
     MapAny_insert(&This->m_state2token, &updatedState, value);
   }
   for( int cur = 0, end = MapAny_size(&nfa->m_tokendefs); cur != end; ++cur ) {
     int *key = 0;
     Token *value = 0;
-    MapAny_getByIndexConst(&nfa->m_tokendefs,cur,&key,&value);
+    MapAny_getByIndexConst(&nfa->m_tokendefs,cur,(const void**)&key,(const void**)&value);
     Nfa_setTokenDef(This,value);
   }
 }
@@ -600,7 +600,7 @@ void Nfa_getTokenDefs(const Nfa *This, VectorAny /*<Token>*/ *tokendefs) {
   const int *key = 0;
   const Token *tok = 0;
   for( int cur = 0, end = MapAny_size(&This->m_tokendefs); cur< end; ++cur ) {
-    MapAny_getByIndexConst(&This->m_tokendefs,cur,&key,&tok);
+    MapAny_getByIndexConst(&This->m_tokendefs,cur,(const void**)&key,(const void**)&tok);
     VectorAny_push_back(tokendefs,tok);
   }
   qsort(tokendefs->m_p,tokendefs->m_size,tokendefs->m_ops->elementSize,compareTokens);
@@ -665,10 +665,9 @@ void Nfa_closure(const Nfa *This, const MapAny /*<int,Set<int>>*/ *emptytransiti
 void Nfa_follow(const Nfa *This, const CharRange *range, const SetAny /*<int>*/ *states, SetAny /*<int>*/ *nextstates ) {
   const Transition *key = 0;
   const CharSet *value = 0;
-  int *pfrom = 0;
   SetAny_clear(nextstates);
   for( int cur = 0, end = MapAny_size(&This->m_transitions); cur != end; ++cur ) {
-    MapAny_getByIndexConst(&This->m_transitions,cur,&key,&value);
+    MapAny_getByIndexConst(&This->m_transitions,cur,(const void**)&key,(const void**)&value);
     if( ! SetAny_findConst(states,&key->m_from) || ! CharSet_ContainsCharRange(value,range) )
       continue;
     SetAny_insert(nextstates,&key->m_to,0);
@@ -680,7 +679,7 @@ void Nfa_stateTransitions(const Nfa *This, const SetAny /*<int>*/ *states, CharS
   const Transition *key = 0;
   const CharSet *value = 0;
   for( int cur = 0, end = MapAny_size(&This->m_transitions); cur != end; ++cur ) {
-    MapAny_getByIndexConst(&This->m_transitions,cur,&key,&value);
+    MapAny_getByIndexConst(&This->m_transitions,cur,(const void**)&key,(const void**)&value);
     const int *pstate = &SetAny_findConstT(states,&key->m_from,int);
     if( ! pstate )
       continue;
@@ -755,9 +754,7 @@ void Nfa_toDfa(const Nfa *This, Nfa *dfa) {
     Nfa_stateTransitions(This, &state, &transitions);
     for( int cur = 0, end = CharSet_size(&transitions); cur != end; ++cur ) {
       curRange = CharSet_getRange(&transitions,cur);
-      _heapchk();
       Nfa_follow(This, curRange, &state, &nextstate);
-      _heapchk();
       Nfa_closure(This, &emptytransitions, &nextstate);
       if( SetAny_size(&nextstate) == 0 )
         continue;
@@ -795,7 +792,7 @@ void Rx_init(Rx *This, bool onstack) {
   This->m_low = This->m_high = -1;
   CharSet_init(&This->m_charset, false);
   if( onstack )
-    Push_Destroy(This,Rx_destroy);
+    Push_Destroy(This,(vpstack_destroyer)Rx_destroy);
 }
 
 void Rx_destroy(Rx *This) {
@@ -810,19 +807,19 @@ void Rx_destroy(Rx *This) {
   }
 }
 
-Rx_init_FromChar(Rx *This, char c, bool onstack) {
+void Rx_init_FromChar(Rx *This, char c, bool onstack) {
   Rx_init(This,onstack);
   This->m_t = RxType_CharSet;
   CharSet_addChar(&This->m_charset,c);
 }
 
-Rx_init_FromCharSet(Rx *This, const CharSet *charset, bool onstack) {
+void Rx_init_FromCharSet(Rx *This, const CharSet *charset, bool onstack) {
   Rx_init(This,onstack);
   This->m_t = RxType_CharSet;
   CharSet_Assign(&This->m_charset,charset);
 }
 
-Rx_init_Binary(Rx *This, BinaryOp op,Rx *lhs, Rx *rhs, bool onstack) {
+void Rx_init_Binary(Rx *This, BinaryOp op,Rx *lhs, Rx *rhs, bool onstack) {
   Rx_init(This,onstack);
   This->m_t = RxType_BinaryOp;
   This->m_op = op;
@@ -830,7 +827,7 @@ Rx_init_Binary(Rx *This, BinaryOp op,Rx *lhs, Rx *rhs, bool onstack) {
   This->m_rhs = rhs;
 }
 
-Rx_init_Many(Rx *This, Rx *rx, int count, bool onstack) {
+void Rx_init_Many(Rx *This, Rx *rx, int count, bool onstack) {
   Rx_init(This,onstack);
   This->m_t = RxType_Many;
   This->m_lhs = rx;
@@ -841,7 +838,7 @@ Rx_init_Many(Rx *This, Rx *rx, int count, bool onstack) {
     This->m_high = -1;
 }
 
-Rx_init_ManyRange(Rx *This, Rx *rx, int low, int high, bool onstack) {
+void Rx_init_ManyRange(Rx *This, Rx *rx, int low, int high, bool onstack) {
   Rx_init(This,onstack);
   This->m_t = RxType_Many;
   This->m_lhs = rx;
@@ -999,7 +996,7 @@ static bool ParseSub(TokStream *s, String *sub) {
 }
 
 static bool ParseRepeat(TokStream *s, int *low, int *high) {
-  int c = TokStream_peekc(s,0);
+  TokStream_peekc(s,0);
   if( TokStream_peekc(s,0) != '{' )
     return false;
   int startn1 = 1;
@@ -1674,7 +1671,7 @@ static void OutputDfaSource(FILE *out, const Nfa *dfa, const LanguageOutputter *
   for( int cur = 0, end = MapAny_size(&dfa->m_transitions); cur < end; ++cur ) {
     const Transition *transition = 0;
     const CharSet *ranges = 0;
-    MapAny_getByIndexConst(&dfa->m_transitions,cur,&transition,&ranges);
+    MapAny_getByIndexConst(&dfa->m_transitions,cur,(const void**)&transition,(const void**)&ranges);
     if( ! MapAny_find(&transitioncounts,&transition->m_from) ) {
       int zero = 0;
       MapAny_insert(&transitioncounts,&transition->m_from,&zero);

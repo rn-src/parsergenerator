@@ -5,7 +5,7 @@ extern void *zalloc(size_t len);
 extern ElementOps ProductionDescriptorElement;
 extern ElementOps ProductionDescriptorsElement;
 extern ElementOps RestrictionElement;
-
+#if 0
 static String *NameIndexToName(int idx, String *name) {
   if( idx == 0 )
     String_AssignChars(name,"A");
@@ -22,12 +22,12 @@ static String *NameIndexToName(int idx, String *name) {
   }
   return name;
 }
-
+#endif
 void Restriction_init(Restriction *This, bool onstack) {
   ProductionDescriptor_init(&This->m_restricted, false);
   ProductionDescriptor_init(&This->m_at, false);
   if (onstack)
-    Push_Destroy(This, Restriction_destroy);
+    Push_Destroy(This, (vpstack_destroyer)Restriction_destroy);
 }
 
 void Restriction_destroy(Restriction *This) {
@@ -75,7 +75,7 @@ void RestrictAutomata_init(RestrictAutomata *This, bool onstack) {
   MapAny_init(&This->m_transitions,getIntElement(),getMapAnyElement(),false);
   MapAny_init(&This->m_statetorestrictions, getIntElement(), getSetAnyElement(), false);
   if( onstack )
-    Push_Destroy(This,RestrictAutomata_destroy);
+    Push_Destroy(This,(vpstack_destroyer)RestrictAutomata_destroy);
 }
 
 void RestrictAutomata_destroy(RestrictAutomata *This) {
@@ -188,7 +188,7 @@ int RestrictAutomata_nextState(const RestrictAutomata *This, const Production *c
     for( int cursub = 0, endsub = MapAny_size(t); cursub != endsub; ++cursub ) {
       const Restriction *symbol = 0;
       const SetAny *nextstates = 0;
-      MapAny_getByIndexConst(t,cursub,&symbol,&nextstates);
+      MapAny_getByIndexConst(t,cursub,(const void**)&symbol,(const void**)&nextstates);
       if( ProductionDescriptor_matchesProductionAndPosition(&symbol->m_at, curp, pos) && ProductionDescriptor_matchesProduction(&symbol->m_restricted, ptest) )
         return SetAny_getByIndexConstT(nextstates,0,int);
     }
@@ -306,7 +306,7 @@ void RestrictAutomata_SymbolsFromStates(const RestrictAutomata *This, const SetA
       for( int curtrans = 0, endtrans = MapAny_size(statetransitions); curtrans != endtrans; ++curtrans ) {
         const Restriction *restriction = 0;
         SetAny /*<int>*/ *nextstates = 0;
-        MapAny_getByIndexConst(statetransitions,curtrans,&restriction,&nextstates);
+        MapAny_getByIndexConst(statetransitions,curtrans,(const void**)&restriction,(const void**)&nextstates);
         SetAny_insert(symbols, restriction, 0);
       }
     }
@@ -400,7 +400,7 @@ void RestrictAutomata_Compact(const RestrictAutomata *This, RestrictAutomata *re
   for (int i = 0, n = MapAny_size(&This->m_emptytransitions); i < n; ++i) {
     const int *fromState = 0;
     const SetAny *toStates = 0;
-    MapAny_getByIndexConst(&This->m_emptytransitions, i, &fromState, &toStates);
+    MapAny_getByIndexConst(&This->m_emptytransitions, i, (const void**)&fromState, (const void**)&toStates);
     int fromState2 = getState(restrictAutomataOut, &state2state, *fromState);
     for (int j = 0, m = SetAny_size(toStates); j < m; ++j) {
       const int toState = SetAny_getByIndexConstT(toStates, j, int);
@@ -411,12 +411,12 @@ void RestrictAutomata_Compact(const RestrictAutomata *This, RestrictAutomata *re
   for (int i = 0, n = MapAny_size(&This->m_transitions); i < n; ++i) {
     const int *fromState = 0;
     const MapAny *restrictiontostates = 0;
-    MapAny_getByIndexConst(&This->m_transitions, i, &fromState, &restrictiontostates);
+    MapAny_getByIndexConst(&This->m_transitions, i, (const void**)&fromState, (const void**)&restrictiontostates);
     int fromState2 = getState(restrictAutomataOut, &state2state, *fromState);
     for (int j = 0, m = MapAny_size(restrictiontostates); j < m; ++j) {
       const Restriction *symbol = 0;
       const SetAny *toStates = 0;
-      MapAny_getByIndexConst(restrictiontostates, j, &symbol, &toStates);
+      MapAny_getByIndexConst(restrictiontostates, j, (const void**)&symbol, (const void**)&toStates);
       for (int j = 0, m = SetAny_size(toStates); j < m; ++j) {
         const int toState = SetAny_getByIndexConstT(toStates, j, int);
         int toState2 = getState(restrictAutomataOut, &state2state, toState);
@@ -427,7 +427,7 @@ void RestrictAutomata_Compact(const RestrictAutomata *This, RestrictAutomata *re
   for (int i = 0, n = MapAny_size(&This->m_statetorestrictions); i < n; ++i) {
     const int *fromState = 0;
     const SetAny *restrictions = 0;
-    MapAny_getByIndexConst(&This->m_statetorestrictions, i, &fromState, &restrictions);
+    MapAny_getByIndexConst(&This->m_statetorestrictions, i, (const void**)&fromState, (const void**)&restrictions);
     int fromState2 = getState(restrictAutomataOut, &state2state, *fromState);
     MapAny_insert(&restrictAutomataOut->m_statetorestrictions,&fromState2,restrictions);
   }
@@ -457,13 +457,13 @@ void RestrictAutomata_RestrictionFixups(const RestrictAutomata *This, RestrictAu
   for (int curtrns = 0, endtrns = MapAny_size(&This->m_transitions); curtrns < endtrns; ++curtrns) {
     const int *pfrom = 0;
     const MapAny /*<Restriction,Set<int>>*/ *restrictiontostatesmap = 0;
-    MapAny_getByIndexConst(&This->m_transitions, curtrns, &pfrom, &restrictiontostatesmap);
+    MapAny_getByIndexConst(&This->m_transitions, curtrns, (const void**)&pfrom, (const void**)&restrictiontostatesmap);
     int fromState = *pfrom;
 
     for (int curres = 0, endres = MapAny_size(restrictiontostatesmap); curres < endres; ++curres) {
       const Restriction *tSymbol = 0;
       const SetAny /*<int>*/ *toStates = 0;
-      MapAny_getByIndexConst(restrictiontostatesmap, curres, &tSymbol, &toStates);
+      MapAny_getByIndexConst(restrictiontostatesmap, curres, (const void**)&tSymbol, (const void**)&toStates);
       SetAny_intersection(&toStatesEnd, toStates, &This->m_endStates);
       SetAny_Assign(&toStatesNoEnd, toStates);
       if( SetAny_size(&toStatesEnd) > 0 ) {
@@ -506,13 +506,13 @@ void RestrictAutomata_PlacementFixups(const RestrictAutomata *This, RestrictAuto
   for (int curtrns = 0, endtrns = MapAny_size(&This->m_transitions); curtrns < endtrns; ++curtrns) {
     const int *pfrom = 0;
     const MapAny /*<Restriction,Set<int>>*/ *restrictiontostatesmap = 0;
-    MapAny_getByIndexConst(&This->m_transitions, curtrns, &pfrom, &restrictiontostatesmap);
+    MapAny_getByIndexConst(&This->m_transitions, curtrns, (const void**)&pfrom, (const void**)&restrictiontostatesmap);
     int fromState = *pfrom;
 
     for (int curres = 0, endres = MapAny_size(restrictiontostatesmap); curres < endres; ++curres) {
       const Restriction *tSymbol = 0;
       const SetAny /*<int>*/ *toStates = 0;
-      MapAny_getByIndexConst(restrictiontostatesmap, curres, &tSymbol, &toStates);
+      MapAny_getByIndexConst(restrictiontostatesmap, curres, (const void**)&tSymbol, (const void**)&toStates);
 
       // For each transition symbol A along S0->S1 where S1 has transition symbol B along S1->S2, add transition symbol A@B (rx BA) to S0->S1.
       ProductionDescriptor_Assign(&r.m_at, &tSymbol->m_restricted);
@@ -564,7 +564,7 @@ void RestrictAutomata_print(const RestrictAutomata *This, FILE *out, const MapAn
       for( int cur = 0, end = MapAny_size(trans); cur != end; ++cur ) {
         const Restriction *restriction = 0;
         const SetAny /*<int>*/ *intset = 0;
-        MapAny_getByIndexConst(trans,cur,&restriction,&intset);
+        MapAny_getByIndexConst(trans,cur,(const void**)&restriction,(const void**)&intset);
         fputs("  on input ", out);
         Restriction_print(restriction,out,tokens);
         fputs("\n", out);
@@ -589,7 +589,7 @@ void StringToInt_2_IntToString(const MapAny /*<String,int>*/ *src, MapAny /*<int
   for( int tok = 0; tok != MapAny_size(src); ++tok ) {
     const String *first = 0;
     const int *second = 0;
-    MapAny_getByIndexConst(src,tok,&first,&second);
+    MapAny_getByIndexConst(src,tok,(const void**)&first,(const void**)&second);
     String_AssignString(&MapAny_findT(tokens,second,String),first);
   }
 }

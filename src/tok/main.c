@@ -46,7 +46,7 @@ int main(int argc, char *argv[])
         continue;
       }
       OutputTokenizerSource(fout,dfa,prefix);
-    } else if( getParseError(&pe) ) {
+    } else if( getParseError((const ParseError**)&pe) ) {
       fprintf(stderr, "Parse Error %s(%d:%d) : %s\n", fname, pe->line, pe->col, String_Chars(&pe->err));
       clearParseError();
     } else {

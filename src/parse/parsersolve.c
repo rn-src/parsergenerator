@@ -29,7 +29,7 @@ void StringAndIntSet_init(StringAndIntSet *This, bool onstack) {
   String_init(&This->str,false);
   SetAny_init(&This->set, getIntElement(),false);
   if( onstack )
-    Push_Destroy(This,StringAndIntSet_destroy);
+    Push_Destroy(This,(vpstack_destroyer)StringAndIntSet_destroy);
 }
 
 void StringAndIntSet_destroy(StringAndIntSet *This) {
@@ -61,7 +61,7 @@ void StringAndIntSet_Assign(StringAndIntSet *lhs, const StringAndIntSet *rhs) {
   SetAny_Assign(&lhs->set,&rhs->set);
 }
 
-ElementOps StringAndIntSetElement = {sizeof(StringAndIntSet), false, false, StringAndIntSet_init, StringAndIntSet_destroy, StringAndIntSet_LessThan, StringAndIntSet_Equal, StringAndIntSet_Assign, 0};
+ElementOps StringAndIntSetElement = {sizeof(StringAndIntSet), false, false, (elementInit)StringAndIntSet_init, (elementDestroy)StringAndIntSet_destroy, (elementLessThan)StringAndIntSet_LessThan, (elementEqual)StringAndIntSet_Equal, (elementAssign)StringAndIntSet_Assign, 0};
 extern ElementOps ProductionStateElement;
 
 struct FirstAndFollowState;
@@ -77,13 +77,13 @@ struct FirstAndFollowState {
   SetAny /*<int>*/ adding;
 };
 
-FirstAndFollowState_destroy(FirstAndFollowState *This) {
+void FirstAndFollowState_destroy(FirstAndFollowState *This) {
   SetAny_destroy(&This->visited);
   SetAny_destroy(&This->emptyintset);
   SetAny_destroy(&This->adding);
 }
 
-FirstAndFollowState_init(FirstAndFollowState *This, FirstsAndFollows *_firstsAndFollows, ParserDef *_parser, FILE *_out, int _verbosity, bool onstack) {
+void FirstAndFollowState_init(FirstAndFollowState *This, FirstsAndFollows *_firstsAndFollows, ParserDef *_parser, FILE *_out, int _verbosity, bool onstack) {
   This->firstsAndFollows = _firstsAndFollows;
   This->parser = _parser;
   This->out = _out;
@@ -92,7 +92,7 @@ FirstAndFollowState_init(FirstAndFollowState *This, FirstsAndFollows *_firstsAnd
   SetAny_init(&This->emptyintset, getIntElement(), false);
   SetAny_init(&This->adding, getIntElement(), false);
   if( onstack )
-    Push_Destroy(This,FirstAndFollowState_destroy);
+    Push_Destroy(This,(vpstack_destroyer)FirstAndFollowState_destroy);
 }
 
 static void FirstAndFollowState_logAdded(FirstAndFollowState *This, const char *to, int symbol, int pid, int restrictState) {
@@ -120,8 +120,6 @@ static  bool FirstAndFollowState_ComputeFirsts_productionandrestrictstate(FirstA
       const VectorAny /*<productionandrestrictstate_t>*/ *subproductions = ParserDef_productionsAt(This->parser, production, placementdot, restrictState);
       for (int pidx = 0, endpidx = VectorAny_size(subproductions); pidx < endpidx; ++pidx) {
         const productionandrestrictstate_t *subprs = &VectorAny_ArrayOpConstT(subproductions, pidx, productionandrestrictstate_t);
-        const Production *subProduction = subprs->production;
-        int subRestrictState = subprs->restrictstate;
         added = FirstAndFollowState_ComputeFirsts_productionandrestrictstate(This, subprs) || added;
       }
     }
@@ -151,8 +149,6 @@ static  bool FirstAndFollowState_ComputeFirsts_productionandrestrictstate(FirstA
       const VectorAny /*<productionandrestrictstate_t>*/ *subproductions = ParserDef_productionsAt(This->parser, production, placementdot, restrictState);
       for( int pidx = 0, endpidx = VectorAny_size(subproductions); pidx < endpidx; ++pidx ) {
         const productionandrestrictstate_t *subprs = &VectorAny_ArrayOpConstT(subproductions,pidx,productionandrestrictstate_t);
-        const Production *subProduction = subprs->production;
-        int subRestrictState = subprs->restrictstate;
 
         // Watch for empty productions, which introduces an epsilon
         if( VectorAny_size(&subprs->production->m_symbols) == 0 )
@@ -193,7 +189,6 @@ static  bool FirstAndFollowState_ComputeFirsts_productionandrestrictstate(FirstA
 void FirstAndFollowState_ComputeFirsts(FirstAndFollowState *This) {
   productionandrestrictstate_t prs;
   volatile bool runAgain = true;
-  int eoftok = EOF_TOK;
 
   MapAny_clear(&This->firstsAndFollows->m_firsts);
 
@@ -245,7 +240,6 @@ static  bool FirstAndFollowState_ComputeFollows_productionandrestrictstate(First
           }
         } else {
           // Next symbol is a nonterminal, use the union of firsts from the sub-productions
-          productionandrestrictstate_t nextprs;
           const VectorAny /*<productionandrestrictstate_t>*/ *subnextproductions = ParserDef_productionsAt(This->parser, production, placementdot+1, restrictState);
           for (int nextpidx = 0, nextendpidx = VectorAny_size(subnextproductions); nextpidx < nextendpidx; ++nextpidx) {
             const productionandrestrictstate_t *subnextprs = &VectorAny_ArrayOpConstT(subnextproductions, nextpidx, productionandrestrictstate_t);
@@ -540,7 +534,7 @@ void LR_PrintStatesAndActions(const ParserDef *parser, const LRParserSolution *s
       for( int curshift = 0, endshift = MapAny_size(shifttosymbols); curshift != endshift; ++curshift ) {
         const int *tostate = 0;
         const SetAny /*<int>*/ *onsymbols = 0;
-        MapAny_getByIndexConst(shifttosymbols,curshift,&tostate,&onsymbols);
+        MapAny_getByIndexConst(shifttosymbols,curshift,(const void**)&tostate,(const void**)&onsymbols);
         fprintf(out, "shift to state %d on ", *tostate);
         bool bFirst = true;
         for( int cursym = 0, endsym = SetAny_size(onsymbols); cursym != endsym; ++cursym ) {
@@ -564,10 +558,10 @@ void LR_PrintStatesAndActions(const ParserDef *parser, const LRParserSolution *s
       for( int curreduce = 0, endreduce = MapAny_size(reducebysymbols); curreduce != endreduce; ++curreduce ) {
         const Production *production = 0;
         const SetAny /*<int>*/ *reduceby;
-        MapAny_getByIndexConst(reducebysymbols,curreduce,&production,&reduceby);
+        MapAny_getByIndexConst(reducebysymbols,curreduce,(const void**)&production,(const void**)&reduceby);
         VectorAny_push_back(&reduces,production);
       }
-      if( VectorAny_size(reduces) > 1 )
+      if( VectorAny_size(&reduces) > 1 )
         qsort(VectorAny_ptr(&reduces),VectorAny_size(&reduces),sizeof(Production*),Production_CompareId);
       for( int curp = 0, endp = VectorAny_size(&reduces); curp != endp; ++curp ) {
         Production *p = VectorAny_ArrayOpT(&reduces,curp,Production*);
@@ -639,13 +633,12 @@ int LR_PrintConflicts(ParserDef *parser, LRParserSolution *solution, FILE *out) 
     SetAny_clear(&symbols);
     SetAny_clear(&shiftsymbols);
     MapAny_clear(&reductions);
-    const state_t *state = &VectorAny_ArrayOpConstT(&solution->m_states,i,state_t);
     shifttosymbols_t *shifttosymbols = &MapAny_findT(&solution->m_shifts,&i,shifttosymbols_t);
     if( shifttosymbols ) {
       for( int curshift = 0, endshift = MapAny_size(shifttosymbols); curshift != endshift; ++curshift ) {
         const int *shiftto = 0;
         SetAny /*<int>*/ *shiftsymbols = 0;
-        MapAny_getByIndex(shifttosymbols,curshift,&shiftto,&shiftsymbols);
+        MapAny_getByIndex(shifttosymbols,curshift,(const void**)&shiftto,(void**)&shiftsymbols);
         for( int cursym = 0, endsym = SetAny_size(shiftsymbols); cursym != endsym; ++cursym ) {
           int sym = SetAny_getByIndexConstT(shiftsymbols,cursym,int);
           SetAny_insert(shiftsymbols,&sym,0);
@@ -658,10 +651,9 @@ int LR_PrintConflicts(ParserDef *parser, LRParserSolution *solution, FILE *out) 
       for( int curreduce = 0, endreduce = MapAny_size(reducebysymbols); curreduce != endreduce; ++curreduce ) {
         const Production *production = 0;
         const SetAny /*<int>*/ *reducebys = 0;
-        MapAny_getByIndexConst(reducebysymbols,curreduce,&production,&reducebys);
+        MapAny_getByIndexConst(reducebysymbols,curreduce,(const void**)&production,(const void**)&reducebys);
         for( int cursym = 0, endsym = SetAny_size(reducebys); cursym != endsym; ++cursym ) {
           int sym = SetAny_getByIndexConstT(reducebys,cursym,int);
-          const char *symstr = (sym==-1) ? "$" : String_Chars(&MapAny_findConstT(tokens,&sym,SymbolDef).m_name);
           SetAny *reductionproductions = &MapAny_findT(&reductions, &sym, SetAny);
           if (!reductionproductions) {
             MapAny_insert(&reductions, &sym, &emptyproductionset);
@@ -722,7 +714,7 @@ void FirstsAndFollows_init(FirstsAndFollows *This, bool onstack) {
   MapAny_init(&This->m_firsts, &ProductionAndRestrictStateElement, getSetAnyElement(), false);
   MapAny_init(&This->m_follows, &ProductionAndRestrictStateElement, getSetAnyElement(), false);
   if (onstack)
-    Push_Destroy(This, FirstsAndFollows_destroy);
+    Push_Destroy(This, (vpstack_destroyer)FirstsAndFollows_destroy);
 }
 
 void FirstsAndFollows_destroy(FirstsAndFollows *This) {
@@ -736,7 +728,7 @@ void LRParserSolution_init(LRParserSolution *This, bool onstack) {
   MapAny_init(&This->m_shifts, getIntElement(), getMapAnyElement(), false);
   MapAny_init(&This->m_reductions, getIntElement(), getMapAnyElement(), false);
   if( onstack )
-    Push_Destroy(This, LRParserSolution_destroy);
+    Push_Destroy(This, (vpstack_destroyer)LRParserSolution_destroy);
 }
 
 void LRParserSolution_destroy(LRParserSolution *This) {
@@ -749,7 +741,7 @@ void LRParserSolution_destroy(LRParserSolution *This) {
 void LLParserSolution_init(LLParserSolution *This, bool onstack) {
   FirstsAndFollows_init(&This->m_firstsAndFollows, false);
   if (onstack)
-    Push_Destroy(This, LLParserSolution_destroy);
+    Push_Destroy(This, (vpstack_destroyer)LLParserSolution_destroy);
 }
 
 void LLParserSolution_destroy(LLParserSolution *This) {
@@ -772,7 +764,7 @@ int LR_SolveParser(ParserDef *parser, LRParserSolution *solution, FILE *vout, in
   }
   ticks_t stop = getSystemTicks();
   if( timed ) {
-    printf("Tokens %d\n", VectorAny_size(&parser->m_tokens));
+    printf("Tokens %d\n", MapAny_size(&parser->m_tokens));
     printf("Productions %d\n", VectorAny_size(&parser->m_productions));
     printf("States %d\n", VectorAny_size(&solution->m_states));
     printf("Duration %.6f\n", (double)(stop-start)/(double)getSystemTicksFreq());
@@ -786,7 +778,7 @@ int LL_SolveParser(ParserDef *parser, LLParserSolution *solution, FILE *vout, in
   FirstsAndFollows_Compute(&solution->m_firstsAndFollows, parser, vout, verbosity);
   ticks_t stop = getSystemTicks();
   if (timed) {
-    printf("Tokens %d\n", VectorAny_size(&parser->m_tokens));
+    printf("Tokens %d\n", MapAny_size(&parser->m_tokens));
     printf("Productions %d\n", VectorAny_size(&parser->m_productions));
     printf("Duration %.6f\n", (double)(stop - start) / (double)getSystemTicksFreq());
   }
