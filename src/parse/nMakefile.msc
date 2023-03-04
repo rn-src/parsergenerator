@@ -13,8 +13,8 @@ parser.exe: parsertokL.h $(OBJS)
 	@link /nologo /DEBUG /SUBSYSTEM:CONSOLE /OUT:parser.exe $(OBJS)
 #	@link /nologo /SUBSYSTEM:CONSOLE /OUT:parser.exe $(OBJS)
 
-parsertokL.h: parsertok.L
-	@..\tok\tokenizer.exe parsertok.L --prefix=PARSERTOK
+#parsertokL.h: parsertok.L
+#	@..\tok\tokenizer.exe parsertok.L --prefix=PARSERTOK
 
 {../tok}.c{../tok}.obj:
 	@cl /nologo /c $(CFLAGS) $< /Fo$@
@@ -28,4 +28,4 @@ clean:
 	@-del ..\tok\tok.obj > NUL 2>&1
 	@-del *.obj > NUL 2>&1
 	@-del *.pdb > NUL 2>&1
-	@-del parsertokL.h > NUL 2>&1
+#	@-del parsertokL.h > NUL 2>&1

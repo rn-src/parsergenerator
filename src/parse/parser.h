@@ -432,10 +432,17 @@ enum ParserType {
 };
 typedef enum ParserType ParserType;
 
+enum OutputLanguage {
+  OutputLanguage_C,
+  OutputLanguage_Python
+};
+typedef enum OutputLanguage OutputLanguage;
+
 struct LanguageOutputOptions {
   int min_nt_value;
   bool do_pound_line;
   ParserType m_parserType;
+  OutputLanguage m_outputLanguage;
 };
 
 void ParseParser(TokBuf *tokbuf, ParserDef *parser, FILE *vout, int verbosity);

@@ -70,6 +70,58 @@ void CLanguageOutputter_outEndFunctionCode(const LanguageOutputter *This, FILE *
 }
 LanguageOutputter CLanguageOutputter = {CLanguageOutputter_outDecl, CLanguageOutputter_outArrayDecl, CLanguageOutputter_outStartArray, CLanguageOutputter_outEndArray, CLanguageOutputter_outEndStmt, CLanguageOutputter_outNull, CLanguageOutputter_outBool, CLanguageOutputter_outStr, CLanguageOutputter_outChar, CLanguageOutputter_outInt, CLanguageOutputter_outFunctionStart, CLanguageOutputter_outStartParameters, CLanguageOutputter_outEndParameters, CLanguageOutputter_outStartFunctionCode, CLanguageOutputter_outEndFunctionCode};
 
+void PyLanguageOutputter_outDecl(const LanguageOutputter* This, FILE* out, const char* type, const char* name) { fputs(type, out); fputc(' ', out); fputs(name, out); }
+void PyLanguageOutputter_outArrayDecl(const LanguageOutputter* This, FILE* out, const char* type, const char* name) { fputs(type, out); fputc(' ', out); fputs(name, out); fputs("[]", out); }
+void PyLanguageOutputter_outStartArray(const LanguageOutputter* This, FILE* out) { fputc('{', out); }
+void PyLanguageOutputter_outEndArray(const LanguageOutputter* This, FILE* out) { fputc('}', out); }
+void PyLanguageOutputter_outEndStmt(const LanguageOutputter* This, FILE* out) { fputc(';', out); }
+void PyLanguageOutputter_outNull(const LanguageOutputter* This, FILE* out) { fputc('0', out); }
+void PyLanguageOutputter_outBool(const LanguageOutputter* This, FILE* out, bool b) { fputs((b ? "true" : "false"), out); }
+void PyLanguageOutputter_outStr(const LanguageOutputter* This, FILE* out, const char* str) { fputc('"', out); fputs(str, out); fputc('"', out); }
+void PyLanguageOutputter_outChar(const LanguageOutputter* This, FILE* out, int c) {
+  if (c == '\r') {
+    fputs("'\\r'", out);
+  }
+  else if (c == '\n') {
+    fputs("'\\n'", out);
+  }
+  else if (c == '\v') {
+    fputs("'\\v'", out);
+  }
+  else if (c == ' ') {
+    fputs("' '", out);
+  }
+  else if (c == '\t') {
+    fputs("'\\t'", out);
+  }
+  else if (c == '\\' || c == '\'') {
+    fprintf(out, "'\\%c'", c);
+  }
+  else if (c <= 126 && isgraph(c)) {
+    fprintf(out, "'%c'", c);
+  }
+  else
+    fprintf(out, "%d", c);
+}
+void PyLanguageOutputter_outInt(const LanguageOutputter* This, FILE* out, int i) { fprintf(out, "%d", i); }
+void PyLanguageOutputter_outFunctionStart(const LanguageOutputter* This, FILE* out, const char* rettype, const char* name) {
+  fputs("function ", out);
+  fputs(name, out);
+}
+void PyLanguageOutputter_outStartParameters(const LanguageOutputter* This, FILE* out) {
+  fputs("(", out);
+}
+void PyLanguageOutputter_outEndParameters(const LanguageOutputter* This, FILE* out) {
+  fputs(")", out);
+}
+void PyLanguageOutputter_outStartFunctionCode(const LanguageOutputter* This, FILE* out) {
+  fputs("{", out);
+}
+void PyLanguageOutputter_outEndFunctionCode(const LanguageOutputter* This, FILE* out) {
+  fputs("}", out);
+}
+LanguageOutputter PyLanguageOutputter = { PyLanguageOutputter_outDecl, PyLanguageOutputter_outArrayDecl, PyLanguageOutputter_outStartArray, PyLanguageOutputter_outEndArray, PyLanguageOutputter_outEndStmt, PyLanguageOutputter_outNull, PyLanguageOutputter_outBool, PyLanguageOutputter_outStr, PyLanguageOutputter_outChar, PyLanguageOutputter_outInt, PyLanguageOutputter_outFunctionStart, PyLanguageOutputter_outStartParameters, PyLanguageOutputter_outEndParameters, PyLanguageOutputter_outStartFunctionCode, PyLanguageOutputter_outEndFunctionCode };
+
 static void PrintExtraType(FILE *out, const ParserDef *parser, const LanguageOutputter *lang, const LanguageOutputOptions *outputOptions) {
   int extraNt = ParserDef_getExtraNt(parser);
   if( ! MapAny_contains(&parser->m_tokdefs, &extraNt) || String_length(&MapAny_findConstT(&parser->m_tokdefs, &extraNt, SymbolDef).m_semantictype) == 0 )
@@ -450,7 +502,7 @@ static void OutputLRParser(FILE *out, const ParserDef *parser, const LRParserSol
 }
 
 void OutputLRParserSolution(FILE *out, const ParserDef *parser, const LRParserSolution *solution, LanguageOutputOptions *options) {
-  LanguageOutputter *outputer = &CLanguageOutputter;
+  LanguageOutputter *outputer = options->m_outputLanguage == OutputLanguage_Python ? &PyLanguageOutputter : &CLanguageOutputter;
   OutputLRParser(out,parser,solution,outputer,options);
 }
 

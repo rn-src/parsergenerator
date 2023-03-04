@@ -40,6 +40,10 @@ void parseArgs(int argc, char *argv[], int *pverbosity, int *ptimed, LanguageOut
     options->m_parserType = ParserType_LR;
   if (getarg(argc, argv, "--ll"))
     options->m_parserType = ParserType_LL;
+  if (getarg(argc, argv, "--c"))
+    options->m_outputLanguage = OutputLanguage_C;
+  if (getarg(argc, argv, "--py"))
+    options->m_outputLanguage = OutputLanguage_Python;
   for (int i = 1; i < argc; ++i) {
     if (argv[i][0] == '-')
       continue;
@@ -54,7 +58,7 @@ int main(int argc, char *argv[]) {
   int verbosity = 0;
   int timed = 0;
   const char *fname = 0;
-  LanguageOutputOptions options = { 0, true, ParserType_LR };
+  LanguageOutputOptions options = { 0, true, ParserType_LR, OutputLanguage_C };
 
   parseArgs(argc, argv, &verbosity, &timed, &options, &fname);
 
@@ -64,6 +68,8 @@ int main(int argc, char *argv[]) {
           "--minnt        : minimum nonterminal value, if the default output is too low\n"
           "--lr           : output an LR parser\n"
           "--ll           : output an LL parser\n"
+          "--c            : output C\n"
+          "--py           : output python\n"
           "-no-pound-line : turn off #line directives in the output\n", stderr);
     return -1;
   }

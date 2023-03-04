@@ -363,6 +363,8 @@ void RestrictAutomata_toDeterministicRestrictAutomata(const RestrictAutomata *Th
         nextStateNo = RestrictAutomata_newstate(out);
         MapAny_insert(&stateset2state,&nextstate,&nextStateNo);
         VectorAny_push_back(&statesets,&nextstate);
+        // in case of resize
+        stateset = &VectorAny_ArrayOpT(&statesets, i, SetAny);
         if( SetAny_intersects(&nextstate, &This->m_endStates) )
           RestrictAutomata_addEndState(out,nextStateNo);
       } else

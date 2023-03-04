@@ -117,11 +117,15 @@ static  bool FirstAndFollowState_ComputeFirsts_productionandrestrictstate(FirstA
       SymbolType stype = ParserDef_getSymbolType(This->parser, symbol);
       if (stype == SymbolTypeTerminal)
         continue;
-      const VectorAny /*<productionandrestrictstate_t>*/ *subproductions = ParserDef_productionsAt(This->parser, production, placementdot, restrictState);
-      for (int pidx = 0, endpidx = VectorAny_size(subproductions); pidx < endpidx; ++pidx) {
-        const productionandrestrictstate_t *subprs = &VectorAny_ArrayOpConstT(subproductions, pidx, productionandrestrictstate_t);
+      VectorAny subproductions;
+      Scope_Push();
+      VectorAny_init(&subproductions, 0, true);
+      VectorAny_Assign(&subproductions, ParserDef_productionsAt(This->parser, production, placementdot, restrictState));
+      for (int pidx = 0, endpidx = VectorAny_size(&subproductions); pidx < endpidx; ++pidx) {
+        const productionandrestrictstate_t *subprs = &VectorAny_ArrayOpConstT(&subproductions, pidx, productionandrestrictstate_t);
         added = FirstAndFollowState_ComputeFirsts_productionandrestrictstate(This, subprs) || added;
       }
+      Scope_Pop();
     }
   }
 
@@ -476,7 +480,7 @@ void LR_ComputeStatesAndActions(ParserDef *parser, LRParserSolution *solution, F
       const SetAny /*<int>*/ *follows = &MapAny_findConstT(&solution->m_firstsAndFollows.m_follows,productionandrestrictstate_t_set(&prs,curProductionState->m_p,curProductionState->m_restrictstate),SetAny);
       if (!follows)
         continue;
-      reducebysymbols_t *reducebysymbols = &MapAny_findT(&solution->m_reductions,&stateIdx,reducebysymbols_t);
+     reducebysymbols_t *reducebysymbols = &MapAny_findT(&solution->m_reductions,&stateIdx,reducebysymbols_t);
       if (!reducebysymbols) {
         MapAny_insert(&solution->m_reductions, &stateIdx, &emptyreducebysymbols);
         reducebysymbols = &MapAny_findT(&solution->m_reductions, &stateIdx, reducebysymbols_t);
