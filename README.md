@@ -38,7 +38,7 @@ the semantic actions provided in the grammar file.  To put it all together, seve
 The output file will be _lexerL.h_
 
 ```
---js             Output tokenizer code in javascript
+--py             Output tokenizer code in Python
 --c              Output tokenizer code in C
 ```
 
