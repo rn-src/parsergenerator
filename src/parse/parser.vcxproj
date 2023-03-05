@@ -21,10 +21,12 @@
   <ItemGroup>
     <ClInclude Include="..\tok\tinytemplates.h" />
     <ClInclude Include="..\tok\tok.h" />
+    <ClInclude Include="lrparse.h" />
     <ClInclude Include="parser.h" />
     <ClInclude Include="parsertokL.h" />
   </ItemGroup>
   <ItemGroup>
+    <None Include="lrparse.py" />
     <None Include="nMakefile.msc" />
     <None Include="parsertok.L" />
   </ItemGroup>

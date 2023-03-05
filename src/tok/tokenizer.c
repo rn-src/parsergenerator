@@ -1569,6 +1569,42 @@ void CLanguageOutputter_outChar(const LanguageOutputter *This, FILE *out, int c)
 void CLanguageOutputter_outInt(const LanguageOutputter *This, FILE *out, int i)  { fprintf(out,"%d",i); }
 LanguageOutputter CLanguageOutputter = {CLanguageOutputter_outDecl, CLanguageOutputter_outArrayDecl, CLanguageOutputter_outStartArray, CLanguageOutputter_outEndArray, CLanguageOutputter_outEndStmt, CLanguageOutputter_outNull, CLanguageOutputter_outBool, CLanguageOutputter_outStr, CLanguageOutputter_outChar, CLanguageOutputter_outInt};
 
+void PyLanguageOutputter_outDecl(const LanguageOutputter* This, FILE* out, const char* type, const char* name) { fputs(type, out); fputc(' ', out); fputs(This->prefix, out); fputs("_", out); fputs(name, out); }
+void PyLanguageOutputter_outArrayDecl(const LanguageOutputter* This, FILE* out, const char* type, const char* name) { fputs(type, out); fputc(' ', out);  fputs(This->prefix, out); fputs("_", out); fputs(name, out); fputs("[]", out); }
+void PyLanguageOutputter_outStartArray(const LanguageOutputter* This, FILE* out) { fputc('{', out); }
+void PyLanguageOutputter_outEndArray(const LanguageOutputter* This, FILE* out) { fputc('}', out); }
+void PyLanguageOutputter_outEndStmt(const LanguageOutputter* This, FILE* out) { fputc(';', out); }
+void PyLanguageOutputter_outNull(const LanguageOutputter* This, FILE* out) { fputc('0', out); }
+void PyLanguageOutputter_outBool(const LanguageOutputter* This, FILE* out, bool b) { fputs((b ? "true" : "false"), out); }
+void PyLanguageOutputter_outStr(const LanguageOutputter* This, FILE* out, const char* str) { fputc('"', out); fputs(str, out); fputc('"', out); }
+void PyLanguageOutputter_outChar(const LanguageOutputter* This, FILE* out, int c) {
+  if (c == '\r') {
+    fputs("'\\r'", out);
+  }
+  else if (c == '\n') {
+    fputs("'\\n'", out);
+  }
+  else if (c == '\v') {
+    fputs("'\\v'", out);
+  }
+  else if (c == ' ') {
+    fputs("' '", out);
+  }
+  else if (c == '\t') {
+    fputs("'\\t'", out);
+  }
+  else if (c == '\\' || c == '\'') {
+    fprintf(out, "'\\%c'", c);
+  }
+  else if (c <= 126 && isgraph(c)) {
+    fprintf(out, "'%c'", c);
+  }
+  else
+    fprintf(out, "%d", c);
+}
+void PyLanguageOutputter_outInt(const LanguageOutputter* This, FILE* out, int i) { fprintf(out, "%d", i); }
+LanguageOutputter PyLanguageOutputter = { PyLanguageOutputter_outDecl, PyLanguageOutputter_outArrayDecl, PyLanguageOutputter_outStartArray, PyLanguageOutputter_outEndArray, PyLanguageOutputter_outEndStmt, PyLanguageOutputter_outNull, PyLanguageOutputter_outBool, PyLanguageOutputter_outStr, PyLanguageOutputter_outChar, PyLanguageOutputter_outInt };
+
 static void OutputDfaSource(FILE *out, const Nfa *dfa, const LanguageOutputter *lang) {
   bool first = true;
   // Going to assume there are no gaps in toking numbering
@@ -1737,8 +1773,8 @@ static void OutputDfaSource(FILE *out, const Nfa *dfa, const LanguageOutputter *
   Scope_Pop();
 }
 
-void OutputTokenizerSource(FILE *out, const Nfa *dfa, const char *prefix) {
-  LanguageOutputter *outputer = &CLanguageOutputter;
+void OutputTokenizerSource(FILE *out, const Nfa *dfa, const char *prefix, bool py) {
+  LanguageOutputter *outputer = py ? &PyLanguageOutputter : &CLanguageOutputter;
   outputer->prefix = prefix;
   OutputDfaSource(out,dfa,outputer);
   fputc('\n',out);

@@ -4,10 +4,14 @@
 int main(int argc, char *argv[])
 {
   const char *prefix = "prefix";
+  bool py = false;
   for( int i = 1; i < argc; ++i ) {
     if( argv[i][0] == '-' ) {
       if (strncmp(argv[i],"--prefix=",9) == 0) {
         prefix = argv[i] + 9;
+      }
+      if (strncmp(argv[i], "--py", 4) == 0) {
+        py = true;
       }
     }
   }
@@ -45,7 +49,7 @@ int main(int argc, char *argv[])
         fclose(fin);
         continue;
       }
-      OutputTokenizerSource(fout,dfa,prefix);
+      OutputTokenizerSource(fout,dfa,prefix,py);
     } else if( getParseError((const ParseError**)&pe) ) {
       fprintf(stderr, "Parse Error %s(%d:%d) : %s\n", fname, pe->line, pe->col, String_Chars(&pe->err));
       clearParseError();

@@ -1,0 +1,11 @@
+*.obj
+.vs
+*.o
+*~
+Debug
+x64
+*.ilk
+*.pdb
+*.user
+*.exe
+.mypy_cache

@@ -23,6 +23,7 @@ struct LanguageOutputter {
   void (*outEndParameters)(const LanguageOutputter *This, FILE *out);
   void (*outStartFunctionCode)(const LanguageOutputter *This, FILE *out);
   void (*outEndFunctionCode)(const LanguageOutputter *This, FILE *out);
+  void (*outStartLineComment)(const LanguageOutputter* This, FILE* out);
 };
 
 void CLanguageOutputter_outDecl(const LanguageOutputter *This, FILE *out, const char *type, const char *name) { fputs(type,out); fputc(' ',out); fputs(name,out); }
@@ -68,16 +69,50 @@ void CLanguageOutputter_outStartFunctionCode(const LanguageOutputter *This, FILE
 void CLanguageOutputter_outEndFunctionCode(const LanguageOutputter *This, FILE *out) {
   fputs("}", out);
 }
-LanguageOutputter CLanguageOutputter = {CLanguageOutputter_outDecl, CLanguageOutputter_outArrayDecl, CLanguageOutputter_outStartArray, CLanguageOutputter_outEndArray, CLanguageOutputter_outEndStmt, CLanguageOutputter_outNull, CLanguageOutputter_outBool, CLanguageOutputter_outStr, CLanguageOutputter_outChar, CLanguageOutputter_outInt, CLanguageOutputter_outFunctionStart, CLanguageOutputter_outStartParameters, CLanguageOutputter_outEndParameters, CLanguageOutputter_outStartFunctionCode, CLanguageOutputter_outEndFunctionCode};
+void CLanguageOutputter_outStartLineComment(const LanguageOutputter* This, FILE* out) {
+  fputs("//", out);
+}
+LanguageOutputter CLanguageOutputter = {CLanguageOutputter_outDecl, CLanguageOutputter_outArrayDecl, CLanguageOutputter_outStartArray, CLanguageOutputter_outEndArray, CLanguageOutputter_outEndStmt, CLanguageOutputter_outNull, CLanguageOutputter_outBool, CLanguageOutputter_outStr, CLanguageOutputter_outChar, CLanguageOutputter_outInt, CLanguageOutputter_outFunctionStart, CLanguageOutputter_outStartParameters, CLanguageOutputter_outEndParameters, CLanguageOutputter_outStartFunctionCode, CLanguageOutputter_outEndFunctionCode, CLanguageOutputter_outStartLineComment };
 
-void PyLanguageOutputter_outDecl(const LanguageOutputter* This, FILE* out, const char* type, const char* name) { fputs(type, out); fputc(' ', out); fputs(name, out); }
-void PyLanguageOutputter_outArrayDecl(const LanguageOutputter* This, FILE* out, const char* type, const char* name) { fputs(type, out); fputc(' ', out); fputs(name, out); fputs("[]", out); }
-void PyLanguageOutputter_outStartArray(const LanguageOutputter* This, FILE* out) { fputc('{', out); }
-void PyLanguageOutputter_outEndArray(const LanguageOutputter* This, FILE* out) { fputc('}', out); }
-void PyLanguageOutputter_outEndStmt(const LanguageOutputter* This, FILE* out) { fputc(';', out); }
-void PyLanguageOutputter_outNull(const LanguageOutputter* This, FILE* out) { fputc('0', out); }
-void PyLanguageOutputter_outBool(const LanguageOutputter* This, FILE* out, bool b) { fputs((b ? "true" : "false"), out); }
-void PyLanguageOutputter_outStr(const LanguageOutputter* This, FILE* out, const char* str) { fputc('"', out); fputs(str, out); fputc('"', out); }
+static const char* PyType(const char* type) {
+  if (strstr(type, "int"))
+    return "int";
+  else if (strstr(type, "double") || strstr(type, "float"))
+    return "float";
+  else if (strstr(type, "char*") )
+    return "str";
+  return "Any";
+}
+
+void PyLanguageOutputter_outDecl(const LanguageOutputter* This, FILE* out, const char* type, const char* name) {
+  fputs(name,out);
+  fputs(": ",out);
+  fputs(PyType(type), out);
+}
+void PyLanguageOutputter_outArrayDecl(const LanguageOutputter* This, FILE* out, const char* type, const char* name) {
+  fputs(name,out);
+  fputs(": ", out);
+  fputs("tuple[",out);
+  fputs(PyType(type), out);
+  fputs("]",out);
+}
+void PyLanguageOutputter_outStartArray(const LanguageOutputter* This, FILE* out) {
+  fputc('(', out);
+}
+void PyLanguageOutputter_outEndArray(const LanguageOutputter* This, FILE* out) {
+  fputc(')', out);
+}
+void PyLanguageOutputter_outEndStmt(const LanguageOutputter* This, FILE* out) {
+}
+void PyLanguageOutputter_outNull(const LanguageOutputter* This, FILE* out) {
+  fputc('None', out);
+}
+void PyLanguageOutputter_outBool(const LanguageOutputter* This, FILE* out, bool b) {
+  fputs((b ? "True" : "False"), out);
+}
+void PyLanguageOutputter_outStr(const LanguageOutputter* This, FILE* out, const char* str) {
+  fputc('"', out); fputs(str, out); fputc('"', out);
+}
 void PyLanguageOutputter_outChar(const LanguageOutputter* This, FILE* out, int c) {
   if (c == '\r') {
     fputs("'\\r'", out);
@@ -105,7 +140,7 @@ void PyLanguageOutputter_outChar(const LanguageOutputter* This, FILE* out, int c
 }
 void PyLanguageOutputter_outInt(const LanguageOutputter* This, FILE* out, int i) { fprintf(out, "%d", i); }
 void PyLanguageOutputter_outFunctionStart(const LanguageOutputter* This, FILE* out, const char* rettype, const char* name) {
-  fputs("function ", out);
+  fputs("def ", out);
   fputs(name, out);
 }
 void PyLanguageOutputter_outStartParameters(const LanguageOutputter* This, FILE* out) {
@@ -115,12 +150,13 @@ void PyLanguageOutputter_outEndParameters(const LanguageOutputter* This, FILE* o
   fputs(")", out);
 }
 void PyLanguageOutputter_outStartFunctionCode(const LanguageOutputter* This, FILE* out) {
-  fputs("{", out);
+  fputs("  ", out);
 }
-void PyLanguageOutputter_outEndFunctionCode(const LanguageOutputter* This, FILE* out) {
-  fputs("}", out);
+void PyLanguageOutputter_outEndFunctionCode(const LanguageOutputter* This, FILE* out) {}
+void PyLanguageOutputter_outStartLineComment(const LanguageOutputter* This, FILE* out) {
+  fputs("#", out);
 }
-LanguageOutputter PyLanguageOutputter = { PyLanguageOutputter_outDecl, PyLanguageOutputter_outArrayDecl, PyLanguageOutputter_outStartArray, PyLanguageOutputter_outEndArray, PyLanguageOutputter_outEndStmt, PyLanguageOutputter_outNull, PyLanguageOutputter_outBool, PyLanguageOutputter_outStr, PyLanguageOutputter_outChar, PyLanguageOutputter_outInt, PyLanguageOutputter_outFunctionStart, PyLanguageOutputter_outStartParameters, PyLanguageOutputter_outEndParameters, PyLanguageOutputter_outStartFunctionCode, PyLanguageOutputter_outEndFunctionCode };
+LanguageOutputter PyLanguageOutputter = { PyLanguageOutputter_outDecl, PyLanguageOutputter_outArrayDecl, PyLanguageOutputter_outStartArray, PyLanguageOutputter_outEndArray, PyLanguageOutputter_outEndStmt, PyLanguageOutputter_outNull, PyLanguageOutputter_outBool, PyLanguageOutputter_outStr, PyLanguageOutputter_outChar, PyLanguageOutputter_outInt, PyLanguageOutputter_outFunctionStart, PyLanguageOutputter_outStartParameters, PyLanguageOutputter_outEndParameters, PyLanguageOutputter_outStartFunctionCode, PyLanguageOutputter_outEndFunctionCode, PyLanguageOutputter_outStartLineComment };
 
 static void PrintExtraType(FILE *out, const ParserDef *parser, const LanguageOutputter *lang, const LanguageOutputOptions *outputOptions) {
   int extraNt = ParserDef_getExtraNt(parser);
@@ -294,7 +330,9 @@ static void OutputLRParser(FILE *out, const ParserDef *parser, const LRParserSol
   first = true;
   int actionidx = 0;
   for( int i = 0; i < VectorAny_size(&solution->m_states); ++i ) {
-    fprintf(out,"\n/* state %d */ ", i);
+    fputs("\n",out);
+    lang->outStartLineComment(lang,out);
+    fprintf(out," state %d \n", i);
     VectorAny_push_back(&sidxtoaoffset,&actionidx);
     const shifttosymbols_t *shifttosymbols = &MapAny_findConstT(&solution->m_shifts,&i,shifttosymbols_t);
     if( shifttosymbols ) {

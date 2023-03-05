@@ -200,6 +200,6 @@ struct Rx {
 };
 
 Nfa *ParseTokenizerFile(TokStream *s);
-void OutputTokenizerSource(FILE *out, const Nfa *dfa, const char *prefix);
+void OutputTokenizerSource(FILE *out, const Nfa *dfa, const char *prefix, bool py);
 
 #endif /* __tokenizer_h */

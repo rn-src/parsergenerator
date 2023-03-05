@@ -27,10 +27,16 @@
     <ClInclude Include="parsertokL.h">
       <Filter>Header Files</Filter>
     </ClInclude>
+    <ClInclude Include="lrparse.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <None Include="nMakefile.msc" />
     <None Include="parsertok.L" />
+    <None Include="lrparse.py">
+      <Filter>Source Files</Filter>
+    </None>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="main.c">

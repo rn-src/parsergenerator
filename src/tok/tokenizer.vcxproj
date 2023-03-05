@@ -78,6 +78,9 @@
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">
     <NMakeOutput>tokenizer.exe</NMakeOutput>
     <NMakePreprocessorDefinitions>WIN32;_DEBUG;$(NMakePreprocessorDefinitions)</NMakePreprocessorDefinitions>
+    <NMakeBuildCommandLine>nmake -f nMakefile.msc</NMakeBuildCommandLine>
+    <NMakeReBuildCommandLine>nmake -f nMakefile.msc clean all</NMakeReBuildCommandLine>
+    <NMakeCleanCommandLine>nmake -f nMakefile.msc clean</NMakeCleanCommandLine>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">
     <NMakeOutput>tokenizer.exe</NMakeOutput>
