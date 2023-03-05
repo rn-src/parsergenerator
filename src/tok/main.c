@@ -33,7 +33,10 @@ int main(int argc, char *argv[])
       lastdot[0] = lastdot[1];
       ++lastdot;
     }
-    strcat(foutname,".h");
+    if( py )
+      strcat(foutname,".py");
+    else
+     strcat(foutname,".h");
 
     ParseError *pe;
     TokStream s;

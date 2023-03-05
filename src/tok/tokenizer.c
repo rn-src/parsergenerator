@@ -2,6 +2,7 @@
 #include <limits.h>
 #include <ctype.h>
 #include <stdlib.h>
+#include <string.h>
 #include "tokenizer.h"
 
 ElementOps ActionElement = {sizeof(Action), false, false, 0, 0, 0, 0, 0, 0};
@@ -1527,6 +1528,7 @@ struct LanguageOutputter;
 typedef struct LanguageOutputter LanguageOutputter;
 
 struct LanguageOutputter {
+  void (*outTop)(const LanguageOutputter *This, FILE *out);
   void (*outDecl)(const LanguageOutputter *This, FILE *out, const char *type, const char *name);
   void (*outArrayDecl)(const LanguageOutputter *This, FILE *out, const char *type, const char *name);
   void (*outStartArray)(const LanguageOutputter *This, FILE *out);
@@ -1540,6 +1542,7 @@ struct LanguageOutputter {
   const char *prefix;
 };
 
+void CLanguageOutputter_outTop(const LanguageOutputter* This, FILE* out) {}
 void CLanguageOutputter_outDecl(const LanguageOutputter *This, FILE *out, const char *type, const char *name) { fputs(type, out); fputc(' ', out); fputs(This->prefix, out); fputs("_", out); fputs(name, out); }
 void CLanguageOutputter_outArrayDecl(const LanguageOutputter *This, FILE *out, const char *type, const char *name) { fputs(type,out); fputc(' ',out);  fputs(This->prefix, out); fputs("_", out); fputs(name,out); fputs("[]",out); }
 void CLanguageOutputter_outStartArray(const LanguageOutputter *This, FILE *out) { fputc('{',out); }
@@ -1567,43 +1570,54 @@ void CLanguageOutputter_outChar(const LanguageOutputter *This, FILE *out, int c)
     fprintf(out,"%d",c);
 }
 void CLanguageOutputter_outInt(const LanguageOutputter *This, FILE *out, int i)  { fprintf(out,"%d",i); }
-LanguageOutputter CLanguageOutputter = {CLanguageOutputter_outDecl, CLanguageOutputter_outArrayDecl, CLanguageOutputter_outStartArray, CLanguageOutputter_outEndArray, CLanguageOutputter_outEndStmt, CLanguageOutputter_outNull, CLanguageOutputter_outBool, CLanguageOutputter_outStr, CLanguageOutputter_outChar, CLanguageOutputter_outInt};
+LanguageOutputter CLanguageOutputter = {CLanguageOutputter_outTop, CLanguageOutputter_outDecl, CLanguageOutputter_outArrayDecl, CLanguageOutputter_outStartArray, CLanguageOutputter_outEndArray, CLanguageOutputter_outEndStmt, CLanguageOutputter_outNull, CLanguageOutputter_outBool, CLanguageOutputter_outStr, CLanguageOutputter_outChar, CLanguageOutputter_outInt};
 
-void PyLanguageOutputter_outDecl(const LanguageOutputter* This, FILE* out, const char* type, const char* name) { fputs(type, out); fputc(' ', out); fputs(This->prefix, out); fputs("_", out); fputs(name, out); }
-void PyLanguageOutputter_outArrayDecl(const LanguageOutputter* This, FILE* out, const char* type, const char* name) { fputs(type, out); fputc(' ', out);  fputs(This->prefix, out); fputs("_", out); fputs(name, out); fputs("[]", out); }
-void PyLanguageOutputter_outStartArray(const LanguageOutputter* This, FILE* out) { fputc('{', out); }
-void PyLanguageOutputter_outEndArray(const LanguageOutputter* This, FILE* out) { fputc('}', out); }
-void PyLanguageOutputter_outEndStmt(const LanguageOutputter* This, FILE* out) { fputc(';', out); }
+static const char *pytype(const char *type) {
+  if( strstr(type,"int") )
+    return "int";
+  if( strstr(type,"bool") )
+    return "bool";
+  if( strstr(type,"char") )
+    return "str";
+  return "Any";
+}
+
+void PyLanguageOutputter_outTop(const LanguageOutputter* This, FILE* out) { fputs("from typing import Sequence\n", out); }
+void PyLanguageOutputter_outDecl(const LanguageOutputter* This, FILE* out, const char* type, const char* name) { fputs(name, out); fputs(": ",out); fputs(pytype(type), out); }
+void PyLanguageOutputter_outArrayDecl(const LanguageOutputter* This, FILE* out, const char* type, const char* name) { fputs(name, out); fputs(": Sequence[", out);  fputs(pytype(type), out); fputs("]", out); }
+void PyLanguageOutputter_outStartArray(const LanguageOutputter* This, FILE* out) { fputc('(', out); }
+void PyLanguageOutputter_outEndArray(const LanguageOutputter* This, FILE* out) { fputc(')', out); }
+void PyLanguageOutputter_outEndStmt(const LanguageOutputter* This, FILE* out) {}
 void PyLanguageOutputter_outNull(const LanguageOutputter* This, FILE* out) { fputc('0', out); }
-void PyLanguageOutputter_outBool(const LanguageOutputter* This, FILE* out, bool b) { fputs((b ? "true" : "false"), out); }
-void PyLanguageOutputter_outStr(const LanguageOutputter* This, FILE* out, const char* str) { fputc('"', out); fputs(str, out); fputc('"', out); }
+void PyLanguageOutputter_outBool(const LanguageOutputter* This, FILE* out, bool b) { fputs((b ? "True" : "False"), out); }
+void PyLanguageOutputter_outStr(const LanguageOutputter* This, FILE* out, const char* str) { fputc('\'', out); fputs(str, out); fputc('\'', out); }
 void PyLanguageOutputter_outChar(const LanguageOutputter* This, FILE* out, int c) {
   if (c == '\r') {
-    fputs("'\\r'", out);
+    fputs("ord('\\r')", out);
   }
   else if (c == '\n') {
-    fputs("'\\n'", out);
+    fputs("ord('\\n')", out);
   }
   else if (c == '\v') {
-    fputs("'\\v'", out);
+    fputs("ord('\\v')", out);
   }
   else if (c == ' ') {
-    fputs("' '", out);
+    fputs("ord(' ')", out);
   }
   else if (c == '\t') {
-    fputs("'\\t'", out);
+    fputs("ord('\\t')", out);
   }
   else if (c == '\\' || c == '\'') {
-    fprintf(out, "'\\%c'", c);
+    fprintf(out, "ord('\\%c')", c);
   }
   else if (c <= 126 && isgraph(c)) {
-    fprintf(out, "'%c'", c);
+    fprintf(out, "ord('%c')", c);
   }
   else
     fprintf(out, "%d", c);
 }
 void PyLanguageOutputter_outInt(const LanguageOutputter* This, FILE* out, int i) { fprintf(out, "%d", i); }
-LanguageOutputter PyLanguageOutputter = { PyLanguageOutputter_outDecl, PyLanguageOutputter_outArrayDecl, PyLanguageOutputter_outStartArray, PyLanguageOutputter_outEndArray, PyLanguageOutputter_outEndStmt, PyLanguageOutputter_outNull, PyLanguageOutputter_outBool, PyLanguageOutputter_outStr, PyLanguageOutputter_outChar, PyLanguageOutputter_outInt };
+LanguageOutputter PyLanguageOutputter = { PyLanguageOutputter_outTop, PyLanguageOutputter_outDecl, PyLanguageOutputter_outArrayDecl, PyLanguageOutputter_outStartArray, PyLanguageOutputter_outEndArray, PyLanguageOutputter_outEndStmt, PyLanguageOutputter_outNull, PyLanguageOutputter_outBool, PyLanguageOutputter_outStr, PyLanguageOutputter_outChar, PyLanguageOutputter_outInt };
 
 static void OutputDfaSource(FILE *out, const Nfa *dfa, const LanguageOutputter *lang) {
   bool first = true;
@@ -1614,6 +1628,8 @@ static void OutputDfaSource(FILE *out, const Nfa *dfa, const LanguageOutputter *
   VectorAny_init(&tokens,&TokenElement,true);
   MapAny_init(&transitioncounts,getIntElement(),getIntElement(),true);
   Nfa_getTokenDefs(dfa,&tokens);
+
+  lang->outTop(lang,out);
 
   for( int cur = 0, end = VectorAny_size(&tokens); cur != end; ++cur ) {
     const Token *curToken = &VectorAny_ArrayOpConstT(&tokens,cur,Token);

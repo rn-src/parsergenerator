@@ -4,7 +4,7 @@ A tokenizer and parser generator, implements infinite sub-parse tree restriction
 ## Building - Windows
 _If you don't like VS 14 or 32 bit, you can use whatever windows platform you prefer_
 ```
-%comspec% /k ""C:\Program Files (x86)\Microsoft Visual Studio 14.0\VC\vcvarsall.bat"" x86
+%comspec% /k "C:\Program Files (x86)\Microsoft Visual Studio\2022\Community\VC\Auxiliary\Build\vcvarsall.bat" x86
 cd src/tok
 nmake -f nMakefile.msc
 cd ../parse
