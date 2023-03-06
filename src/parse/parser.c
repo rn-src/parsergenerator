@@ -1263,6 +1263,28 @@ static ProductionDescriptor *ParseProductionDescriptor(Tokenizer *toks, ParserDe
   return pd;
 }
 
+static String *ParseSquarePairTokType(Tokenizer* toks, String *toktype) {
+  String tok;
+  Scope_Push();
+  String_init(&tok, true);
+  if (toks->peek(toks) != PARSERTOK_LBRKT)
+    error(toks, "expected '['");
+  toks->tokstr(toks, &tok);
+  toks->discard(toks);
+  toktype = String_AddString(toktype, &tok);
+  // just real simple, one level deep.  if we need more later we'll augment the parser
+  while (toks->peek(toks) != PARSERTOK_RBRKT) {
+    toks->tokstr(toks, &tok);
+    toktype = String_AddString(toktype, &tok);
+    toks->discard(toks);
+  }
+  toks->tokstr(toks, &tok);
+  toktype = String_AddString(toktype, &tok);
+  toks->discard(toks);
+  Scope_Pop();
+  return toktype;
+}
+
 static void ParseTypedefRule(Tokenizer *toks, ParserDef *parser) {
   if( toks->peek(toks) != PARSERTOK_TYPEDEFTOK )
     return;
@@ -1274,6 +1296,9 @@ static void ParseTypedefRule(Tokenizer *toks, ParserDef *parser) {
   String_init(&toktype,true);
   toks->tokstr(toks,&toktype);
   toks->discard(toks);
+  if(toks->peek(toks) == PARSERTOK_LBRKT) {
+    String_AssignString(&toktype,ParseSquarePairTokType(toks, &toktype));
+  }
   while( toks->peek(toks) == PARSERTOK_STAR ) {
     String tok;
     Scope_Push();
@@ -1304,7 +1329,7 @@ static void ParseTypedefRule(Tokenizer *toks, ParserDef *parser) {
       errorString(toks, &err);
       Scope_Pop();
     }
-    symboldef->m_semantictype = toktype;
+    String_AssignString(&symboldef->m_semantictype,&toktype);
     nt = ParseNonterminalOrExtra(toks,parser);
   }
   Scope_Pop();

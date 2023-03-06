@@ -8,7 +8,7 @@ const char *getarg(int argc, char *argv[], const char *arg) {
   return 0;
 }
 
-char *makeFOutName(const char *fname) {
+char *makeFOutName(const char *fname, LanguageOutputOptions *options) {
   char *foutname = (char*)malloc(strlen(fname) + 3);
   strcpy(foutname, fname);
   char *lastdot = strrchr(foutname, '.');
@@ -16,13 +16,17 @@ char *makeFOutName(const char *fname) {
     lastdot[0] = lastdot[1];
     ++lastdot;
   }
-  strcat(foutname, ".h");
+  if( options->m_outputLanguage == OutputLanguage_Python )
+    strcat(foutname, ".py");
+  else
+    strcat(foutname, ".h");
   return foutname;
 }
 
 void parseArgs(int argc, char *argv[], int *pverbosity, int *ptimed, LanguageOutputOptions *options, const char **pfname) {
   int verbosity = 0;
   int timed = 0;
+  int nImports = 0;
   const char *arg;
   if (getarg(argc, argv, "-vvv"))
     verbosity = 3;
@@ -30,6 +34,8 @@ void parseArgs(int argc, char *argv[], int *pverbosity, int *ptimed, LanguageOut
     verbosity = 2;
   else if (getarg(argc, argv, "-v"))
     verbosity = 1;
+  if ((arg = getarg(argc, argv, "--lexer=")))
+    options->m_lexerName = arg + 8;
   if ((arg = getarg(argc, argv, "--minnt=")))
     options->min_nt_value = atoi(arg + 8);
   if ((arg = getarg(argc, argv, "--no-pound-line")))
@@ -45,10 +51,40 @@ void parseArgs(int argc, char *argv[], int *pverbosity, int *ptimed, LanguageOut
   if (getarg(argc, argv, "--py"))
     options->m_outputLanguage = OutputLanguage_Python;
   for (int i = 1; i < argc; ++i) {
+    if (strncmp(argv[i], "--import=",9) == 0) {
+      options->m_extraImports[nImports++] = argv[i]+9;
+      options->m_extraImports[nImports] = 0;
+    }
+  }
+  for (int i = 1; i < argc; ++i) {
     if (argv[i][0] == '-')
       continue;
     *pfname = argv[i];
     break;
+  }
+  // get the lexer name, if not provided
+  if (!options->m_lexerName && *pfname) {
+    const char *fname = *pfname;
+    char* foutname = (char*)malloc(strlen(fname) + 3);
+    strcpy(foutname, fname);
+    const char* startfname = strrchr(foutname, '/');
+    if ( startfname )
+      startfname++;
+    if( ! startfname )
+      startfname = strrchr(foutname,'\\');
+    if (startfname)
+      startfname++;
+    if( ! startfname )
+      startfname = fname;
+    char *lexerName = (char*)malloc(strlen(startfname)+4);
+    strcpy(lexerName,startfname);
+    char* lastdot = strrchr(lexerName, '.');
+    if( *lastdot )
+      *lastdot = 0;
+    int len = strlen(lexerName);
+    lexerName[len] = 'L';
+    lexerName[len+1] = 0;
+    options->m_lexerName = lexerName;
   }
   *pverbosity = verbosity;
   *ptimed = timed;
@@ -58,7 +94,8 @@ int main(int argc, char *argv[]) {
   int verbosity = 0;
   int timed = 0;
   const char *fname = 0;
-  LanguageOutputOptions options = { 0, true, ParserType_LR, OutputLanguage_C };
+  char *extraImports[32] = {0};
+  LanguageOutputOptions options = { 0, true, ParserType_LR, OutputLanguage_C, 0, extraImports };
 
   parseArgs(argc, argv, &verbosity, &timed, &options, &fname);
 
@@ -70,7 +107,9 @@ int main(int argc, char *argv[]) {
           "--ll           : output an LL parser\n"
           "--c            : output C\n"
           "--py           : output python\n"
-          "-no-pound-line : turn off #line directives in the output\n", stderr);
+          "--lexer        : lexer name, if different from the parser (used in python)\n"
+          "--import       : module to import (python) or include (C), can be repeated to import multple modules\n"
+          "-no-pound-line : turn off #line directives in the output (applies to C)\n", stderr);
     return -1;
   }
 
@@ -95,7 +134,7 @@ int main(int argc, char *argv[]) {
       return -1;
     }
     Push_Destroy(fin, (vpstack_destroyer)fclose);
-    foutname = makeFOutName(fname);
+    foutname = makeFOutName(fname,&options);
     Push_Destroy(foutname, free);
     ParserDef_init(&parser,vout,verbosity,true);
     FileTokBuf_init(&tokbuf,fin,fname,true);

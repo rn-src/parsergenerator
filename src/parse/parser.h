@@ -443,6 +443,8 @@ struct LanguageOutputOptions {
   bool do_pound_line;
   ParserType m_parserType;
   OutputLanguage m_outputLanguage;
+  const char *m_lexerName;
+  const char **m_extraImports;
 };
 
 void ParseParser(TokBuf *tokbuf, ParserDef *parser, FILE *vout, int verbosity);
