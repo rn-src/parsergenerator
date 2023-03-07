@@ -95,7 +95,7 @@ int main(int argc, char *argv[]) {
   int timed = 0;
   const char *fname = 0;
   char *extraImports[32] = {0};
-  LanguageOutputOptions options = { 0, true, ParserType_LR, OutputLanguage_C, 0, extraImports };
+  LanguageOutputOptions options = { 0, true, ParserType_LR, OutputLanguage_C, 0, (const char**)extraImports };
 
   parseArgs(argc, argv, &verbosity, &timed, &options, &fname);
 

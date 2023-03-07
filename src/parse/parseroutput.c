@@ -145,7 +145,7 @@ void PyLanguageOutputter_outEndArray(const LanguageOutputter* This, FILE* out) {
 void PyLanguageOutputter_outEndStmt(const LanguageOutputter* This, FILE* out) {
 }
 void PyLanguageOutputter_outNull(const LanguageOutputter* This, FILE* out) {
-  fputc('None', out);
+  fputs("None", out);
 }
 void PyLanguageOutputter_outBool(const LanguageOutputter* This, FILE* out, bool b) {
   fputs((b ? "True" : "False"), out);
