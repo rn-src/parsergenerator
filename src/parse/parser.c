@@ -5,7 +5,7 @@ ElementOps ActionItemElement = { sizeof(ActionItem), false, false, (elementInit)
 ElementOps ProductionDescriptorElement = { sizeof(ProductionDescriptor), false, false, (elementInit)ProductionDescriptor_init, (elementDestroy)ProductionDescriptor_destroy, (elementLessThan)ProductionDescriptor_LessThan, (elementEqual)ProductionDescriptor_Equal, (elementAssign)ProductionDescriptor_Assign, 0 };
 ElementOps ProductionDescriptorsElement = { sizeof(ProductionDescriptors), false, false, (elementInit)ProductionDescriptors_init, (elementDestroy)ProductionDescriptors_destroy, (elementLessThan)ProductionDescriptors_LessThan, (elementEqual)ProductionDescriptors_Equal, (elementAssign)ProductionDescriptors_Assign, 0 };
 ElementOps SymbolDefElement = { sizeof(ProductionDescriptor), false, false, (elementInit)SymbolDef_init, (elementDestroy)SymbolDef_destroy, (elementLessThan)SymbolDef_LessThan, (elementEqual)SymbolDef_Equal, (elementAssign)SymbolDef_Assign, 0 };
-ElementOps ProductionAndRestrictStateElement = { sizeof(productionandrestrictstate_t), false, false, 0, 0, 0, 0, 0, 0 };
+ElementOps ProductionAndRestrictStateElement = { sizeof(productionandrestrictstate_t), false, false, 0, 0, (elementLessThan)productionandrestrictstate_t_LessThan, (elementEqual)productionandrestrictstate_t_Equal, 0, 0 };
 ElementOps ProductionStateElement = { sizeof(ProductionState), false, false, 0, 0, (elementLessThan)ProductionState_LessThan, (elementEqual)ProductionState_Equal, 0, 0 };
 ElementOps StateElement = { sizeof(state_t), false, false, (elementInit)state_t_init, (elementDestroy)state_t_destroy, (elementLessThan)state_t_LessThan, (elementEqual)state_t_Equal, (elementAssign)state_t_Assign, 0 };
 ElementOps RestrictionElement = { sizeof(Restriction), false, false, (elementInit)Restriction_init, (elementDestroy)Restriction_destroy, (elementLessThan)Restriction_LessThan, (elementEqual)Restriction_Equal, (elementAssign)Restriction_Assign, 0 };
@@ -1773,3 +1773,16 @@ bool state_t_Equal(const state_t *lhs, const state_t *rhs) {
 void state_t_Assign(state_t *lhs, const state_t *rhs) {
   SetAny_Assign(&lhs->m_productionStates,&rhs->m_productionStates);
 }
+
+bool productionandrestrictstate_t_LessThan(const productionandrestrictstate_t *lhs, const productionandrestrictstate_t *rhs) {
+  if( lhs->production->m_pid < rhs->production->m_pid )
+    return true;
+  else if( lhs->production->m_pid > rhs->production->m_pid )
+    return false;
+  return lhs->restrictstate < rhs->restrictstate;
+}
+
+bool productionandrestrictstate_t_Equal(const productionandrestrictstate_t *lhs, const productionandrestrictstate_t *rhs) {
+  return lhs->production->m_pid == rhs->production->m_pid && lhs->restrictstate == rhs->restrictstate;
+}
+

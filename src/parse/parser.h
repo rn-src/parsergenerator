@@ -302,6 +302,8 @@ struct productionandrestrictstate_t;
 typedef struct productionandrestrictstate_t productionandrestrictstate_t;
 
 productionandrestrictstate_t *productionandrestrictstate_t_set(productionandrestrictstate_t *This, const Production *production, int restrictstate);
+bool productionandrestrictstate_t_LessThan(const productionandrestrictstate_t *lhs, const productionandrestrictstate_t *rhs);
+bool productionandrestrictstate_t_Equal(const productionandrestrictstate_t *lhs, const productionandrestrictstate_t *rhs);
 
 struct productionandrestrictstate_t {
   const Production *production;
