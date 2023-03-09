@@ -721,7 +721,6 @@ void ParserDef_init(ParserDef *This, FILE *vout, int verbosity, bool onstack) {
   MapAny_init(&This->m_tokdefs, getIntElement(), &SymbolDefElement,false);
   VectorAny_init(&This->m_productions, getPointerElement(),false);
   VectorAny_init(&This->m_restrictrules, getPointerElement(),false);
-  VectorAny_init(&This->m_restrictrxs, getPointerElement(), false);
   VectorAny_init(&This->m_assocrules, getPointerElement(),false);
   VectorAny_init(&This->m_precrules, getPointerElement(),false);
   RestrictAutomata_init(&This->m_restrict,false);
@@ -1012,16 +1011,6 @@ void ParserDef_addRestrictRule(ParserDef *This, RestrictRule *rule) {
   }
 }
 
-void ParserDef_addRestrictRx(ParserDef *This, ProductionRegex *rx) {
-  static int i = 1;
-  VectorAny_push_back(&This->m_restrictrxs, &rx);
-  if (This->m_verbosity > 2) {
-    fprintf(This->m_vout, "added rx (add # %d)\n", i++);
-    ProductionRegex_print(rx, This->m_vout, &This->m_tokdefs);
-    fputs("\n", This->m_vout);
-  }
-}
-
 void ParserDef_print(const ParserDef *This, FILE *out) {
   for( int i = 0, n = VectorAny_size(&This->m_productions); i != n; ++i) {
     const Production *p = VectorAny_ArrayOpConstT(&This->m_productions,i,Production*);
@@ -1235,7 +1224,7 @@ static int ParseSymbolOrDottedSymbol(Tokenizer *toks, ParserDef *parser, bool *d
   return symbol;
 }
 
-static ProductionDescriptor *ParseProductionDescriptor(Tokenizer *toks, ParserDef *parser) {
+static ProductionDescriptor *ParseProductionDescriptor(Tokenizer *toks, ParserDef *parser, ProductionDescriptor *pd) {
   if( toks->peek(toks) != PARSERTOK_LBRKT )
     error(toks,"Expected '[' to start production descriptor");
   toks->discard(toks);
@@ -1263,8 +1252,10 @@ static ProductionDescriptor *ParseProductionDescriptor(Tokenizer *toks, ParserDe
   if( toks->peek(toks) != PARSERTOK_RBRKT )
     error(toks,"Expected ']' to end production descriptor");
   toks->discard(toks);
-  ProductionDescriptor *pd = (ProductionDescriptor*)zalloc(sizeof(ProductionDescriptor));
-  ProductionDescriptor_init(pd,false);
+  if( ! pd ) {
+    ProductionDescriptor *pd = (ProductionDescriptor*)zalloc(sizeof(ProductionDescriptor));
+    ProductionDescriptor_init(pd,false);
+  }
   ProductionDescriptor_setinfo(pd,nt,&symbols);
   Scope_Pop();
   return pd;
@@ -1341,23 +1332,22 @@ static void ParseTypedefRule(Tokenizer *toks, ParserDef *parser) {
   }
   Scope_Pop();
 }
-#if 0
-static ProductionDescriptors *ParseProductionDescriptors(Tokenizer *toks, ParserDef *parser) {
-  ProductionDescriptor *pd = ParseProductionDescriptor(toks,parser);
-  ProductionDescriptors *pds = (ProductionDescriptors*)zalloc(sizeof(ProductionDescriptors));
-  ProductionDescriptors_init(pds,false);
-  ProductionDescriptors_insert(pds,pd,0);
-  ProductionDescriptor_destroy(pd);
-  free(pd);
+
+static ProductionDescriptors *ParseProductionDescriptors(Tokenizer *toks, ParserDef *parser, ProductionDescriptors *pds) {
+  ProductionDescriptor pd;
+  Scope_Push();
+  ProductionDescriptor_init(&pd,true);
+  ParseProductionDescriptor(toks,parser,&pd);
+  ProductionDescriptors_insert(pds,&pd,0);
   while( toks->peek(toks) == PARSERTOK_LBRKT ) {
-    pd = ParseProductionDescriptor(toks,parser);
-    ProductionDescriptors_insert(pds,pd,0);
-    ProductionDescriptor_destroy(pd);
-    free(pd);
+    ProductionDescriptor_clear(&pd);
+    ParseProductionDescriptor(toks,parser,&pd);
+    ProductionDescriptors_insert(pds,&pd,0);
   }
+  Scope_Pop();
   return pds;
 }
-#endif
+
 static ProductionDescriptors *ParseProductions(Tokenizer *toks, ParserDef *parser);
 
 static void checkProductionDescriptorsSameNonterminal(Tokenizer *toks, ProductionDescriptors *p, int lastnt, const char *name) {
@@ -1602,7 +1592,7 @@ static ProductionRegex *ParseRxSimple(Tokenizer *toks, ParserDef *parser) {
     r->m_paren = true;
     return r;
   } else {
-    ProductionDescriptor *pd = ParseProductionDescriptor(toks, parser);
+    ProductionDescriptor *pd = ParseProductionDescriptor(toks, parser, 0);
     return rxpd(pd);
   }
 
@@ -1678,12 +1668,24 @@ static ProductionRegex *ParseRx(Tokenizer *toks, ParserDef *parser) {
   return ParseRxOr(toks,parser);
 }
 
-static ProductionRegex *ParseRestrictRx(Tokenizer *toks, ParserDef *parser) {
-  if( toks->peek(toks) != PARSERTOK_NOTARROW )
+static RestrictRule *ParseRestrictRule(Tokenizer *toks, ParserDef *parser) {
+  RestrictRule *rr = (RestrictRule*)zalloc(sizeof(RestrictRule));
+  rr->m_restriction = (Restriction*)zalloc(sizeof(Restriction));
+  Restriction_init(rr->m_restriction,false);
+  if( toks->peek(toks) != PARSERTOK_RESTRICT )
     return 0;
   toks->discard(toks);
-  ProductionRegex *rx = ParseRx(toks, parser);
-  return rx;
+  if( toks->peek(toks) != PARSERTOK_ARROW )
+    rr->m_rx = ParseRx(toks, parser);
+  if( toks->peek(toks) != PARSERTOK_ARROW )
+    error(toks,"Expected -->");
+  toks->discard(toks);
+  ParseProductionDescriptors(toks, parser, &rr->m_restriction->m_restricted);
+  if( toks->peek(toks) != PARSERTOK_NOTARROW )
+    error(toks,"Expected -/->");
+  toks->discard(toks);
+  ParseProductionDescriptors(toks, parser, &rr->m_restriction->m_at);
+  return rr;
 }
 
 static bool ParseParsePart(Tokenizer *toks, ParserDef *parser) {
@@ -1695,9 +1697,9 @@ static bool ParseParsePart(Tokenizer *toks, ParserDef *parser) {
   } else if( toks->peek(toks) == PARSERTOK_PRECEDENCE ) {
     PrecedenceRule *p = ParsePrecedenceRule(toks,parser);
     VectorAny_push_back(&parser->m_precrules,&p);
-  } else if( toks->peek(toks) == PARSERTOK_NOTARROW ) {
-    ProductionRegex *rx = ParseRestrictRx(toks,parser);
-    ParserDef_addRestrictRx(parser,rx);
+  } else if( toks->peek(toks) == PARSERTOK_RESTRICT ) {
+    RestrictRule *rr = ParseRestrictRule(toks,parser);
+    ParserDef_addRestrictRule(parser,rr);
   } else if( toks->peek(toks) == PARSERTOK_REJECTABLE  || toks->peek(toks) == PARSERTOK_START || toks->peek(toks) == PARSERTOK_ID ) {
     VectorAny /*<Production*>*/ productions;
     Scope_Push();
