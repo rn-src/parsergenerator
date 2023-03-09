@@ -1253,7 +1253,7 @@ static ProductionDescriptor *ParseProductionDescriptor(Tokenizer *toks, ParserDe
     error(toks,"Expected ']' to end production descriptor");
   toks->discard(toks);
   if( ! pd ) {
-    ProductionDescriptor *pd = (ProductionDescriptor*)zalloc(sizeof(ProductionDescriptor));
+    pd = (ProductionDescriptor*)zalloc(sizeof(ProductionDescriptor));
     ProductionDescriptor_init(pd,false);
   }
   ProductionDescriptor_setinfo(pd,nt,&symbols);
@@ -1579,7 +1579,7 @@ static bool ParseRepeat(Tokenizer *toks, int *plow, int *phigh) {
 static ProductionRegex *ParseRxSimple(Tokenizer *toks, ParserDef *parser) {
   int c = toks->peek(toks);
 
-  if( c == -1 || c == PARSERTOK_SEMI || c == PARSERTOK_PLUS || c == PARSERTOK_STAR || c == PARSERTOK_QUESTION || c == PARSERTOK_RPAREN )
+  if( c == -1 || c == PARSERTOK_SEMI || c == PARSERTOK_PLUS || c == PARSERTOK_STAR || c == PARSERTOK_QUESTION || c == PARSERTOK_RPAREN || c == PARSERTOK_ARROW || c == PARSERTOK_NOTARROW )
     return 0;
 
   if( c == PARSERTOK_LPAREN ) {
@@ -1680,11 +1680,11 @@ static RestrictRule *ParseRestrictRule(Tokenizer *toks, ParserDef *parser) {
   if( toks->peek(toks) != PARSERTOK_ARROW )
     error(toks,"Expected -->");
   toks->discard(toks);
-  ParseProductionDescriptors(toks, parser, &rr->m_restriction->m_restricted);
+  ParseProductionDescriptors(toks, parser, &rr->m_restriction->m_at);
   if( toks->peek(toks) != PARSERTOK_NOTARROW )
     error(toks,"Expected -/->");
   toks->discard(toks);
-  ParseProductionDescriptors(toks, parser, &rr->m_restriction->m_at);
+  ParseProductionDescriptors(toks, parser, &rr->m_restriction->m_restricted);
   return rr;
 }
 
