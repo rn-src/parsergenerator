@@ -12,7 +12,8 @@
         NONASSOC   /NON-ASSOCIATIVE/
         INT        /[[:digit:]]+/
         COLON      /:|->/
-        NOTARROW   /-\/->|RESTRICT/
+        NOTARROW   /-\/->/
+        RESTRICT   /RESTRICT/
         COMMA      /\,/
         SEMI       /;/
         ID         /[[:alpha:]_][[:alnum:]_]*/

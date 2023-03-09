@@ -485,24 +485,22 @@ ProductionDescriptors *ProductionDescriptors_UnDottedProductionDescriptors(const
 static ProductionRegex *rxpd(ProductionDescriptor *pd);
 static ProductionRegex *rxbinary(BinaryOp op, ProductionRegex *lhs, ProductionRegex *rhs);
 
-ProductionRegex *ProductionDescriptors_ProductionRegex(const ProductionDescriptors *This, Assoc assoc) {
-  ProductionRegex *pr = 0;
+ProductionDescriptors *ProductionDescriptors_DottedProductionDescriptors(const ProductionDescriptors *This, ProductionDescriptors *pdsdotted, Assoc assoc) {
+  ProductionDescriptors_clear(pdsdotted);
+  ProductionDescriptor pddotted;
+  Scope_Push();
+  ProductionDescriptor_init(&pddotted,true);
   int nt = -1;
   for (int i = 0, n = ProductionDescriptors_size(This); i < n; ++i) {
     const ProductionDescriptor *pd = &ProductionDescriptors_getByIndexConst(This, i);
-    ProductionDescriptor *pddotted = (ProductionDescriptor*)zalloc(sizeof(ProductionDescriptor));
-    ProductionDescriptor_init(pddotted, false);
+    ProductionDescriptor_clear(&pddotted);
     if (nt == -1)
       nt = pd->m_nt;
-    ProductionDescriptor_DottedProductionDescriptor(pd, pddotted, nt, assoc);
-    if (i == 0)
-      pr = rxpd(pddotted);
-    else
-      pr = rxbinary(BinaryOp_Or, pr, rxpd(pddotted));
+    ProductionDescriptor_DottedProductionDescriptor(pd, &pddotted, nt, assoc);
+    ProductionDescriptors_insert(pdsdotted,&pddotted,0);
   }
-  if( ProductionDescriptors_size(This) > 1 )
-    pr->m_paren = true;
-  return pr;
+  Scope_Pop();
+  return pdsdotted;
 }
 
 ProductionDescriptors *ProductionDescriptors_clone(const ProductionDescriptors *This) {
@@ -585,6 +583,8 @@ void ProductionRegex_destroy(ProductionRegex *This) {
 }
 
 void ProductionRegex_print(ProductionRegex *This, FILE *out, const MapAny /*<int,SymbolDef>*/ *tokens) {
+  if( ! This )
+    return;
   if (This->m_paren)
     fputs("(", out);
   switch (This->m_t) {
@@ -629,10 +629,11 @@ void ProductionRegex_print(ProductionRegex *This, FILE *out, const MapAny /*<int
 }
 
 void RestrictRule_print(const RestrictRule *This, FILE *out, const MapAny /*<int,SymbolDef>*/ *tokens) {
-  if( This->m_restricted )
-    ProductionDescriptors_print(This->m_restricted, out, tokens);
+  ProductionRegex_print(This->m_rx, out, tokens);
+  fputs(" --> ", out);
+  ProductionDescriptors_print(&This->m_restriction->m_at, out, tokens);
   fputs(" -/-> ", out);
-  ProductionRegex_print(This->m_rx,out,tokens);
+  ProductionDescriptors_print(&This->m_restriction->m_restricted, out, tokens);
 }
 
 void PrecedenceRule_init(PrecedenceRule *This, bool onstack) {
@@ -953,8 +954,11 @@ void ParserDef_expandAssocRules(ParserDef *This) {
       fputs("\n", This->m_vout);
     }
     RestrictRule *rr = (RestrictRule*)zalloc(sizeof(RestrictRule));
-    rr->m_restricted = 0;
-    rr->m_rx = rxbinary(BinaryOp_Concat, ProductionDescriptors_ProductionRegex(rule->m_pds, rule->m_assoc), ProductionDescriptors_ProductionRegex(rule->m_pds, AssocNull));
+    rr->m_rx = 0; // no prerequisite to reach this restrict state
+    rr->m_restriction = (Restriction*)zalloc(sizeof(Restriction));
+    Restriction_init(rr->m_restriction,false);
+    ProductionDescriptors_DottedProductionDescriptors(rule->m_pds, &rr->m_restriction->m_at, rule->m_assoc);
+    ProductionDescriptors_Assign(&rr->m_restriction->m_restricted, rule->m_pds);
     ParserDef_addRestrictRule(This, rr);
   }
 }
@@ -975,10 +979,13 @@ void ParserDef_expandPrecRules(ParserDef *This) {
     for (int curpr = 0, endpr = PrecedenceRule_size(precrule); curpr < endpr; ++curpr) {
       ProductionDescriptors *pds = PrecedenceRule_ArrayOp(precrule,endpr-curpr-1);
       if( curpr > 0 ) {
-        RestrictRule *dr = (RestrictRule*)zalloc(sizeof(RestrictRule));
-        dr->m_restricted = 0;
-        dr->m_rx = rxbinary(BinaryOp_Concat, ProductionDescriptors_ProductionRegex(pds, AssocNon), ProductionDescriptors_ProductionRegex(&descriptors, AssocNull));
-        ParserDef_addRestrictRule(This, dr);
+        RestrictRule *rr = (RestrictRule*)zalloc(sizeof(RestrictRule));
+        rr->m_rx = 0; // no prerequisites to get to the restrict rule
+        rr->m_restriction = (Restriction*)zalloc(sizeof(Restriction));
+        Restriction_init(rr->m_restriction,false);
+        ProductionDescriptors_DottedProductionDescriptors(pds, &rr->m_restriction->m_at, AssocNon);
+        ProductionDescriptors_insertMany(&rr->m_restriction->m_restricted, ProductionDescriptors_ptr(&descriptors), ProductionDescriptors_size(&descriptors));
+        ParserDef_addRestrictRule(This, rr);
       }
       ProductionDescriptors_insertMany(&descriptors,ProductionDescriptors_ptr(pds),ProductionDescriptors_size(pds));
     }
@@ -1429,7 +1436,7 @@ static AssociativeRule *ParseAssociativeRule(Tokenizer *toks, ParserDef *parser)
   if( toks->peek(toks) != PARSERTOK_LEFTASSOC && toks->peek(toks) != PARSERTOK_RIGHTASSOC && toks->peek(toks) != PARSERTOK_NONASSOC )
     error(toks,"expected LEFT-ASSOCIATIVE or RIGHT-ASSOCITIVE or NON-ASSOCIATIVE");
   int iassoc = toks->peek(toks);
-  Assoc assoc;
+  Assoc assoc = AssocNull;
   if( iassoc == PARSERTOK_LEFTASSOC )
     assoc = AssocLeft;
   else if( iassoc == PARSERTOK_RIGHTASSOC )

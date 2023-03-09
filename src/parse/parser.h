@@ -168,7 +168,7 @@ typedef struct ProductionDescriptors ProductionDescriptors;
 void ProductionDescriptors_init(ProductionDescriptors *This, bool onstack);
 void ProductionDescriptors_destroy(ProductionDescriptors *This);
 ProductionDescriptors *ProductionDescriptors_UnDottedProductionDescriptors(const ProductionDescriptors *This, ProductionDescriptors *psundottedOut);
-ProductionRegex *ProductionDescriptors_ProductionRegex(const ProductionDescriptors *This, Assoc assoc);
+ProductionDescriptors *ProductionDescriptors_DottedProductionDescriptors(const ProductionDescriptors* This, ProductionDescriptors *pdsdotted, Assoc assoc);
 ProductionDescriptors *ProductionDescriptors_clone(const ProductionDescriptors *This);
 void ProductionDescriptors_print(const ProductionDescriptors *This, FILE *out, const MapAny /*<int,SymbolDef>*/ *tokens);
 bool ProductionDescriptors_LessThan(const ProductionDescriptors *lhs, const ProductionDescriptors *rhs);
@@ -233,16 +233,6 @@ struct ProductionRegex {
   bool m_paren;
 };
 
-struct RestrictRule;
-typedef struct RestrictRule RestrictRule;
-
-void RestrictRule_print(const RestrictRule *This, FILE *out, const MapAny /*<int,SymbolDef>*/ *tokens);
-
-struct RestrictRule {
-  ProductionRegex *m_rx;
-  ProductionDescriptors *m_restricted;
-};
-
 struct AssociativeRule;
 typedef struct AssociativeRule AssociativeRule;
 
@@ -266,8 +256,18 @@ void Restriction_clear(Restriction *This);
 void Restriction_print(const Restriction *This, FILE *out, const MapAny /*<int,SymbolDef>*/ *tokens);
 
 struct Restriction {
-  ProductionDescriptor m_restricted;
-  ProductionDescriptor m_at;
+  ProductionDescriptors m_restricted;
+  ProductionDescriptors m_at;
+};
+
+struct RestrictRule;
+typedef struct RestrictRule RestrictRule;
+
+void RestrictRule_print(const RestrictRule* This, FILE* out, const MapAny /*<int,SymbolDef>*/* tokens);
+
+struct RestrictRule {
+  ProductionRegex* m_rx;
+  Restriction *m_restriction;
 };
 
 void RestrictAutomata_init(RestrictAutomata *This, bool onstack);

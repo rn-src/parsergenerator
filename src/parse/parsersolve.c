@@ -423,7 +423,6 @@ void LR_ComputeStatesAndActions(ParserDef *parser, LRParserSolution *solution, F
   shifttosymbols_t emptyshifttosymbols;
   reducebysymbols_t emptyreducebysymbols;
 
-
   Scope_Push();
   MapAny_init(&statemap,&StateElement,getIntElement(),true);
   state_t_init(&state,true);

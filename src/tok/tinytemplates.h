@@ -15,6 +15,8 @@
 #include <stdbool.h>
 #endif
 
+// By using C instead of C++, we get to avoid linking the C++ binaries and a much reduced binary size,
+// but we sacrifice automatic scoping and the tie-ins to excpetions.  These Scope functions simulate that.
 typedef void (*vpstack_destroyer)(void *vpstack);
 void Push_Destroy(void *vpstack, vpstack_destroyer destroyer);
 void Scope_Push();

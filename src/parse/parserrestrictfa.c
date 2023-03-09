@@ -5,66 +5,47 @@ extern void *zalloc(size_t len);
 extern ElementOps ProductionDescriptorElement;
 extern ElementOps ProductionDescriptorsElement;
 extern ElementOps RestrictionElement;
-#if 0
-static String *NameIndexToName(int idx, String *name) {
-  if( idx == 0 )
-    String_AssignChars(name,"A");
-  else {
-    char namestr[10];
-    namestr[9] = 0;
-    char *s = namestr+9; 
-    while( idx ) {
-      --s;
-      *s = (idx%26)+'A';
-      idx /= 26;
-    }
-    String_AssignChars(name,s);
-  }
-  return name;
-}
-#endif
+
 void Restriction_init(Restriction *This, bool onstack) {
-  ProductionDescriptor_init(&This->m_restricted, false);
-  ProductionDescriptor_init(&This->m_at, false);
+  ProductionDescriptors_init(&This->m_restricted, false);
+  ProductionDescriptors_init(&This->m_at, false);
   if (onstack)
     Push_Destroy(This, (vpstack_destroyer)Restriction_destroy);
 }
 
 void Restriction_destroy(Restriction *This) {
-  ProductionDescriptor_destroy(&This->m_restricted);
-  ProductionDescriptor_destroy(&This->m_at);
+  ProductionDescriptors_destroy(&This->m_restricted);
+  ProductionDescriptors_destroy(&This->m_at);
 }
 
 bool Restriction_LessThan(const Restriction *lhs, const Restriction *rhs) {
-  if (ProductionDescriptor_LessThan(&lhs->m_restricted, &rhs->m_restricted))
+  if (ProductionDescriptors_LessThan(&lhs->m_restricted, &rhs->m_restricted))
     return true;
-  if (ProductionDescriptor_LessThan(&rhs->m_restricted, &lhs->m_restricted) )
+  if (ProductionDescriptors_LessThan(&rhs->m_restricted, &lhs->m_restricted) )
     return false;
-  if (ProductionDescriptor_LessThan(&lhs->m_at, &rhs->m_at))
+  if (ProductionDescriptors_LessThan(&lhs->m_at, &rhs->m_at))
     return true;
   return false;
 }
 
 bool Restriction_Equal(const Restriction *lhs, const Restriction *rhs) {
-  return ProductionDescriptor_Equal(&lhs->m_restricted, &rhs->m_restricted) && ProductionDescriptor_Equal(&lhs->m_at, &rhs->m_at);
+  return ProductionDescriptors_Equal(&lhs->m_restricted, &rhs->m_restricted) && ProductionDescriptors_Equal(&lhs->m_at, &rhs->m_at);
 }
 
 void Restriction_Assign(Restriction *lhs, const Restriction *rhs) {
-  ProductionDescriptor_Assign(&lhs->m_restricted, &rhs->m_restricted);
-  ProductionDescriptor_Assign(&lhs->m_at, &rhs->m_at);
+  ProductionDescriptors_Assign(&lhs->m_restricted, &rhs->m_restricted);
+  ProductionDescriptors_Assign(&lhs->m_at, &rhs->m_at);
 }
 
 void Restriction_clear(Restriction *This) {
-  ProductionDescriptor_clear(&This->m_restricted);
-  ProductionDescriptor_clear(&This->m_at);
+  ProductionDescriptors_clear(&This->m_restricted);
+  ProductionDescriptors_clear(&This->m_at);
 }
 
 void Restriction_print(const Restriction *This, FILE *out, const MapAny /*<int,SymbolDef>*/ *tokens) {
-  ProductionDescriptor_print(&This->m_restricted, out, tokens);
-  if (This->m_at.m_nt != -1) {
-    fputs(" @ ", out);
-    ProductionDescriptor_print(&This->m_at, out, tokens);
-  }
+  ProductionDescriptors_print(&This->m_at, out, tokens);
+  fputs(" -/-> ", out);
+  ProductionDescriptors_print(&This->m_restricted, out, tokens);
 }
 
 void RestrictAutomata_init(RestrictAutomata *This, bool onstack) {
@@ -189,7 +170,7 @@ int RestrictAutomata_nextState(const RestrictAutomata *This, const Production *c
       const Restriction *symbol = 0;
       const SetAny *nextstates = 0;
       MapAny_getByIndexConst(t,cursub,(const void**)&symbol,(const void**)&nextstates);
-      if( ProductionDescriptor_matchesProductionAndPosition(&symbol->m_at, curp, pos) && ProductionDescriptor_matchesProduction(&symbol->m_restricted, ptest) )
+      if( ProductionDescriptors_matchesProductionAndPosition(&symbol->m_at, curp, pos) && ProductionDescriptors_matchesProduction(&symbol->m_restricted, ptest) )
         return SetAny_getByIndexConstT(nextstates,0,int);
     }
   }
@@ -207,19 +188,22 @@ bool RestrictAutomata_isRestricted(const RestrictAutomata *This, const Productio
     return false;
   for (int curfb = 0, endfb = SetAny_size(restrictions); curfb != endfb; ++curfb) {
     const Restriction *restriction = &SetAny_getByIndexConstT(restrictions, curfb, Restriction);
-    if( ProductionDescriptor_matchesProductionAndPosition(&restriction->m_at, curp, pos) && ProductionDescriptor_matchesProduction(&restriction->m_restricted, ptest) )
+    if( ProductionDescriptors_matchesProductionAndPosition(&restriction->m_at, curp, pos) && ProductionDescriptors_matchesProduction(&restriction->m_restricted, ptest) )
       return true;
   }
   return false;
 }
 
+// Turn the regex into an Nfa.
+// lastInputs gives the LASTS of the regex, knowing this helps us create the Restrict associations.
+// epsilonLast tells the caller if the lastInput can be epsilon, in which case it cannot erase previous lasts.
 int RestrictRegex_addToNfa(ProductionRegex *This, RestrictAutomata *nrestrict, int startState) {
   if (This->m_t == RxType_Production) {
     int endState = RestrictAutomata_newstate(nrestrict);
     Restriction restriction;
     Scope_Push();
     Restriction_init(&restriction, true);
-    ProductionDescriptor_Assign(&restriction.m_restricted,This->m_pd);
+    ProductionDescriptors_insert(&restriction.m_restricted,This->m_pd, 0);
     RestrictAutomata_addTransition(nrestrict, startState, endState, &restriction);
     Scope_Pop();
     return endState;
@@ -242,28 +226,30 @@ int RestrictRegex_addToNfa(ProductionRegex *This, RestrictAutomata *nrestrict, i
   else if (This->m_t == RxType_Many) {
     int endState = startState;
     int preLhsState = startState;
-    if (This->m_low <= 0) {
+
+    if (This->m_low <= 0) { // one optional group
       endState = RestrictRegex_addToNfa(This->m_lhs, nrestrict, endState);
       // Jump ahead to the end, lhs is optional
       RestrictAutomata_addEmptyTransition(nrestrict, preLhsState, endState);
-    } else {
-      // do the mandatory number of lhs repeats
+    } else { // lead with a number of mandatory repreats
+      // do the mandatory minimum number of lhs repeats
       for (int i = 0; i < This->m_low; ++i) {
         preLhsState = endState;
         endState = RestrictRegex_addToNfa(This->m_lhs, nrestrict, preLhsState);
       }
     }
-    if (This->m_high == -1) {
+    if (This->m_high == -1) { // any number of repeats, lastInputs would be covered by the above if/else block
       // endless loop back
       RestrictAutomata_addEmptyTransition(nrestrict, endState, preLhsState);
     }
-    else {
+    else { // do the additional number of repeats beyond the minimum, lastInputs is covered by the above if/else block
       for (int i = This->m_low; i < This->m_high; ++i) {
         RestrictAutomata_addEmptyTransition(nrestrict, preLhsState, endState);
         preLhsState = endState;
         endState = RestrictRegex_addToNfa(This->m_lhs, nrestrict, preLhsState);
       }
     }
+
     return endState;
   }
   return -1;
@@ -313,7 +299,7 @@ void RestrictAutomata_SymbolsFromStates(const RestrictAutomata *This, const SetA
   }
 }
 
-// Make a DFA from the NFA.  ALSO, make sure to add the implied transition to the start state.
+// Make a DFA from the NFA.
 void RestrictAutomata_toDeterministicRestrictAutomata(const RestrictAutomata *This, RestrictAutomata *out) {
   VectorAny /*< Set<int> >*/ statesets;
   MapAny /*< Set<int>, int >*/ stateset2state;
@@ -473,7 +459,7 @@ void RestrictAutomata_RestrictionFixups(const RestrictAutomata *This, RestrictAu
         for (int cursym = 0, endsym = SetAny_size(&toStatesEnd); cursym < endsym; ++cursym) {
           int toState = SetAny_getByIndexConstT(&toStatesEnd, cursym, int);
           Restriction_clear(&r);
-          ProductionDescriptor_UnDottedProductionDescriptor(&tSymbol->m_restricted, &r.m_restricted);
+          ProductionDescriptors_UnDottedProductionDescriptors(&tSymbol->m_restricted, &r.m_restricted);
           RestrictAutomata_addTransition(&restrictAutomataTmp, fromState, toState, &r);
         }
       }
@@ -517,22 +503,22 @@ void RestrictAutomata_PlacementFixups(const RestrictAutomata *This, RestrictAuto
       MapAny_getByIndexConst(restrictiontostatesmap, curres, (const void**)&tSymbol, (const void**)&toStates);
 
       // For each transition symbol A along S0->S1 where S1 has transition symbol B along S1->S2, add transition symbol A@B (rx BA) to S0->S1.
-      ProductionDescriptor_Assign(&r.m_at, &tSymbol->m_restricted);
+      ProductionDescriptors_Assign(&r.m_at, &tSymbol->m_restricted);
       RestrictAutomata_SymbolsFromStates(This, toStates, &tosymbols);
       for (int cursym = 0, endsym = SetAny_size(&tosymbols); cursym < endsym; ++cursym) {
         const Restriction *tosymbol = &SetAny_getByIndexConstT(&tosymbols, cursym, Restriction);
-        ProductionDescriptor_UnDottedProductionDescriptor(&tosymbol->m_restricted, &r.m_restricted);
+        ProductionDescriptors_UnDottedProductionDescriptors(&tosymbol->m_restricted, &r.m_restricted);
         RestrictAutomata_addMultiStateTransition(&restrictAutomataTmp, fromState, toStates,&r);
       }
 
       // For each transition symbol A along S0->S1 where S1 has restriction R, add restriction R@A (rx AR) to S0.
-      ProductionDescriptor_Assign(&r.m_at, &tSymbol->m_restricted);
+      ProductionDescriptors_Assign(&r.m_at, &tSymbol->m_restricted);
       for( int curtostate = 0, endtostate = SetAny_size(toStates); curtostate != endtostate; ++curtostate ) {
         int toState = SetAny_getByIndexConstT(toStates,curtostate,int);
         const SetAny /*<Restriction>*/ *toRestrictions = &MapAny_findConstT(&This->m_statetorestrictions, &toState, SetAny);
         for (int ridx = 0, endridx = SetAny_size(toRestrictions); ridx < endridx; ++ridx) {
           const Restriction *toRestriction = &SetAny_getByIndexConstT(toRestrictions, ridx, Restriction);
-          ProductionDescriptor_UnDottedProductionDescriptor(&toRestriction->m_restricted, &r.m_restricted);
+          ProductionDescriptors_UnDottedProductionDescriptors(&toRestriction->m_restricted, &r.m_restricted);
           RestrictAutomata_addRestriction(&restrictAutomataTmp,fromState,&r);
           RestrictAutomata_addEndState(&restrictAutomataTmp,fromState);
         }
@@ -559,7 +545,7 @@ void RestrictAutomata_print(const RestrictAutomata *This, FILE *out, const MapAn
     if( MapAny_contains(&This->m_emptytransitions,&i) ) {
       const SetAny /*<int>*/ *empties = &MapAny_findConstT(&This->m_emptytransitions,&i,SetAny);
       for( int cur = 0, end = SetAny_size(empties); cur != end; ++cur )
-        fprintf(out, "epsilon transition to %d\n", SetAny_getByIndexConstT(empties,cur,int));
+        fprintf(out, "  epsilon transition to %d\n", SetAny_getByIndexConstT(empties,cur,int));
     }
     if( MapAny_contains(&This->m_transitions,&i) ) {
       const MapAny /*< Restriction, Set<int> >*/ *trans = &MapAny_findConstT(&This->m_transitions,&i,MapAny);
@@ -597,12 +583,12 @@ void StringToInt_2_IntToString(const MapAny /*<String,int>*/ *src, MapAny /*<int
 }
 
 void ParserDef_computeRestrictAutomata(ParserDef *This) {
-  RestrictAutomata restrictA, restrictB;
+  RestrictAutomata restrictNFA, restrictDFA;
   Restriction restriction;
 
   Scope_Push();
-  RestrictAutomata_init(&restrictA, true);
-  RestrictAutomata_init(&restrictB, true);
+  RestrictAutomata_init(&restrictNFA, true);
+  RestrictAutomata_init(&restrictDFA, true);
   Restriction_init(&restriction, true);
 
   // Expand rules
@@ -616,50 +602,34 @@ void ParserDef_computeRestrictAutomata(ParserDef *This) {
     }
   }
   // Turn the regular expressions into a nondeterministic automata
-  int startState = RestrictAutomata_newstate(&restrictA);
-  restrictA.m_startState = startState;
+  int startState = RestrictAutomata_newstate(&restrictNFA);
+  restrictNFA.m_startState = startState;
   for (int cur = 0, end = VectorAny_size(&This->m_restrictrules); cur != end; ++cur) {
     RestrictRule *rr = VectorAny_ArrayOpT(&This->m_restrictrules, cur, RestrictRule*);
-    int endState = RestrictRegex_addToNfa(rr->m_rx, &restrictA, startState);
-    RestrictAutomata_addEndState(&restrictA, endState);
+    Restriction *restriction = rr->m_restriction;
+    int nfaStartState = RestrictAutomata_newstate(&restrictNFA);
+    RestrictAutomata_addEmptyTransition(&restrictNFA,startState,nfaStartState);
+    int endState = nfaStartState;
+    if( rr->m_rx )
+      endState = RestrictRegex_addToNfa(rr->m_rx, &restrictNFA, nfaStartState);
+    RestrictAutomata_addEndState(&restrictNFA, endState);
+    // these are the restrictions
+    RestrictAutomata_addRestriction(&restrictNFA, endState, restriction);
+    // back epsilon transitions to ensure all occurances of a pattern have the restrictions
+    for (int srcState = nfaStartState; srcState <= endState; ++srcState)
+      RestrictAutomata_addEmptyTransition(&restrictNFA, srcState, startState);
   }
   if (This->m_verbosity > 2) {
-    fputs("non-deterministic restrict automata (wo/restrictions):\n", This->m_vout);
-    RestrictAutomata_print(&restrictA, This->m_vout, &This->m_tokdefs);
-  }
-  // The state preceeding an endstates gets the restriction.
-  RestrictAutomata_RestrictionFixups(&restrictA, &restrictB);
-  if( This->m_verbosity > 2 ) {
-    fputs("non-deterministic restrict automata (w/restrictions):\n", This->m_vout);
-    RestrictAutomata_print(&restrictB,This->m_vout,&This->m_tokdefs);
+    fputs("non-deterministic restrict automata:\n", This->m_vout);
+    RestrictAutomata_print(&restrictNFA, This->m_vout, &This->m_tokdefs);
   }
   // Make the automata deterministic.
-  RestrictAutomata_toDeterministicRestrictAutomata(&restrictB,&restrictA);
+  RestrictAutomata_toDeterministicRestrictAutomata(&restrictNFA,&restrictDFA);
   if (This->m_verbosity > 2) {
-    fputs("deterministic restrict automata (wo/placement-fixups):\n", This->m_vout);
-    RestrictAutomata_print(&restrictA, This->m_vout, &This->m_tokdefs);
+    fputs("deterministic restrict automata:\n", This->m_vout);
+    RestrictAutomata_print(&restrictDFA, This->m_vout, &This->m_tokdefs);
   }
-  // Add the placement fixups (may add epsilons)
-  RestrictAutomata_PlacementFixups(&restrictA,&restrictB);
-  if (This->m_verbosity > 2) {
-    fputs("deterministic restrict automata (w/placement-fixups):\n", This->m_vout);
-    RestrictAutomata_print(&restrictB, This->m_vout, &This->m_tokdefs);
-  }
-  // Add the epsilons to transition the start state
-  RestrictAutomata_AddStartStateEpsilons(&restrictB);
-  if (This->m_verbosity > 2) {
-    fputs("non-deterministic restrict automata (with start-state epsilons):\n", This->m_vout);
-    RestrictAutomata_print(&restrictB, This->m_vout, &This->m_tokdefs);
-  }
-  // Make the automata deterministic again.
-  RestrictAutomata_toDeterministicRestrictAutomata(&restrictB, &restrictA);
-  // Finished
-  RestrictAutomata_Assign(&This->m_restrict, &restrictA);
-  if( This->m_verbosity > 2 ) {
-    fputs("deterministic restrict automata (final):\n", This->m_vout);
-      RestrictAutomata_print(&This->m_restrict,This->m_vout,&This->m_tokdefs);
-  }
-
+  RestrictAutomata_Assign(&This->m_restrict,&restrictDFA);
   Scope_Pop();
 }
 
