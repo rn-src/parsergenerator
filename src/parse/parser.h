@@ -166,6 +166,7 @@ struct ProductionDescriptors;
 typedef struct ProductionDescriptors ProductionDescriptors;
 
 void ProductionDescriptors_init(ProductionDescriptors *This, bool onstack);
+void ProductionDescriptors_clear(ProductionDescriptors *This);
 void ProductionDescriptors_destroy(ProductionDescriptors *This);
 ProductionDescriptors *ProductionDescriptors_UnDottedProductionDescriptors(const ProductionDescriptors *This, ProductionDescriptors *psundottedOut);
 ProductionDescriptors *ProductionDescriptors_DottedProductionDescriptors(const ProductionDescriptors* This, ProductionDescriptors *pdsdotted, Assoc assoc);
