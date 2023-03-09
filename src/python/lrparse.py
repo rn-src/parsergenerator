@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+# Provided by parsergenerator - free to use under MIT license
 from typing import Sequence, Callable, IO, Protocol, Any, Optional
 from tok import ParsePos, Tokenizer, Token
 

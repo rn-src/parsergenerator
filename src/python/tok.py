@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+# Provided by parsergenerator - free to use under MIT license
 from typing import Protocol, Sequence, Callable, Optional, IO, Any
 
 MAX_BUFFER_ACCUM: int = 128
