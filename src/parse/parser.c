@@ -1290,10 +1290,24 @@ static void ParseTypedefRule(Tokenizer *toks, ParserDef *parser) {
   if( toks->peek(toks) != PARSERTOK_ID )
     error(toks,"expected id after typedef");
   String toktype;
+  String tok;
   Scope_Push();
   String_init(&toktype,true);
+  String_init(&tok,true);
   toks->tokstr(toks,&toktype);
   toks->discard(toks);
+  while( toks->peek(toks) == PARSERTOK_DOT ) {
+    toks->tokstr(toks,&tok);
+    String *s = String_AddString(&toktype, &tok);
+    String_AssignString(&toktype,s);
+    toks->discard(toks);
+    if( toks->peek(toks) != PARSERTOK_ID )
+      error(toks,"expected id after '.'");
+    toks->tokstr(toks,&tok);
+    s = String_AddString(&toktype, &tok);
+    toks->discard(toks);
+    String_AssignString(&toktype,s);
+  }
   if(toks->peek(toks) == PARSERTOK_LBRKT) {
     String_AssignString(&toktype,ParseSquarePairTokType(toks, &toktype));
   }

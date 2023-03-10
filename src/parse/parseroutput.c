@@ -275,6 +275,7 @@ static void PrintSymbolType(FILE *out, const ParserDef *parser, const LanguageOu
         fputs("    self.", out);
       lang->outDecl(lang, out, String_Chars(&symdef->m_semantictype), String_Chars(&fld));
       lang->outEndStmt(lang,out);
+      fputc('\n',out);
       Scope_Pop();
     }
   }
