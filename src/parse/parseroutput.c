@@ -222,6 +222,7 @@ static void PrintSymbolType(FILE *out, const ParserDef *parser, const LanguageOu
   if( outputOptions->m_outputLanguage == OutputLanguage_Python ) {
     fputs("class stack_t:\n", out);
     fputs("  __slots__ = ('tok'", out);
+    int slot = 0;
     for (int cursymbol = 0, endsymbol = MapAny_size(&parser->m_tokdefs); cursymbol != endsymbol; ++cursymbol) {
       // Map<int,SymbolDef>::const_iterator
       const int* tokid = 0;
@@ -233,7 +234,8 @@ static void PrintSymbolType(FILE *out, const ParserDef *parser, const LanguageOu
         String fld;
         Scope_Push();
         String_init(&fld, true);
-        int i = MapAny_size(tfields);
+        int i = MapAny_size(tfields)+slot;
+	++slot;
         while (i > 0) {
           String_AddCharInPlace(&fld, 'a' + (i % 26));
           i /= 26;
