@@ -8,29 +8,29 @@ ACTION_REDUCE: int = 1
 ACTION_STOP: int = 2
 
 class ParseInfo:
-  __slots__ = ('nstates','actions','actionstart','prod0','nproductions','productions','productionstart','start','nonterminals','reduce','extra','token')
+  __slots__ = ('nstates','actions','actionstart','prod0','nproductions','productions','productionstart','start','nonterminals','reduce','extra_t','stack_t')
   def __init__(self, ns: Any):
     self.nstates: int = ns.nstates
     self.actions: Sequence[int] = ns.actions
     self.actionstart: Sequence[int] = ns.actionstart
-    self.prod0: int = ns.prod0
+    self.prod0: int = ns.PROD_0
     self.nproductions: int = ns.nproductions
     self.productions: Sequence[int] = ns.productions
     self.productionstart: Sequence[int] = ns.productionstart
-    self.start: int = ns.start
+    self.start: int = ns.START
     self.nonterminals: Sequence[str] = ns.nonterminals
     self.reduce: Callable = ns.reduce
-    self.extra: type = ns.extra
-    self.token: type = ns.token
+    self.extra_t: type = ns.extra_t
+    self.stack_t: type = ns.stack_t
 
 class Parser:
   __slots__ = ('parseinfo','extra','verbosity','reduce','fout')
-  def __init__(self, parseinfo: ParseInfo, verbosity: int, fout: IO):
+  def __init__(self, parseinfo: ParseInfo, verbosity: int, fout: Optional[IO]):
     self.parseinfo: ParseInfo = parseinfo
     self.verbosity: int = verbosity
-    self.extra = parseinfo.extra()
+    self.extra = parseinfo.extra_t()
     self.reduce: Callable = parseinfo.reduce
-    self.fout: IO = fout
+    self.fout: Optional[IO] = fout
 
   def parse(self, toks: Tokenizer) -> bool:
     states: list[int] = []
@@ -42,18 +42,18 @@ class Parser:
     inputnum: int = 0
     err: Optional[str] = None
     while len(states) > 0:
-      if self.verbosity:
+      if self.verbosity and self.fout:
         self.fout.write("lrstates = {states}\n".format(states=states))
       stateno = states[-1]
       if len(inputqueue) == 0:
         inputnum += 1
         nxt: int = toks.peek()
-        t = self.parseinfo.token()
+        t = self.parseinfo.stack_t()
         t.tok = Token(toks.tokstr(),toks.filename(),toks.wslines(), toks.wscols(),toks.wslen(),toks.line(),toks.col(),nxt)
         toks.discard()
         inputqueue.append( (nxt,t) )
       tok = inputqueue[-1][0]
-      if self.verbosity:
+      if self.verbosity and self.fout:
         t = inputqueue[-1][1]
         if t.tok.s:
           self.fout.write("input (# {inputnum}) = {tok} {tokstr} = \"{tokname}\" - {filename}({line}:{col})\n".format(inputnum=inputnum, tok=tok, tokstr=toks.tokid2str(tok), tokname=t.tok.s, filename=t.tok.filename, line=t.tok.line, col=t.tok.col))
@@ -62,7 +62,7 @@ class Parser:
       lastaction: int = self.parseinfo.actionstart[stateno+1]
       while firstaction != lastaction:
         action: int = actions[firstaction]
-        didcation: bool = False
+        didcaction: bool = False
         nextaction: int = firstaction
         nsymbols: int = 0
         if action == ACTION_SHIFT:
@@ -70,7 +70,7 @@ class Parser:
           nsymbols = actions[firstaction+2];
           nextaction = firstaction+3+nsymbols;
           if tok in actions[firstaction+3:nextaction]:
-            if self.verbosity:
+            if self.verbosity and self.fout:
               self.fout.write("shift to {shiftto}\n".format(shiftto=shiftto))
             states.append(shiftto)
             values.append(inputqueue[-1][1])
@@ -82,8 +82,8 @@ class Parser:
           nsymbols = actions[firstaction+3];
           nextaction = firstaction+4+nsymbols;
           if tok in actions[firstaction+4:nextaction]:
-            if self.verbosity :
-              reducebyp: int = reduceby-self.parseinfo.prod0
+            reducebyp: int = reduceby-self.parseinfo.prod0
+            if self.verbosity and self.fout:
               self.fout.write("reduce {reducecount} states by rule {ruleno} [".format(reducecount=reducecount, ruleno=reducebyp+1))
               production: Sequence[int] = self.parseinfo.productions[self.parseinfo.productionstart[reducebyp]:self.parseinfo.productionstart[reducebyp+1]]
               first: bool = True
@@ -97,36 +97,36 @@ class Parser:
                   first = False
                   self.fout.write(" :");
               self.fout.write(" ] ? ... ")
-            output = self.parseinfo.token()
-            inputs = values[reducecount:]
-            ok, err = self.reduce(self.extra,reduceby,inputs,output)
-            if ok:
-              if self.verbosity:
+            output = self.parseinfo.stack_t()
+            output.tok = Token('',toks.filename(),toks.wslines(),toks.wscols(),toks.wslen(),toks.line(),toks.col(),self.parseinfo.productions[self.parseinfo.productionstart[reducebyp]])
+            inputs = values[-reducecount:]
+            if self.reduce(self.extra,reduceby,inputs,output,self.fout):
+              if self.verbosity and self.fout:
                 self.fout.write("YES\n");
               del states[len(states)-reducecount:]
               del values[len(values)-reducecount:]
               inputqueue.append( (reduceby,output) )
               didaction = True
             else:
-              if self.verbosity:
+              if self.verbosity and self.fout:
                 self.fout.write("NO\n")
           if action == ACTION_STOP and didaction:
-            if self.verbosity:
+            if self.verbosity and self.fout:
               self.fout.write("ACCEPT\n")
             return True
         if didaction:
           break
         firstaction = nextaction
       if firstaction == lastaction:
-        if self.verbosity:
+        if self.verbosity and self.fout:
           self.fout.write("NO ACTION AVAILABLE, FAIL\n")
         posstack = toks.getparsepos()
         t = inputqueue[-1][1]
-        if err:
+        if err and self.fout:
           self.fout.write("{filename}({line}:{col}) : error : {err}\n".format(filename=t.tok.filename,line=t.tok.line,col=t.tok.col,err=err))
           for pos in posstack:
             self.fout.write("  at {filename}({line}:{col})\n".format(filename=pos.filename,line=pos.line,col=pos.col))
-        else:
+        elif self.fout:
           self.fout.write("{filename}({line}:{col}) : parse error : input (# {inputnum}) = {tok} {tokstr} = \"{tokname}\" - \n".format(filename=t.tok.filename, line=t.tok.line, col=t.tok.col, inputnum=inputnum, tok=tok, tokstr=toks.tokid2str(tok), tokname=t.tok.s))
           for pos in posstack:
             self.fout.write("  at {filename}({line}:{col})\n".format(filename=pos.filename, line=pos.line, col=pos.col))

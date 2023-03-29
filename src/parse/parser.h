@@ -424,6 +424,14 @@ struct LLParserSolution {
   FirstsAndFollows m_firstsAndFollows;
 };
 
+struct ImportAs;
+typedef struct ImportAs ImportAs;
+
+struct ImportAs {
+  const char *import;
+  const char *as;
+};
+
 struct LanguageOutputOptions;
 typedef struct LanguageOutputOptions LanguageOutputOptions;
 
@@ -445,7 +453,7 @@ struct LanguageOutputOptions {
   ParserType m_parserType;
   OutputLanguage m_outputLanguage;
   const char *m_lexerName;
-  const char **m_extraImports;
+  ImportAs *m_extraImports;
 };
 
 void ParseParser(TokBuf *tokbuf, ParserDef *parser, FILE *vout, int verbosity);

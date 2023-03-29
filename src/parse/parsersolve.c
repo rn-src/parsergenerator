@@ -698,8 +698,7 @@ int LR_PrintConflicts(ParserDef *parser, LRParserSolution *solution, FILE *out) 
     if( ! bFirst )
       fputs("\n",stderr);
   }
-  if( nconflicts )
-    fprintf(stderr, "%d conflicts\n", nconflicts);
+  fprintf(stderr, "%d conflicts\n", nconflicts);
   Scope_Pop();
   return nconflicts;
 }

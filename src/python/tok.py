@@ -200,12 +200,12 @@ class FileTokBuf:
     if not len(c):
       self.eof = True
       return False
-    self.buffer.append(c)
+    self.buffer.append(ord(c))
     return True
 
   def peekc(self, n: int) -> int:
     """Look ahead n characters into the buffer and return the character, without discarding the buffer"""
-    while n >= len(self.buffer)+self.bufpos:
+    while n >= len(self.buffer)-self.bufpos:
       if not self.addc():
         return -1
     return self.buffer[self.bufpos+n]
@@ -217,14 +217,14 @@ class FileTokBuf:
           break
       c = self.buffer[self.bufpos]
       self.bufpos += 1
-      if c == '\n':
+      if c == ord('\n'):
         self._line += 1
         self._col = 1
       else:
         self._col += 1
     # Chop the buffer once in a while, gradually, not all at once
     if self.bufpos > MAX_BUFFER_ACCUM:
-      del self.buffer[MAX_BUFFER_ACCUM-BUFFER_TRIM_KEEP:]
+      del self.buffer[:self.bufpos-BUFFER_TRIM_KEEP]
       self.bufpos = BUFFER_TRIM_KEEP
 
   def line(self) -> int:
@@ -339,7 +339,7 @@ class TokBufTokenizer:
           self.pop()
         elif tokenaction == 3:
           self.gotots(actionarg)
-      if self.tok == -1 or self.isWs(self.tok):
+      if self.tok == -1 or not self.isWs(self.tok):
         break
     return self.tok
 

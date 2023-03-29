@@ -52,8 +52,13 @@ void parseArgs(int argc, char *argv[], int *pverbosity, int *ptimed, LanguageOut
     options->m_outputLanguage = OutputLanguage_Python;
   for (int i = 1; i < argc; ++i) {
     if (strncmp(argv[i], "--import=",9) == 0) {
-      options->m_extraImports[nImports++] = argv[i]+9;
-      options->m_extraImports[nImports] = 0;
+      options->m_extraImports[nImports++].import = argv[i]+9;
+      options->m_extraImports[nImports].import = 0;
+      options->m_extraImports[nImports].as = 0;
+    }
+    if (strncmp(argv[i],"--as=",5) == 0) {
+      if( nImports )
+        options->m_extraImports[nImports-1].as = argv[i]+5;
     }
   }
   for (int i = 1; i < argc; ++i) {
@@ -94,8 +99,8 @@ int main(int argc, char *argv[]) {
   int verbosity = 0;
   int timed = 0;
   const char *fname = 0;
-  char *extraImports[32] = {0};
-  LanguageOutputOptions options = { 0, true, ParserType_LR, OutputLanguage_C, 0, (const char**)extraImports };
+  ImportAs extraImports[32] = {0};
+  LanguageOutputOptions options = { 0, true, ParserType_LR, OutputLanguage_C, 0, extraImports };
 
   parseArgs(argc, argv, &verbosity, &timed, &options, &fname);
 
@@ -109,6 +114,7 @@ int main(int argc, char *argv[]) {
           "--py           : output python\n"
           "--lexer        : lexer name, if different from the parser (used in python)\n"
           "--import       : module to import (python) or include (C), can be repeated to import multple modules\n"
+          "--as           : as clause on module to import (python), applies to most recent import\n"
           "-no-pound-line : turn off #line directives in the output (applies to C)\n", stderr);
     return -1;
   }

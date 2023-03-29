@@ -30,9 +30,9 @@ struct LanguageOutputter {
 };
 
 void CLanguageOutputter_outTop(const LanguageOutputter* This, const LanguageOutputOptions* outputOptions, FILE* out) {
-  const char** extraImports = outputOptions->m_extraImports;
-  while( *extraImports ) {
-    fprintf(out, "#include \"%s\"\n", *extraImports);
+  ImportAs *extraImports = outputOptions->m_extraImports;
+  while( extraImports->import ) {
+    fprintf(out, "#include \"%s\"\n", extraImports->import);
     ++extraImports;
   }
 }
@@ -103,13 +103,16 @@ static const char* pytype(const char* type) {
 }
 
 void PyLanguageOutputter_outTop(const LanguageOutputter* This, const LanguageOutputOptions* outputOptions, FILE* out) {
-  fputs("from typing import Any,Sequence,Optional,Callable\n", out);
+  fputs("from typing import Any,Sequence,Optional,Callable,IO\n", out);
   // in C we can depend on the preprocessor, in python we must import
   fputs("from lrparse import ACTION_SHIFT,ACTION_REDUCE,ACTION_STOP\n", out);
   fputs("from tok import Token\n", out);
-  const char** extraImports = outputOptions->m_extraImports;
-  while (*extraImports) {
-    fprintf(out, "import %s\n", *extraImports);
+  ImportAs *extraImports = outputOptions->m_extraImports;
+  while (extraImports->import) {
+    if( extraImports->as )
+      fprintf(out, "import %s as %s\n", extraImports->import, extraImports->as);
+    else
+      fprintf(out, "import %s\n", extraImports->import);
     ++extraImports;
   }
 }
@@ -217,7 +220,7 @@ static void PrintSymbolType(FILE *out, const ParserDef *parser, const LanguageOu
   String_init(&tok_str, true);
 
   String_AssignChars(&token_str, "Token");
-  String_AssignChars(&tok_str, "self.tok");
+  String_AssignChars(&tok_str, "tok");
   MapAny_insert(tfields, &token_str, &tok_str);
   if( outputOptions->m_outputLanguage == OutputLanguage_Python ) {
     fputs("class stack_t:\n", out);
@@ -428,6 +431,9 @@ static void OutputLRParser(FILE *out, const ParserDef *parser, const LRParserSol
   AssignTokenValues(parser, &pid2idx, &nt2idx, &terminals, &nonterminals);
   PrintTokenConstants(out, parser, lang, outputOptions, &pid2idx, &nt2idx, terminals, nonterminals);
 
+  int firstnt = outputOptions->min_nt_value>(terminals + 1) ? outputOptions->min_nt_value : (terminals + 1);
+  int firstproduction = firstnt + nonterminals;
+
   lang->outDecl(lang,out,"const int","nstates");
   fputs(" = ",out);
   lang->outInt(lang,out,VectorAny_size(&solution->m_states));
@@ -626,7 +632,7 @@ static void OutputLRParser(FILE *out, const ParserDef *parser, const LRParserSol
     lang->outArrayDecl(lang, out, "stack_t", "inputs");
     fputs(", ", out);
     lang->outDecl(lang, out, "stack_t", "output");
-    fputs(", err: Callable[[str],None]", out);
+    fputs(", err: IO", out);
   } else {
     fputs(", ", out);
     lang->outDecl(lang, out, "stack_t&", "output");
@@ -648,7 +654,12 @@ static void OutputLRParser(FILE *out, const ParserDef *parser, const LRParserSol
     const Production *p = VectorAny_ArrayOpConstT(&parser->m_productions,curp,Production*);
     if( VectorAny_size(&p->m_action) == 0 )
       continue;
-    fprintf(out,"    case PROD_%d:\n      ", MapAny_findConstT(&pid2idx,&p->m_pid,int));
+    if( outputOptions->m_outputLanguage == OutputLanguage_Python) {
+      int prodIdx = MapAny_findConstT(&pid2idx,&p->m_pid,int);
+      fprintf(out,"    case %d # PROD_%d:\n      ", prodIdx+firstproduction, prodIdx);
+    } else {
+      fprintf(out,"    case PROD_%d:\n      ", MapAny_findConstT(&pid2idx,&p->m_pid,int));
+    }
     WriteSemanticAction(p, out, parser, lang, outputOptions, &tfields);
     fputc('\n',out);
   }
