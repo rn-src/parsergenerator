@@ -1095,6 +1095,10 @@ static int ParseSymbol(Tokenizer *toks, ParserDef *parser) {
     int tok = ParserDef_findOrAddSymbolId(parser,toks,&s,SymbolTypeUnknown);
     Scope_Pop();
     return tok;
+  } else if ( toks->peek(toks) == PARSERTOK_ERROR ) {
+    toks->discard(toks);
+    int tok = ParserDef_findOrAddSymbolIdChars(parser,toks,"PARSE_ERROR",SymbolTypeNonterminal);
+    return tok;
   }
   return -1;
 }
@@ -1193,7 +1197,7 @@ static void ParseProduction(Tokenizer *toks, ParserDef *parser, VectorAny /*<Pro
     VectorAny_clear(&action);
     String_AssignChars(&productionName,"");
     String_AssignChars(&filename,"");
-    if( toks->peek(toks) == PARSERTOK_ID )
+    if( toks->peek(toks) == PARSERTOK_ID || toks->peek(toks) == PARSERTOK_ERROR )
       ParseSymbols(toks,parser,&symbols);
     int lineno = toks->line(toks);
     toks->filename(toks,&filename);
@@ -1756,6 +1760,7 @@ void ParseParser(TokBuf *tokbuf, ParserDef *parser, FILE *vout, int verbosity) {
   TokBufTokenizer_init(&toks,tokbuf,&parsertok_pptokinfo,true);
   ParserDef_findOrAddSymbolIdChars(parser,&toks.m_tokenizer,"START",SymbolTypeNonterminal);
   ParserDef_findOrAddSymbolIdChars(parser,&toks.m_tokenizer,"EXTRA",SymbolTypeNonterminal);
+  ParserDef_findOrAddSymbolIdChars(parser,&toks.m_tokenizer,"PARSE_ERROR",SymbolTypeNonterminal);
   ParseStart(&toks.m_tokenizer,parser);
   if( toks.m_tokenizer.peek(&toks.m_tokenizer) != -1 )
     error(&toks.m_tokenizer,"Expected EOF");
