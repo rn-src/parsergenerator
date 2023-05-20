@@ -6,3 +6,6 @@ calculatorG.py: calculator.G
 calculatorL.py: calculator.L
 	tokenizer --py calculator.L
 
+clean:
+	@rm calculatorG.py
+	@rm calculatorL.py

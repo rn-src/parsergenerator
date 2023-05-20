@@ -16,4 +16,5 @@ e : LPAREN e RPAREN {$$ = $2}
   | e PLUS e        {$$ = $1 + $3}
   | e MINUS e       {$$ = $1 - $3}
   | NUMBER          {$$ = float($1.s)}
+#  | <error>         {print('Error during parse')}
   ;
