@@ -1,6 +1,8 @@
 #!/usr/bin/env python3
 # Provided by parsergenerator - free to use under MIT license
 from typing import Protocol, Sequence, Callable, Optional, IO, Any
+from array import array
+from io import StringIO
 
 MAX_BUFFER_ACCUM: int = 128
 BUFFER_TRIM_KEEP: int = 16
@@ -186,7 +188,7 @@ class FileTokBuf:
     """io is expected to read binary bytes, not decoded characters"""
     self.io: IO = io
     self.eof = False
-    self.buffer: bytearray = bytearray()
+    self.buffer: array = array('i')
     self.bufpos = 0
     self._filename: str = filename
     self.pos: int = 0
@@ -361,10 +363,10 @@ class TokBufTokenizer:
     if self.tok == -1:
       return ''
     if self.tok != -1:
-      sbytes: bytearray = bytearray()
+      s = StringIO()
       for i in range(self._toklen):
-        sbytes.append(self.tokbuf.peekc(i))
-      self.s = sbytes.decode('utf-8')
+        s.write(chr(self.tokbuf.peekc(i)))
+      self.s = s.getvalue()
     return self.s
 
   def wslines(self) -> int:
