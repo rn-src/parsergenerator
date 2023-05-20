@@ -63,7 +63,7 @@ class Parser:
       lastaction: int = self.parseinfo.actionstart[stateno+1]
       while firstaction != lastaction:
         action: int = actions[firstaction]
-        didcaction: bool = False
+        didaction: bool = False
         nextaction: int = firstaction
         nsymbols: int = 0
         if action == ACTION_SHIFT:
