@@ -140,22 +140,22 @@ public:
       if( firstaction == lastaction ) {
         if( tok == PARSE_ERROR ) {
           // Input is error and no handler, keep popping states until we find a handler or run out.
+          if( m_vpout ) {
+            fprintf(m_vpout, "during error handling, popping lr state %d\n", states.back())
+          }
+          states.pop_back();
           if( states.size() == 0 ) {
             if( m_verbosity )
               fputs("NO ERROR HANDLER AVAILABLE, FAIL\n", m_vpout);
             return false;
           }
-          if( m_vpout ) {
-            fprintf(m_vpout, "during error handling, popping lr state %d\n", states.back())
-          }
-          states.pop_back();
         }
         else {
+          const T &t = inputqueue.back().second;
           // report the error for verbose output, but add error to the input, hoping for a handler, and carry on
           if( m_vpout ) {
             Vector<ParsePos> posstack;
             ptoks->getParsePos(posstack);
-            const T &t = inputqueue.back().second;
             if( err ) {
               fprintf(m_vpout, "%s(%d:%d) : error : %s\n", t.tok.m_filename.c_str(), t.tok.m_line, t.tok.m_col, err);
               for( Vector<ParsePos>::const_iterator pos = posstack.begin(), endPos = posstack.end(); pos != endPos; ++pos )
@@ -166,9 +166,9 @@ public:
                 fprintf(m_vpout, "  at %s(%d:%d)\n", pos->filename.c_str(), pos->line, pos->col);
             }
           }
-          T t;
-          t.tok.set('','',0,0,0,0,0,PARSE_ERROR);
-          inputqueue.push_back(Pair<int,T>(PARSE_ERROR,t));
+          T t_err;
+          t_err.tok.set("",t.tok.m_filename.c_str(),t.tok.m_wslines,t.tok.m_wscols,t.tok.m_wslen,t.tok.m_line,t.tok.m_col,PARSE_ERROR);
+          inputqueue.push_back(Pair<int,T>(PARSE_ERROR,t_err));
         }
       }
     }
