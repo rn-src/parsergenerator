@@ -140,8 +140,7 @@ class Parser:
             self.fout.write("{filename}({line}:{col}) : parse error : input (# {inputnum}) = {tok} {tokstr} = \"{tokname}\" - \n".format(filename=t.tok.filename, line=t.tok.line, col=t.tok.col, inputnum=inputnum, tok=tok, tokstr=toks.tokid2str(tok), tokname=t.tok.s))
             for pos in posstack:
               self.fout.write("  at {filename}({line}:{col})\n".format(filename=pos.filename, line=pos.line, col=pos.col))
-          t = self.parseinfo.stack_t()
-          t.tok = Token('','',0,0,0,0,0,self.parseinfo.parse_error)
-          inputqueue.append( (self.parseinfo.parse_error,t) )
-          toks.discard()
+          t_err = self.parseinfo.stack_t()
+          t_err.tok = Token('',t.tok.filename,t.tok.wslines,t.tok.wscols,t.tok.wslen,t.tok.line,t.tok.col,self.parseinfo.parse_error)
+          inputqueue.append( (self.parseinfo.parse_error,t_err) )
     return True
