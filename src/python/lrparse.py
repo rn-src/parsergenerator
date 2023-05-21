@@ -120,14 +120,13 @@ class Parser:
         firstaction = nextaction
       if firstaction == lastaction:
         if tok == self.parseinfo.parse_error:
+          if self.verbosity and self.fout:
+            self.fout.write('during error handling, popping lr state {state}\n'.format(state=states[-1]))
+          del states[-1]
           if len(states) == 0:
             if self.verbosity and self.fout:
               self.fout.write("NO ACTION AVAILABLE, FAIL\n")
             return False
-          else:
-            if self.verbosity and self.fout:
-              self.fout.write('during error handling, popping lr state {state}\n'.format(state=states[-1]))
-            del states[-1]
         else:
           # report the error for verbose output, but add error to the input, hoping for a handler, and carry on
           posstack = toks.getparsepos()
