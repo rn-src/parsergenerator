@@ -8,7 +8,7 @@ ACTION_REDUCE: int = 1
 ACTION_STOP: int = 2
 
 class ParseInfo:
-  __slots__ = ('nstates','actions','actionstart','prod0','nproductions','productions','productionstart','start','nonterminals','reduce','extra_t','stack_t')
+  __slots__ = ('nstates','actions','actionstart','prod0','nproductions','productions','productionstart','start','parse_error','nonterminals','reduce','extra_t','stack_t')
   def __init__(self, ns: Any):
     self.nstates: int = ns.nstates
     self.actions: Sequence[int] = ns.actions
@@ -18,6 +18,7 @@ class ParseInfo:
     self.productions: Sequence[int] = ns.productions
     self.productionstart: Sequence[int] = ns.productionstart
     self.start: int = ns.START
+    self.parse_error: int = ns.PARSE_ERROR
     self.nonterminals: Sequence[str] = ns.nonterminals
     self.reduce: Callable = ns.reduce
     self.extra_t: type = ns.extra_t
@@ -37,7 +38,7 @@ class Parser:
     values: list[Any] = []
     inputqueue: list[tuple[int,Any]] = []
     states.append(0)
-    values.append(self.parseinfo.token())
+    values.append(self.parseinfo.stack_t())
     tok: int = -1
     inputnum: int = 0
     err: Optional[str] = None
@@ -62,7 +63,7 @@ class Parser:
       lastaction: int = self.parseinfo.actionstart[stateno+1]
       while firstaction != lastaction:
         action: int = actions[firstaction]
-        didcaction: bool = False
+        didaction: bool = False
         nextaction: int = firstaction
         nsymbols: int = 0
         if action == ACTION_SHIFT:
@@ -118,21 +119,27 @@ class Parser:
           break
         firstaction = nextaction
       if firstaction == lastaction:
-        if self.verbosity and self.fout:
-          self.fout.write("NO ACTION AVAILABLE, FAIL\n")
-        posstack = toks.getparsepos()
-        t = inputqueue[-1][1]
-        if err and self.fout:
-          self.fout.write("{filename}({line}:{col}) : error : {err}\n".format(filename=t.tok.filename,line=t.tok.line,col=t.tok.col,err=err))
-          for pos in posstack:
-            self.fout.write("  at {filename}({line}:{col})\n".format(filename=pos.filename,line=pos.line,col=pos.col))
-        elif self.fout:
-          self.fout.write("{filename}({line}:{col}) : parse error : input (# {inputnum}) = {tok} {tokstr} = \"{tokname}\" - \n".format(filename=t.tok.filename, line=t.tok.line, col=t.tok.col, inputnum=inputnum, tok=tok, tokstr=toks.tokid2str(tok), tokname=t.tok.s))
-          for pos in posstack:
-            self.fout.write("  at {filename}({line}:{col})\n".format(filename=pos.filename, line=pos.line, col=pos.col))
-          self.fout.write("lrstates = { ");
-          for state in states:
-            self.fout.write("{state} ".format(state=state))
-          self.fout.write("}\n");
-        return False
+        if tok == self.parseinfo.parse_error:
+          if self.verbosity and self.fout:
+            self.fout.write('during error handling, popping lr state {state}\n'.format(state=states[-1]))
+          del states[-1]
+          if len(states) == 0:
+            if self.verbosity and self.fout:
+              self.fout.write("NO ACTION AVAILABLE, FAIL\n")
+            return False
+        else:
+          # report the error for verbose output, but add error to the input, hoping for a handler, and carry on
+          posstack = toks.getparsepos()
+          t = inputqueue[-1][1]
+          if err and self.fout:
+            self.fout.write("{filename}({line}:{col}) : error : {err}\n".format(filename=t.tok.filename,line=t.tok.line,col=t.tok.col,err=err))
+            for pos in posstack:
+              self.fout.write("  at {filename}({line}:{col})\n".format(filename=pos.filename,line=pos.line,col=pos.col))
+          elif self.fout:
+            self.fout.write("{filename}({line}:{col}) : parse error : input (# {inputnum}) = {tok} {tokstr} = \"{tokname}\" - \n".format(filename=t.tok.filename, line=t.tok.line, col=t.tok.col, inputnum=inputnum, tok=tok, tokstr=toks.tokid2str(tok), tokname=t.tok.s))
+            for pos in posstack:
+              self.fout.write("  at {filename}({line}:{col})\n".format(filename=pos.filename, line=pos.line, col=pos.col))
+          t_err = self.parseinfo.stack_t()
+          t_err.tok = Token('',t.tok.filename,t.tok.wslines,t.tok.wscols,t.tok.wslen,t.tok.line,t.tok.col,self.parseinfo.parse_error)
+          inputqueue.append( (self.parseinfo.parse_error,t_err) )
     return True

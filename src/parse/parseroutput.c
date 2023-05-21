@@ -656,7 +656,7 @@ static void OutputLRParser(FILE *out, const ParserDef *parser, const LRParserSol
       continue;
     if( outputOptions->m_outputLanguage == OutputLanguage_Python) {
       int prodIdx = MapAny_findConstT(&pid2idx,&p->m_pid,int);
-      fprintf(out,"    case %d # PROD_%d:\n      ", prodIdx+firstproduction, prodIdx);
+      fprintf(out,"    case %d: # PROD_%d:\n      ", prodIdx+firstproduction, prodIdx);
     } else {
       fprintf(out,"    case PROD_%d:\n      ", MapAny_findConstT(&pid2idx,&p->m_pid,int));
     }
