@@ -641,7 +641,7 @@ int LR_PrintConflicts(ParserDef *parser, LRParserSolution *solution, FILE *out) 
       for( int curshift = 0, endshift = MapAny_size(shifttosymbols); curshift != endshift; ++curshift ) {
         const int* tostate = 0;
         SetAny /*<int>*/ * onsymbols = 0;
-        MapAny_getByIndexConst(shifttosymbols, curshift, (const void**)&tostate, (void**)&onsymbols);
+        MapAny_getByIndexConst(shifttosymbols, curshift, (const void**)&tostate, (const void**)&onsymbols);
         for (int cursym = 0, endsym = SetAny_size(onsymbols); cursym != endsym; ++cursym) {
           int onsymbol = SetAny_getByIndexConstT(onsymbols, cursym, int);
           SetAny_insert(&shiftsymbols, &onsymbol, 0);
