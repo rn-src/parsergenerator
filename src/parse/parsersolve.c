@@ -639,13 +639,13 @@ int LR_PrintConflicts(ParserDef *parser, LRParserSolution *solution, FILE *out) 
     shifttosymbols_t *shifttosymbols = &MapAny_findT(&solution->m_shifts,&i,shifttosymbols_t);
     if( shifttosymbols ) {
       for( int curshift = 0, endshift = MapAny_size(shifttosymbols); curshift != endshift; ++curshift ) {
-        const int *shiftto = 0;
-        SetAny /*<int>*/ *shiftsymbols = 0;
-        MapAny_getByIndex(shifttosymbols,curshift,(const void**)&shiftto,(void**)&shiftsymbols);
-        for( int cursym = 0, endsym = SetAny_size(shiftsymbols); cursym != endsym; ++cursym ) {
-          int sym = SetAny_getByIndexConstT(shiftsymbols,cursym,int);
-          SetAny_insert(shiftsymbols,&sym,0);
-          SetAny_insert(&symbols,&sym,0);
+        const int* tostate = 0;
+        SetAny /*<int>*/ * onsymbols = 0;
+        MapAny_getByIndexConst(shifttosymbols, curshift, (const void**)&tostate, (void**)&onsymbols);
+        for (int cursym = 0, endsym = SetAny_size(onsymbols); cursym != endsym; ++cursym) {
+          int onsymbol = SetAny_getByIndexConstT(onsymbols, cursym, int);
+          SetAny_insert(&shiftsymbols, &onsymbol, 0);
+          SetAny_insert(&symbols, &onsymbol, 0);
         }
       }
     }
