@@ -170,7 +170,7 @@ int RestrictAutomata_nextState(const RestrictAutomata *This, const Production *c
       const Restriction *symbol = 0;
       const SetAny *nextstates = 0;
       MapAny_getByIndexConst(t,cursub,(const void**)&symbol,(const void**)&nextstates);
-      if( ProductionDescriptors_matchesProductionAndPosition(&symbol->m_at, curp, pos) && ProductionDescriptors_matchesProduction(&symbol->m_restricted, ptest) )
+      if( ProductionDescriptors_matchesProductionAndPosition(&symbol->m_restricted, curp, pos) )
         return SetAny_getByIndexConstT(nextstates,0,int);
     }
   }
