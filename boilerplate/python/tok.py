@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-# Provided by parsergenerator - free to use under MIT license
+# Provided by parsergenerator - https://github.com/rn-src/parsergenerator - free to use under MIT license
 from typing import Protocol, Sequence, Callable, Optional, IO, Any
 from array import array
 from io import StringIO

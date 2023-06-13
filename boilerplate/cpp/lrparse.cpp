@@ -1,8 +1,8 @@
 #include <stdio.h>
 #include "../../src/tok/tinytemplates.h"
 #include "../../src/tok/tok.h"
-#include "calculatorL.h"
-TokenInfo calctokinfo = {
+#include "parserL.h"
+TokenInfo tokinfo = {
   tokenCount,
   sectionCount,
   tokenaction,
@@ -14,8 +14,8 @@ TokenInfo calctokinfo = {
   tokens
 };
 #include "../../src/parse/lrparse.h"
-#include "calculatorG.h"
-ParseInfo calclrinfo = {
+#include "parserG.h"
+ParseInfo lrinfo = {
   nstates,
   actions,
   actionstart,
@@ -29,8 +29,8 @@ ParseInfo calclrinfo = {
 
 int main() {
   FileTokBuf tokbuf(stdin, "<stdin>");
-  TokBufTokenizer toks(&tokbuf,&calctokinfo);
-  Parser<extra_t,stack_t> parser(&calclrinfo,reduce,0,0);
+  TokBufTokenizer toks(&tokbuf,&tokinfo);
+  Parser<extra_t,stack_t> parser(&parserlrinfo,reduce,0,0);
   if( parser.parse(&toks) )
     fprintf(stderr, "%f\n", parser.m_extra);
   else
