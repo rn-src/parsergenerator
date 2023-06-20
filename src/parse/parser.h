@@ -12,8 +12,6 @@ struct ParserDef;
 typedef struct ParserDef ParserDef;
 struct LRParserSolution;
 typedef struct LRParserSolution LRParserSolution;
-struct LLParserSolution;
-typedef struct LLParserSolution LLParserSolution;
 struct Production;
 typedef struct Production Production;
 struct RestrictAutomata;
@@ -63,7 +61,8 @@ enum ActionType {
   ActionTypeUnknown,
   ActionTypeSrc,
   ActionTypeDollarDollar,
-  ActionTypeDollarNumber
+  ActionTypeDollarNumber,
+  ActionTypeDollarExtra
 };
 typedef enum ActionType ActionType;
 
@@ -417,13 +416,6 @@ struct LRParserSolution {
   reducemap_t m_reductions;
 };
 
-void LLParserSolution_init(LLParserSolution *This, bool onstack);
-void LLParserSolution_destroy(LLParserSolution *This);
-
-struct LLParserSolution {
-  FirstsAndFollows m_firstsAndFollows;
-};
-
 struct ImportAs;
 typedef struct ImportAs ImportAs;
 
@@ -435,12 +427,6 @@ struct ImportAs {
 struct LanguageOutputOptions;
 typedef struct LanguageOutputOptions LanguageOutputOptions;
 
-enum ParserType {
-  ParserType_LR,
-  ParserType_LL
-};
-typedef enum ParserType ParserType;
-
 enum OutputLanguage {
   OutputLanguage_C,
   OutputLanguage_Python
@@ -450,7 +436,6 @@ typedef enum OutputLanguage OutputLanguage;
 struct LanguageOutputOptions {
   int min_nt_value;
   bool do_pound_line;
-  ParserType m_parserType;
   OutputLanguage m_outputLanguage;
   const char *m_lexerName;
   ImportAs *m_extraImports;
@@ -459,8 +444,6 @@ struct LanguageOutputOptions {
 void ParseParser(TokBuf *tokbuf, ParserDef *parser, FILE *vout, int verbosity);
 int LR_SolveParser(ParserDef *parser, LRParserSolution *solution, FILE *vout, int verbosity, int timed);
 void OutputLRParserSolution(FILE *out, const ParserDef *parser, const LRParserSolution *solution, LanguageOutputOptions *options);
-int LL_SolveParser(ParserDef *parser, LLParserSolution *solution, FILE *vout, int verbosity, int timed);
-void OutputLLParserSolution(FILE *out, const ParserDef *parser, const LLParserSolution *solution, LanguageOutputOptions *options);
 
 #endif /* __parser_h */
 

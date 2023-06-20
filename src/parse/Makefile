@@ -1,5 +1,6 @@
 OBJ=parser.o parsersolve.o parseroutput.o main.o parserrestrictfa.o timer.o ../tok/tinytemplates.o ../tok/tok.o
-CFLAGS=-I. -g -O0
+#CFLAGS=-I. -g -O0
+CFLAGS=-I. -O2
 DEPS=parser.h ../tok/tinytemplates.h
 
 all: parser

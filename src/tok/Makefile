@@ -1,17 +1,18 @@
 all: tokenizer
-CFLAGS=-g -O0
+CFLAGS=-O2
+#CFLAGS=-g -O0
 
 tokenizer: tokenizer.o main.o tinytemplates.o
 	g++ $(CPPFLAGS) $(CFLAGS) tokenizer.o main.o tinytemplates.o -otokenizer
 
 tinytemplates.o: tinytemplates.c tinytemplates.h
-	gcc -g -c tinytemplates.c -otinytemplates.o
+	gcc $(CFLAGS) -c tinytemplates.c -otinytemplates.o
 
 tokenizer.o: tokenizer.c tokenizer.h
-	gcc -g -c tokenizer.c -otokenizer.o
+	gcc $(CFLAGS) -c tokenizer.c -otokenizer.o
 
 main.o: main.c tokenizer.h
-	gcc -g -c main.c -omain.o
+	gcc $(CFLAGS) -c main.c -omain.o
 
 clean:
 	-rm *.o > /dev/null 2>&1

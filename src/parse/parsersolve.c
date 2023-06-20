@@ -1,5 +1,4 @@
 #include "parser.h"
-#include "parsertokL.h"
 #include <stdint.h>
 
 #define SHIFT (1)
@@ -740,16 +739,6 @@ void LRParserSolution_destroy(LRParserSolution *This) {
   MapAny_destroy(&This->m_reductions);
 }
 
-void LLParserSolution_init(LLParserSolution *This, bool onstack) {
-  FirstsAndFollows_init(&This->m_firstsAndFollows, false);
-  if (onstack)
-    Push_Destroy(This, (vpstack_destroyer)LLParserSolution_destroy);
-}
-
-void LLParserSolution_destroy(LLParserSolution *This) {
-  FirstsAndFollows_destroy(&This->m_firstsAndFollows);
-}
-
 int LR_SolveParser(ParserDef *parser, LRParserSolution *solution, FILE *vout, int verbosity, int timed) {
   if( ! ParserDef_getStartProduction(parser) ) {
     fputs("The grammar definition requires a START production",stderr);
@@ -774,15 +763,3 @@ int LR_SolveParser(ParserDef *parser, LRParserSolution *solution, FILE *vout, in
   return nconflicts;
 }
 
-int LL_SolveParser(ParserDef *parser, LLParserSolution *solution, FILE *vout, int verbosity, int timed) {
-  ticks_t start = getSystemTicks();
-  ParserDef_computeRestrictAutomata(parser);
-  FirstsAndFollows_Compute(&solution->m_firstsAndFollows, parser, vout, verbosity);
-  ticks_t stop = getSystemTicks();
-  if (timed) {
-    printf("Tokens %d\n", MapAny_size(&parser->m_tokens));
-    printf("Productions %d\n", VectorAny_size(&parser->m_productions));
-    printf("Duration %.6f\n", (double)(stop - start) / (double)getSystemTicksFreq());
-  }
-  return 0;
-}

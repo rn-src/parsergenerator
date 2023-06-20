@@ -42,10 +42,6 @@ void parseArgs(int argc, char *argv[], int *pverbosity, int *ptimed, LanguageOut
     options->do_pound_line = false;
   if (getarg(argc, argv, "--timed"))
     timed = 1;
-  if (getarg(argc, argv, "--lr"))
-    options->m_parserType = ParserType_LR;
-  if (getarg(argc, argv, "--ll"))
-    options->m_parserType = ParserType_LL;
   if (getarg(argc, argv, "--c"))
     options->m_outputLanguage = OutputLanguage_C;
   if (getarg(argc, argv, "--py"))
@@ -100,7 +96,7 @@ int main(int argc, char *argv[]) {
   int timed = 0;
   const char *fname = 0;
   ImportAs extraImports[32] = {0};
-  LanguageOutputOptions options = { 0, true, ParserType_LR, OutputLanguage_C, 0, extraImports };
+  LanguageOutputOptions options = { 0, true, OutputLanguage_C, 0, extraImports };
 
   parseArgs(argc, argv, &verbosity, &timed, &options, &fname);
 
@@ -109,7 +105,6 @@ int main(int argc, char *argv[]) {
           "   -v          : verbosity, 1 through 3 times\n"
           "--minnt        : minimum nonterminal value, if the default output is too low\n"
           "--lr           : output an LR parser\n"
-          "--ll           : output an LL parser\n"
           "--c            : output C\n"
           "--py           : output python\n"
           "--lexer        : lexer name, if different from the parser (used in python)\n"
@@ -126,7 +121,6 @@ int main(int argc, char *argv[]) {
   ParserDef parser;
   FileTokBuf tokbuf;
   LRParserSolution solution;
-  LLParserSolution llsolution;
   const ParseError *pe = 0;
   int ret = 0;
 
@@ -145,14 +139,10 @@ int main(int argc, char *argv[]) {
     ParserDef_init(&parser,vout,verbosity,true);
     FileTokBuf_init(&tokbuf,fin,fname,true);
     LRParserSolution_init(&solution, true);
-    LLParserSolution_init(&llsolution, true);
     ParseParser(&tokbuf.m_tokbuf,&parser,vout,verbosity);
     int n = 0;
 
-    if (options.m_parserType == ParserType_LR)
-      n = LR_SolveParser(&parser, &solution, vout, verbosity, timed);
-    else if (options.m_parserType == ParserType_LL)
-      n = LL_SolveParser(&parser, &llsolution, vout, verbosity, timed);
+    n = LR_SolveParser(&parser, &solution, vout, verbosity, timed);
 
     if( n != 0 ) {
       Scope_Pop();
@@ -166,11 +156,7 @@ int main(int argc, char *argv[]) {
     }
     Push_Destroy(fout, (vpstack_destroyer)fclose);
 
-    if (options.m_parserType == ParserType_LR)
-      OutputLRParserSolution(fout, &parser, &solution, &options);
-    else if (options.m_parserType == ParserType_LL)
-      OutputLLParserSolution(fout, &parser, &llsolution, &options);
-
+    OutputLRParserSolution(fout, &parser, &solution, &options);
   } else if( getParseError(&pe) ) {
     if( pe->line != -1 )
       fprintf(stderr, "%s(%d:%d) : %s\n", String_Chars(&pe->file), pe->line, pe->col, String_Chars(&pe->err));
