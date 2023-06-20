@@ -212,7 +212,7 @@ bool parse(tokenizer *toks, parseinfo *parseinfo, void *extra, int verbosity, wr
           int nsymbols = firstaction[3];
           nextaction = firstaction+4+nsymbols;
           if( findsymbol(tok,firstaction+4,nsymbols) ) {
-            Token *inputs = values.values+(values.size-reducecount);
+            Token *inputs = vectok_item(&values,values.size-reducecount);
             if( verbosity ) {
               int reducebyp = reduceby-parseinfo->prod0;
               writer->printf(writer,"reduce %d states by rule %d [", reducecount, reducebyp+1);
@@ -231,7 +231,11 @@ bool parse(tokenizer *toks, parseinfo *parseinfo, void *extra, int verbosity, wr
               writer->puts(writer," ] ? ... ");
             }
             err = 0;
-            char v[parseinfo->itemsize];
+#ifdef WIN32
+            char *v = (char*)_alloca(parseinfo->itemsize);
+#else
+	    char *v = char[parseinfo->itemsize];
+#endif
             Token *output = (Token*)v;
             memset(output,0,parseinfo->itemsize);
             output->tok = reduceby;

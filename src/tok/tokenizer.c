@@ -1731,11 +1731,7 @@ static void OutputDfaSource(FILE *out, const Nfa *dfa, const LanguageOutputter *
   lang->outEndStmt(lang,out);
   fputc('\n',out);
 
-  lang->outDecl(lang,out,"static const int","stateCount");
-  fputs(" = ",out);
-  lang->outInt(lang,out,Nfa_stateCount(dfa));
-  lang->outEndStmt(lang,out);
-  fputc('\n',out);
+  lang->outIntDecl(lang,out,"stateCount",Nfa_stateCount(dfa));
 
   lang->outArrayDecl(lang,out,"static const int","transitions");
   fputs(" = ",out);

@@ -11,6 +11,7 @@ struct LanguageOutputter {
   void (*outBottom)(const LanguageOutputter* This, const LanguageOutputOptions* outputOptions, FILE* out);
   void (*outTypeDecl)(const LanguageOutputter* This, FILE* out, const char* type, const char* name);
   void (*outDecl)(const LanguageOutputter *This, FILE *out, const char *type, const char *name);
+  void (*outIntDecl)(const LanguageOutputter *This, FILE *out, const char *name, int i);
   void (*outOptionalDecl)(const LanguageOutputter* This, FILE* out, const char* type, const char* name);
   void (*outArrayDecl)(const LanguageOutputter *This, FILE *out, const char *type, const char *name);
   void (*outStartArray)(const LanguageOutputter *This, FILE *out);
@@ -61,6 +62,9 @@ void CLanguageOutputter_outTypeDecl(const LanguageOutputter* This, FILE* out, co
   fputs("typedef ", out); fputs(type, out); fputc(' ', out); fputs(name, out);
 }
 void CLanguageOutputter_outDecl(const LanguageOutputter *This, FILE *out, const char *type, const char *name) { fputs(type,out); fputc(' ',out); fputs(name,out); }
+void CLanguageOutputter_outIntDecl(const LanguageOutputter *This, FILE *out, const char *name, int i) {
+  fprintf(out, "#define %s (%d)\n", name, i);
+}
 void CLanguageOutputter_outOptionalDecl(const LanguageOutputter* This, FILE* out, const char* type, const char* name) { fputs(type, out); fputc(' ', out); fputs(name, out); }
 void CLanguageOutputter_outArrayDecl(const LanguageOutputter *This, FILE *out, const char *type, const char *name) { fputs(type,out); fputc(' ',out); fputs(name,out); fputs("[]",out); }
 void CLanguageOutputter_outStartArray(const LanguageOutputter *This, FILE *out) { fputc('{',out); }
@@ -106,7 +110,7 @@ void CLanguageOutputter_outEndFunctionCode(const LanguageOutputter *This, FILE *
 void CLanguageOutputter_outStartLineComment(const LanguageOutputter* This, FILE* out) {
   fputs("//", out);
 }
-LanguageOutputter CLanguageOutputter = {CLanguageOutputter_outTop, CLanguageOutputter_outBottom, CLanguageOutputter_outTypeDecl, CLanguageOutputter_outDecl, CLanguageOutputter_outTypeDecl, CLanguageOutputter_outArrayDecl, CLanguageOutputter_outStartArray, CLanguageOutputter_outEndArray, CLanguageOutputter_outEndStmt, CLanguageOutputter_outNull, CLanguageOutputter_outBool, CLanguageOutputter_outStr, CLanguageOutputter_outChar, CLanguageOutputter_outInt, CLanguageOutputter_outFunctionStart, CLanguageOutputter_outStartParameters, CLanguageOutputter_outEndParameters, CLanguageOutputter_outStartFunctionCode, CLanguageOutputter_outEndFunctionCode, CLanguageOutputter_outStartLineComment };
+LanguageOutputter CLanguageOutputter = {CLanguageOutputter_outTop, CLanguageOutputter_outBottom, CLanguageOutputter_outTypeDecl, CLanguageOutputter_outDecl, CLanguageOutputter_outIntDecl, CLanguageOutputter_outTypeDecl, CLanguageOutputter_outArrayDecl, CLanguageOutputter_outStartArray, CLanguageOutputter_outEndArray, CLanguageOutputter_outEndStmt, CLanguageOutputter_outNull, CLanguageOutputter_outBool, CLanguageOutputter_outStr, CLanguageOutputter_outChar, CLanguageOutputter_outInt, CLanguageOutputter_outFunctionStart, CLanguageOutputter_outStartParameters, CLanguageOutputter_outEndParameters, CLanguageOutputter_outStartFunctionCode, CLanguageOutputter_outEndFunctionCode, CLanguageOutputter_outStartLineComment };
 
 static const char* pytype(const char* type) {
   if (strncmp(type, "static", 6) == 0)
@@ -142,6 +146,9 @@ void PyLanguageOutputter_outDecl(const LanguageOutputter* This, FILE* out, const
   fputs(name,out);
   fputs(": ",out);
   fputs(pytype(type), out);
+}
+void PyLanguageOutputter_outIntDecl(const LanguageOutputter* This, FILE* out, const char* name, int i) {
+  fprintf(out, "%s: int = %d\n", name, i);
 }
 void PyLanguageOutputter_outOptionalDecl(const LanguageOutputter* This, FILE* out, const char* type, const char* name) {
   fputs(name, out);
@@ -221,7 +228,7 @@ void PyLanguageOutputter_outEndFunctionCode(const LanguageOutputter* This, FILE*
 void PyLanguageOutputter_outStartLineComment(const LanguageOutputter* This, FILE* out) {
   fputs("#", out);
 }
-LanguageOutputter PyLanguageOutputter = { PyLanguageOutputter_outTop, PyLanguageOutputter_outBottom, PyLanguageOutputter_outTypeDecl, PyLanguageOutputter_outDecl, PyLanguageOutputter_outOptionalDecl, PyLanguageOutputter_outArrayDecl, PyLanguageOutputter_outStartArray, PyLanguageOutputter_outEndArray, PyLanguageOutputter_outEndStmt, PyLanguageOutputter_outNull, PyLanguageOutputter_outBool, PyLanguageOutputter_outStr, PyLanguageOutputter_outChar, PyLanguageOutputter_outInt, PyLanguageOutputter_outFunctionStart, PyLanguageOutputter_outStartParameters, PyLanguageOutputter_outEndParameters, PyLanguageOutputter_outStartFunctionCode, PyLanguageOutputter_outEndFunctionCode, PyLanguageOutputter_outStartLineComment };
+LanguageOutputter PyLanguageOutputter = { PyLanguageOutputter_outTop, PyLanguageOutputter_outBottom, PyLanguageOutputter_outTypeDecl, PyLanguageOutputter_outDecl, PyLanguageOutputter_outIntDecl, PyLanguageOutputter_outOptionalDecl, PyLanguageOutputter_outArrayDecl, PyLanguageOutputter_outStartArray, PyLanguageOutputter_outEndArray, PyLanguageOutputter_outEndStmt, PyLanguageOutputter_outNull, PyLanguageOutputter_outBool, PyLanguageOutputter_outStr, PyLanguageOutputter_outChar, PyLanguageOutputter_outInt, PyLanguageOutputter_outFunctionStart, PyLanguageOutputter_outStartParameters, PyLanguageOutputter_outEndParameters, PyLanguageOutputter_outStartFunctionCode, PyLanguageOutputter_outEndFunctionCode, PyLanguageOutputter_outStartLineComment };
 
 static void PrintExtraType(FILE *out, const ParserDef *parser, const LanguageOutputter *lang, const LanguageOutputOptions *outputOptions) {
   int extraNt = ParserDef_getExtraNt(parser);
@@ -356,32 +363,15 @@ static void PrintTokenConstants(FILE *out, const ParserDef *parser, const Langua
     const int *tokid = 0;
     const SymbolDef *tok = 0;
     MapAny_getByIndexConst(&parser->m_tokdefs, curtok, (const void**)&tokid, (const void**)&tok);
-    if (tok->m_symboltype == SymbolTypeNonterminal) {
-      if( outputOptions->m_outputLanguage == OutputLanguage_Python ) {
-        lang->outDecl(lang, out, "const int", String_Chars(&tok->m_name));
-        fputs(" = ", out);
-        lang->outInt(lang, out, firstnt + MapAny_findT(nt2idx, &tok->m_tokid, int));
-        lang->outEndStmt(lang, out);
-      } else {
-        fprintf(out, "#define %s (%d)", String_Chars(&tok->m_name), firstnt + MapAny_findT(nt2idx, &tok->m_tokid, int));
-      }
-      fputc('\n', out);
-    }
+    if (tok->m_symboltype == SymbolTypeNonterminal)
+      lang->outIntDecl(lang,out,String_Chars(&tok->m_name),firstnt + MapAny_findT(nt2idx, &tok->m_tokid, int));
   }
 
   for (int i = 0; i < VectorAny_size(&parser->m_productions); ++i) {
     char buf[64];
     MapAny_insert(pid2idx, &VectorAny_ArrayOpConstT(&parser->m_productions, i, Production*)->m_pid, &i);
     sprintf(buf, "PROD_%d", i);
-    if( outputOptions->m_outputLanguage == OutputLanguage_Python ) {
-      lang->outDecl(lang, out, "const int", buf);
-      fputs(" = ", out);
-      lang->outInt(lang, out, firstproduction + i);
-      lang->outEndStmt(lang, out);
-    } else {
-      fprintf(out, "#define %s (%d)", buf, firstproduction+i);
-    }
-    fputc('\n', out);
+    lang->outIntDecl(lang,out,buf,firstproduction+i);
   }
 }
 
@@ -468,11 +458,7 @@ static void OutputLRParser(FILE *out, const ParserDef *parser, const LRParserSol
   int firstnt = outputOptions->min_nt_value>(terminals + 1) ? outputOptions->min_nt_value : (terminals + 1);
   int firstproduction = firstnt + nonterminals;
 
-  lang->outDecl(lang,out,"const int","nstates");
-  fputs(" = ",out);
-  lang->outInt(lang,out,VectorAny_size(&solution->m_states));
-  lang->outEndStmt(lang,out);
-  fputc('\n',out);
+  lang->outIntDecl(lang,out,"nstates",VectorAny_size(&solution->m_states));
 
   lang->outArrayDecl(lang,out,"static const int", "actions");
   fputs(" = ",out);
@@ -589,11 +575,7 @@ static void OutputLRParser(FILE *out, const ParserDef *parser, const LRParserSol
   lang->outEndStmt(lang,out);
   fputc('\n',out);
 
-  lang->outDecl(lang,out,"const int","nproductions");
-  fputs(" = ",out);
-  lang->outInt(lang,out,VectorAny_size(&parser->m_productions));
-  lang->outEndStmt(lang,out);
-  fputc('\n',out);
+  lang->outIntDecl(lang,out,"nproductions",VectorAny_size(&parser->m_productions));
 
 
   lang->outArrayDecl(lang,out,"static const int", "productions");
