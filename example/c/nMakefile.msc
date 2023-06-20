@@ -1,0 +1,30 @@
+# To build
+# start visual studio command line prompt
+# nmake -f nMakefile.msc
+OBJS=main.obj lrparse.obj tokenizer.obj
+CFLAGS=/nologo /Zi /Od /EHsc /DWIN32 /MD /I.
+#CFLAGS=/nologo /O1 /EHsc /DWIN32 /MD /I.
+.SUFFIXES: .c .obj
+
+all: example.exe
+
+example.exe: lrparse.h tokenizer.h exampleG.h exampleL.h $(OBJS)
+	@echo linking...
+	@link /nologo /DEBUG /SUBSYSTEM:CONSOLE /OUT:example.exe $(OBJS)
+#	@link /nologo /SUBSYSTEM:CONSOLE /OUT:example.exe $(OBJS)
+
+exampleG.h: example.G
+	@parser.exe "--import=<stdlib.h>" example.G
+
+exampleL.h: example.L
+	@tokenizer.exe example.L
+
+.c.obj:
+	@cl /nologo /c $(CFLAGS) $< /Fo$@
+
+clean:
+	@-del example.exe > NUL 2>&1
+	@-del *.obj > NUL 2>&1
+	@-del *.pdb > NUL 2>&1
+	@-del exampleL.h > NUL 2>&1
+	@-del exampleG.h > NUL 2>&1
