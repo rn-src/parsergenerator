@@ -682,6 +682,9 @@ static void OutputLRParser(FILE *out, const ParserDef *parser, const LRParserSol
       fprintf(out,"    case PROD_%d:\n      ", MapAny_findConstT(&pid2idx,&p->m_pid,int));
     }
     WriteSemanticAction(p, out, parser, lang, outputOptions, &tfields);
+    if( outputOptions->m_outputLanguage == OutputLanguage_C) {
+      fputs("\n      break;\n", out);
+    }
     fputc('\n',out);
   }
   if (outputOptions->m_outputLanguage == OutputLanguage_Python) {

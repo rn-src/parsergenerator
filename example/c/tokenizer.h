@@ -3,6 +3,8 @@
 #include <stdbool.h>
 #include <stddef.h>
 
+void *mrealloc(void *prev, size_t prevsize, size_t newsize);
+
 struct tokinfo {
   int tokenCount;
   int sectionCount;
@@ -55,18 +57,18 @@ struct charbuf {
   char *buf;
   size_t size;
   size_t capacity;
-};
+}token;
 typedef struct charbuf charbuf;
 
 void charbuf_init(charbuf *buf, size_t initial_capacity);
 void charbuf_clear(charbuf *buf);
-void charbuf_set_capacity(charbuf *buf, size_t new_capacity);
-int charbuf_putc_utf8(charbuf *buf, int c);
+size_t charbuf_putc_utf8(charbuf *buf, int c);
 void charbuf_destroy(charbuf *buf);
 
 struct reader;
 typedef size_t (*readfnct)(struct reader *r, size_t n, void *buf);
 struct reader {
+  const char *name;
   readfnct read;
 };
 typedef struct reader reader;
@@ -79,18 +81,17 @@ struct tokenizer {
   reader *rdr;
   charbuf readbuf;
   bool eof;
-  size_t readoffset;
+  size_t bufoffset, bufend;
   tokpos pos;
   toksize size;
   vecint secstack;
 };
 typedef struct tokenizer tokenizer;
 
-void tokenizer_init(tokenizer *tokenizer, tokinfo *info);
+void tokenizer_init(tokenizer *tokenizer, tokinfo *info, reader *rdr);
 void tokenizer_destroy(tokenizer *tokenizer);
 int tokenizer_peek(tokenizer *tokenizer);
 void tokenizer_discard(tokenizer *tokenizer);
 const char *tokenizer_tokid2str(tokenizer *tokenizer, int tokid);
-const char *tokenizer_tokstr(tokenizer *tokenizer, int p);
 
 #endif /* __tokenizer_h */

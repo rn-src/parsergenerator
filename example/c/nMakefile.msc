@@ -2,19 +2,17 @@
 # start visual studio command line prompt
 # nmake -f nMakefile.msc
 OBJS=main.obj lrparse.obj tokenizer.obj
-CFLAGS=/nologo /Zi /Od /EHsc /DWIN32 /MD /I.
-#CFLAGS=/nologo /O1 /EHsc /DWIN32 /MD /I.
+CFLAGS=/nologo /O1 /EHsc /DWIN32 /MD /I.
 .SUFFIXES: .c .obj
 
 all: example.exe
 
 example.exe: lrparse.h tokenizer.h exampleG.h exampleL.h $(OBJS)
 	@echo linking...
-	@link /nologo /DEBUG /SUBSYSTEM:CONSOLE /OUT:example.exe $(OBJS)
-#	@link /nologo /SUBSYSTEM:CONSOLE /OUT:example.exe $(OBJS)
+	@link /nologo /SUBSYSTEM:CONSOLE /OUT:example.exe $(OBJS)
 
 exampleG.h: example.G
-	@parser.exe --no-pound-lines "--import=<stdlib.h>" example.G
+	@parser.exe "--import=<stdlib.h>" example.G
 
 exampleL.h: example.L
 	@tokenizer.exe example.L

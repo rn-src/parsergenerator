@@ -8,6 +8,18 @@
 #define TOKEN_SIZE (16)
 #define TOKENS_PER_BLOCK (64)
 
+static char *tokdup(const char *s) {
+  if( ! s )
+    return 0;
+  char *dup = (char*)mrealloc(0,0,strlen(s)+1);
+  strcpy(dup,s);
+  return dup;
+}
+
+static void tokfree(char *s) {
+  mrealloc(s,0,0);
+}
+
 void writer_printf(writer *w, const char *format, ...) {
   va_list args;
   va_start(args,format);
@@ -35,14 +47,13 @@ typedef struct vectok vectok;
 
 void vectok_init(vectok *v, int itemsize) {
   v->itemsize = itemsize;
-  v->values = malloc(v->itemsize*INITIAL_VEC_CAPACITY);
+  v->values = 0;
   v->size = 0;
-  v->capacity = INITIAL_VEC_CAPACITY;
+  v->capacity = 0;
 }
 
 void vectok_destroy(vectok *v) {
-  if( v->values )
-    free(v->values);
+  mrealloc(v->values,0,0);
 }
 
 Token *vectok_item(vectok *v, size_t i) {
@@ -51,13 +62,14 @@ Token *vectok_item(vectok *v, size_t i) {
 
 void vectok_push(vectok *v, Token *t, size_t copysize) {
   if( v->size == v->capacity ) {
-    v->values = realloc(v->values,v->size*v->itemsize*2);
-    v->capacity *= 2;
+    size_t newcapacity = v->capacity?v->capacity*2:INITIAL_VEC_CAPACITY;
+    v->values = mrealloc(v->values,v->capacity*v->itemsize,newcapacity*v->itemsize);
+    v->capacity = newcapacity;
   }
+  memset(vectok_item(v,v->size),0,v->itemsize);
   if( t )
-    memcpy(vectok_item(v,v->size++),t,copysize);
-  else
-    memset(vectok_item(v,v->size++),0,v->itemsize);
+    memcpy(vectok_item(v,v->size),t,copysize);
+  v->size++;
 }
 
 Token *vectok_back(vectok *v) {
@@ -71,74 +83,12 @@ struct memnode {
 };
 typedef struct memnode memnode;
 
-struct tokenbank {
-  memnode *first;
-  memnode *last;
-};
-typedef struct tokenbank tokenbank;
-
 static memnode *create_memnode(size_t tokens) {
-  memnode *node = (memnode*)malloc(sizeof(memnode));
-  node->buf = (char*)malloc(tokens*TOKEN_SIZE);
-  memset(node->buf,0,tokens*TOKEN_SIZE);
+  memnode *node = (memnode*)mrealloc(0,0,sizeof(memnode));
+  node->buf = (char*)mrealloc(0,0,tokens*TOKEN_SIZE);
   node->tokens = tokens;
   node->next = 0;
   return node;
-}
-
-void tokenbank_init(tokenbank *tokbank) {
-  tokbank->first = tokbank->last = 0;
-}
-
-void tokenbank_destroy(tokenbank *tokbank) {
-  memnode *cur = tokbank->first;
-  while( cur ) {
-    memnode *next = cur->next;
-    free(cur->buf);
-    free(cur);
-    cur = next;
-  }
-}
-
-const char *tokenbank_strdup(tokenbank *tokbank, const char *str) {
-  if( ! str )
-    return 0;
-  memnode *node = tokbank->first;
-  size_t len = strlen(str)+2;
-  size_t blks = (len/TOKEN_SIZE)+((len%TOKEN_SIZE)?1:0);
-  while( node ) {
-    size_t cnt = 0;
-    for( size_t i = 0, n = node->tokens; i < n; ++i ) {
-      if( ! node->buf[i*TOKEN_SIZE] && ! node->buf[i*TOKEN_SIZE+1] )
-        ++cnt;
-      else
-        cnt = 0;
-      if( cnt == blks ) {
-        char *dst = node->buf+(i-cnt)*TOKEN_SIZE;
-        strcpy(dst,str);
-        dst[len-1]=1;
-        return dst;
-      }
-    }
-    node = node->next;
-  }
-  size_t reqblks = blks < TOKENS_PER_BLOCK ? TOKENS_PER_BLOCK : blks; 
-  node = create_memnode(reqblks);
-  if( tokbank->last ) {
-    tokbank->last->next = node;
-    tokbank->last = node;
-  } else
-    tokbank->first = tokbank->last = node;
-  char *dst = node->buf;
-  strcpy(dst,str);
-  dst[len-1]=1;
-  return dst;
-}
-
-void tokenbank_release(tokenbank *tokbank, const char *str) {
-  if( ! str || ! *str )
-    return;
-  memset((char*)str,0,strlen(str)+1);
 }
 
 bool findsymbol(int tok, const int *symbols, int nsymbols) {
@@ -148,163 +98,235 @@ bool findsymbol(int tok, const int *symbols, int nsymbols) {
   return false;
 }
 
-bool parse(tokenizer *toks, parseinfo *parseinfo, void *extra, int verbosity, writer *writer) {
+const int *nextaction(const int *firstaction) {
+  int action = firstaction[0];
+  if( action == ACTION_SHIFT ) {
+    int nsymbols = firstaction[2];
+    return firstaction+3+nsymbols;
+  } else if( action == ACTION_REDUCE || action == ACTION_STOP ) {
+    int nsymbols = firstaction[3];
+    return firstaction+4+nsymbols;
+  }
+  return firstaction;
+}
+
+const int *findmatchingaction(const int *firstaction, const int *lastaction, int tok, int *paction) {
+  while( firstaction != lastaction ) {
+    int action = firstaction[0];
+    *paction = action;
+    if( action == ACTION_SHIFT ) {
+      int shiftto = firstaction[1];
+      int nsymbols = firstaction[2];
+      if( findsymbol(tok,firstaction+3,nsymbols) )
+        break;
+      firstaction = nextaction(firstaction);
+    } else if( action == ACTION_REDUCE || action == ACTION_STOP ) {
+      int reduceby = firstaction[1];
+      int reducecount = firstaction[2];
+      int nsymbols = firstaction[3];
+      if( findsymbol(tok,firstaction+4,nsymbols) )
+        break;
+      firstaction = nextaction(firstaction);
+    }
+  }
+  return firstaction;
+}
+
+struct parsecontext {
+  tokenizer *toks;
+  parseinfo *parseinfo;
+  void *extra;
+  int verbosity;
+  int inputnum;
+  writer *writer;
   vecint states;
   vectok values;
   vecint states_inputqueue;
   vectok values_inputqueue;
-  tokenbank tokbank;
-  bool ret = true;
-  vecint_init(&states);
-  vectok_init(&values, parseinfo->itemsize);
-  vecint_init(&states_inputqueue);
-  vectok_init(&values_inputqueue, parseinfo->itemsize);
-  tokenbank_init(&tokbank);
-  vecint_push(&states,0);
-  vectok_push(&values,0,0);
-  int tok = -1;
-  int inputnum = 0;
+};
+typedef struct parsecontext parsecontext;
+
+void parsecontext_init(parsecontext *ctx, tokenizer *toks, parseinfo *parseinfo, void *extra, int verbosity, writer *writer) {
+  ctx->toks = toks;
+  ctx->parseinfo = parseinfo;
+  ctx->extra = extra;
+  ctx->verbosity = verbosity;
+  ctx->inputnum = 0;
+  ctx->writer = writer;
+  vecint_init(&ctx->states);
+  vectok_init(&ctx->values, parseinfo->itemsize);
+  vecint_init(&ctx->states_inputqueue);
+  vectok_init(&ctx->values_inputqueue, parseinfo->itemsize);
+  vecint_push(&ctx->states,0);
+  vectok_push(&ctx->values,0,0);
+}
+
+void parsecontext_destroy(parsecontext *ctx) {
+  vecint_destroy(&ctx->states);
+  vectok_destroy(&ctx->values);
+  vecint_destroy(&ctx->states_inputqueue);
+  vectok_destroy(&ctx->values_inputqueue);
+}
+
+static void printstatestack(vecint *states, writer *writer) {
+  writer->puts(writer,"lrstates = { ");
+  for( int i = 0; i < states->size; ++i )
+    writer->printf(writer,"%d ",states->values[i]);
+  writer->puts(writer,"}\n");
+}
+
+static void printreduceaction(tokenizer *toks,
+              parseinfo *parseinfo,
+              int reduceby,
+              int reducecount,
+              writer *writer) {
+  int reducebyp = reduceby-parseinfo->prod0;
+  writer->printf(writer,"reduce %d states by rule %d [", reducecount, reducebyp+1);
+  const int *pproduction = parseinfo->productions+parseinfo->productionstart[reducebyp];
+  int pcount = parseinfo->productionstart[reducebyp+1]-parseinfo->productionstart[reducebyp];
+  bool first = true;
+  while( pcount-- ) {
+    int s = *pproduction++;
+    writer->printf(writer, " %s", s >= parseinfo->start ? parseinfo->nonterminals[s-parseinfo->start] : tokenizer_tokid2str(toks,s));
+    if( first ) {
+      first = false;
+      writer->puts(writer," :");
+    }
+  }
+  writer->puts(writer," ] ? ... ");
+}
+
+static void printtoken(tokenizer *toks, int inputnum, int tok, const Token *t, writer *writer) {
+  if( t->s )
+    writer->printf(writer, "input (# %d) = %d %s = \"%s\" - %s(%d:%d)\n", inputnum, tok, tokenizer_tokid2str(toks,tok),t->s,t->pos.filename,t->pos.line,t->pos.col);
+}
+
+bool doaction(parsecontext *ctx,
+              const int *firstaction,
+              const char **err) {
+  int action = firstaction[0];
+  if( action == ACTION_SHIFT ) {
+    int shiftto = firstaction[1];
+    int nsymbols = firstaction[2];
+    if( ctx->verbosity )
+      ctx->writer->printf(ctx->writer,"shift to %d\n", shiftto);
+    vecint_push(&ctx->states,shiftto);
+    vectok_push(&ctx->values,vectok_back(&ctx->values_inputqueue),ctx->parseinfo->itemsize);
+    ctx->states_inputqueue.size -= 1;
+    ctx->values_inputqueue.size -= 1;
+    return true;
+  } else if( action == ACTION_REDUCE || action == ACTION_STOP ) {
+    int reduceby = firstaction[1];
+    int reducecount = firstaction[2];
+    int nsymbols = firstaction[3];
+    if( ctx->verbosity ) printreduceaction(ctx->toks,ctx->parseinfo,reduceby,reducecount,ctx->writer);
+    size_t inputpos = ctx->values.size-reducecount;
+    vectok_push(&ctx->values,0,0);
+    Token *inputs = vectok_item(&ctx->values,inputpos);
+    Token *tmpout = vectok_back(&ctx->values);
+    tmpout->tok = reduceby;
+    tmpout->pos = vectok_back(&ctx->values_inputqueue)->pos;
+    if( ctx->parseinfo->reduce(ctx->extra,reduceby,inputs,tmpout,err) ) {
+      if( ctx->verbosity )
+        ctx->writer->puts(ctx->writer,"YES\n");
+      for( int ir = 0; ir < reducecount; ++ir )
+        tokfree((char*)vectok_item(&ctx->values,inputpos+ir)->s);
+      vecint_push(&ctx->states_inputqueue,reduceby);
+      vectok_push(&ctx->values_inputqueue,tmpout,ctx->parseinfo->itemsize);
+      ctx->states.size = inputpos;
+      ctx->values.size = inputpos;
+      if( action == ACTION_STOP && ctx->verbosity )
+        ctx->writer->puts(ctx->writer,"ACCEPT\n");
+      return true;
+    } else {
+      if( ctx->verbosity )
+        ctx->writer->puts(ctx->writer,"NO\n");
+      ctx->values.size--;
+      return false;
+    }
+  }
+  return false;
+}
+
+static bool handleerror(parsecontext *ctx, int tok, const char *err) {
+  tokpos tpos = vectok_back(&ctx->values_inputqueue)->pos;
+  if( tok == ctx->parseinfo->parse_error ) {
+    // Input is error and no handler, keep popping states until we find a handler or run out.
+    if( ctx->verbosity )
+      ctx->writer->printf(ctx->writer,"during error handling, popping lr state %d\n", vecint_back(&ctx->states));
+    if( ctx->states.size > 1 )
+      ctx->states.size -= 1;
+    else {
+      if( ctx->verbosity ) {
+        tokpos *pos = &ctx->toks->pos;
+        ctx->writer->printf(ctx->writer,"%s(%d:%d) : parse error : ", tpos.filename, tpos.line, tpos.col);
+        if( err )
+          ctx->writer->puts(ctx->writer,err);
+        else
+          ctx->writer->printf(ctx->writer," parse error : input (# %d) = %d = \"%s\"", ctx->inputnum, tok, tokenizer_tokid2str(ctx->toks,tok));
+        ctx->writer->printf(ctx->writer,"  at %s(%d:%d)\n", pos->filename, pos->line, pos->col);
+      }
+      return false;
+    }
+  } else {
+    Token t_err = {ctx->parseinfo->parse_error,0,tpos};
+    vecint_push(&ctx->states_inputqueue,ctx->parseinfo->parse_error);
+    vectok_push(&ctx->values_inputqueue,&t_err,sizeof(Token));
+  }
+  return true;
+}
+
+static int curstate(parsecontext *ctx) {
+  if( ctx->verbosity ) printstatestack(&ctx->states, ctx->writer);
+  return vecint_back(&ctx->states);
+}
+
+static int nexttoken(parsecontext *ctx) {
+  if( ! ctx->states_inputqueue.size ) {
+    ctx->inputnum++;
+    int nxt = tokenizer_peek(ctx->toks);
+    Token t;
+    memset(&t, 0, sizeof(t));
+    t.tok = nxt;
+    t.s = tokdup(ctx->toks->tokstr);
+    t.pos = ctx->toks->pos;
+    tokenizer_discard(ctx->toks);
+    vecint_push(&ctx->states_inputqueue,nxt);
+    vectok_push(&ctx->values_inputqueue,&t,sizeof(Token));
+  }
+  int tok = vecint_back(&ctx->states_inputqueue);
+  if( ctx->verbosity ) printtoken(ctx->toks, ctx->inputnum, tok, vectok_back(&ctx->values_inputqueue), ctx->writer);
+  return tok;
+}
+
+bool parse(tokenizer *toks, parseinfo *parseinfo, void *extra, int verbosity, writer *writer) {
+  parsecontext ctx;
   const char *err = 0;
-  while( states.size > 0 ) {
-    if( verbosity ) {
-      writer->puts(writer,"lrstates = { ");
-      for( int i = 0; i < states.size; ++i )
-        writer->printf(writer,"%d ",states.values[i]);
-      writer->puts(writer,"}\n");
+  bool ret = true;
+  parsecontext_init(&ctx, toks, parseinfo, extra, verbosity, writer);
+  int tok = -1;
+  while( ctx.states.size > 0 ) {
+    int stateno = curstate(&ctx);
+    tok = nexttoken(&ctx);
+    const int *firstaction = parseinfo->actions+parseinfo->actionstart[stateno];
+    const int *lastaction = parseinfo->actions+parseinfo->actionstart[stateno+1];
+    int action = -1;
+    while( (firstaction = findmatchingaction(firstaction,lastaction,tok,&action)) != lastaction ) {
+      if( doaction(&ctx, firstaction, &err) )
+        break;
+      firstaction = nextaction(firstaction);
     }
-      int stateno = vecint_back(&states);
-      if( ! states_inputqueue.size ) {
-        inputnum += 1;
-        int nxt = tokenizer_peek(toks);
-        Token t = {nxt, tokenbank_strdup(&tokbank,toks->tokstr), toks->pos};
-        tokenizer_discard(toks);
-        vecint_push(&states_inputqueue,nxt);
-        vectok_push(&values_inputqueue,&t,sizeof(Token));
-      }
-      tok = vecint_back(&states_inputqueue);
-      if( verbosity ) {
-        const Token *t = vectok_back(&values_inputqueue);
-        if( t->s )
-          writer->printf(writer, "input (# %d) = %d = \"%s\" - %s(%d:%d)\n", inputnum, tok, tokenizer_tokid2str(toks,tok),t->s,t->pos.filename,t->pos.line,t->pos.col);
-      }
-      const int *firstaction = parseinfo->actions+parseinfo->actionstart[stateno];
-      const int *lastaction = parseinfo->actions+parseinfo->actionstart[stateno+1];
-      while( firstaction != lastaction ) {
-        const int *nextaction;
-        int action = firstaction[0];
-        bool didaction = false;
-        if( action == ACTION_SHIFT ) {
-          int shiftto = firstaction[1];
-          int nsymbols = firstaction[2];
-          nextaction = firstaction+3+nsymbols;
-          if( findsymbol(tok,firstaction+3,nsymbols) ) {
-            if( verbosity )
-              writer->printf(writer,"shift to %d\n", shiftto);
-            vecint_push(&states,shiftto);
-            vectok_push(&values,vectok_back(&values_inputqueue),parseinfo->itemsize);
-            states_inputqueue.size -= 1;
-            values_inputqueue.size -= 1;
-            didaction = true;
-          }
-        } else if( action == ACTION_REDUCE || action == ACTION_STOP ) {
-          int reduceby = firstaction[1];
-          int reducecount = firstaction[2];
-          int nsymbols = firstaction[3];
-          nextaction = firstaction+4+nsymbols;
-          if( findsymbol(tok,firstaction+4,nsymbols) ) {
-            Token *inputs = vectok_item(&values,values.size-reducecount);
-            if( verbosity ) {
-              int reducebyp = reduceby-parseinfo->prod0;
-              writer->printf(writer,"reduce %d states by rule %d [", reducecount, reducebyp+1);
-              const int *pproduction = parseinfo->productions+parseinfo->productionstart[reducebyp];
-              int pcount = parseinfo->productionstart[reducebyp+1]-parseinfo->productionstart[reducebyp];
-              bool first = true;
-              while( pcount-- ) {
-                int s = *pproduction++;
-                writer->puts(writer, " ");
-                writer->puts(writer,s >= parseinfo->start ? parseinfo->nonterminals[s-parseinfo->start] : toks->tokstr);
-                if( first ) {
-                  first = false;
-                  writer->puts(writer," :");
-                }
-              }
-              writer->puts(writer," ] ? ... ");
-            }
-            err = 0;
-#ifdef WIN32
-            char *v = (char*)_alloca(parseinfo->itemsize);
-#else
-	    char *v = char[parseinfo->itemsize];
-#endif
-            Token *output = (Token*)v;
-            memset(output,0,parseinfo->itemsize);
-            output->tok = reduceby;
-            output->pos = vectok_back(&values_inputqueue)->pos;
-            if( parseinfo->reduce(extra,reduceby,inputs,output,&err) ) {
-              if( verbosity )
-                writer->puts(writer,"YES\n");
-              for( int ir = 0; ir < reducecount; ++ir )
-                tokenbank_release(&tokbank,inputs[ir].s);
-              states.size -= reducecount;
-              values.size -= reducecount;
-              vecint_push(&states_inputqueue,reduceby);
-              vectok_push(&values_inputqueue,output,parseinfo->itemsize);
-              didaction = true;
-            } else {
-              if( verbosity )
-                writer->puts(writer,"NO\n");
-            }
-          }
-          if( action == ACTION_STOP && didaction ) {
-            if( verbosity )
-              writer->puts(writer,"ACCEPT\n");
-            ret = true;
-            goto cleanup;
-          }
-        }
-        if( didaction )
-          break;
-        firstaction = nextaction;
-      }
-      if( firstaction == lastaction ) {
-        if( tok == parseinfo->parse_error ) {
-          // Input is error and no handler, keep popping states until we find a handler or run out.
-          if( verbosity )
-            writer->printf(writer,"during error handling, popping lr state %d\n", vecint_back(&states));
-          states.size--;
-          if( states.size == 0 ) {
-            if( verbosity )
-              writer->puts(writer,"NO ERROR HANDLER AVAILABLE, FAIL\n");
-            ret = false;
-            goto cleanup;
-          }
-        }
-        else {
-          const Token *t = vectok_back(&values_inputqueue);
-          // report the error for verbose output, but add error to the input, hoping for a handler, and carry on
-          if( verbosity ) {
-            tokpos *pos = &toks->pos;
-            writer->printf(writer,"%s(%d:%d) : parse error : ", t->pos.filename, t->pos.line, t->pos.col);
-            if( err )
-              writer->puts(writer,err);
-            else
-              writer->printf(writer," parse error : input (# %d) = %d = \"%s\"", inputnum, tok, tokenizer_tokid2str(toks,tok));
-            while( pos ) {
-              writer->printf(writer,"  at %s(%d:%d)\n", pos->filename, pos->line, pos->col);
-            }
-          }
-          Token t_err = {parseinfo->parse_error,0,t->pos};
-          vecint_push(&states_inputqueue,parseinfo->parse_error);
-          vectok_push(&values_inputqueue,&t_err,sizeof(Token));
-        }
-      }
+    if( firstaction != lastaction ) {
+      if( action == ACTION_STOP )
+        break;
+      continue;
     }
-cleanup:
-  vecint_destroy(&states);
-  vectok_destroy(&values);
-  vecint_destroy(&states_inputqueue);
-  vectok_destroy(&values_inputqueue);
-  tokenbank_destroy(&tokbank);
+    if( ! handleerror(&ctx, tok, err) ) {
+      ret = false;
+      break;
+    }
+  }
+  parsecontext_destroy(&ctx);
   return ret;
 }
 
