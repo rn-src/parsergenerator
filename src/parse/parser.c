@@ -1146,6 +1146,13 @@ static void ParseAction(Tokenizer *toks, ParserDef *parser, VectorAny /*<ActionI
       item.m_dollarnum = atoi(String_Chars(&s)+1);
       VectorAny_push_back(action,&item);
       Scope_Pop();
+    } else if( toks->peek(toks) == PARSERTOK_DOLLAREXTRA ) {
+      ActionItem item;
+      Scope_Push();
+      ActionItem_init(&item,true);
+      item.m_actiontype = ActionTypeDollarExtra;
+      VectorAny_push_back(action,&item);
+      Scope_Pop();
     } else {
       ActionItem item;
       Scope_Push();

@@ -35,6 +35,7 @@ push b  LBRACE     /\{/
 - section b
       = SQSTR    /'([^']|\\.|\\x[[:xdigit:]]+)*'/
       = DQSTR    /"([^"]|\\.|\\x[[:xdigit:]]+)*"/
+        DOLLAREXTRA  /\$extra/
         DOLLARDOLLAR /\$\$/
         DOLLARNUMBER /\$[[:digit:]]+/
         SRC      /[^\{\}\"\'\$]+|{SQSTR}|{DQSTR}|\$/
