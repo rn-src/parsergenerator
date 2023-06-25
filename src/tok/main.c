@@ -31,12 +31,14 @@ int main(int argc, char *argv[])
     
     FILE *fout = 0;
     char *foutname = (char*)malloc(strlen(fname)+3);
-    strcpy(foutname,fname);
-    char *lastdot = strrchr(foutname,'.');
+    char *name = (char*)malloc(strlen(fname)+3);
+    strcpy(name,fname);
+    char *lastdot = strrchr(name,'.');
     while( *lastdot ) {
       lastdot[0] = lastdot[1];
       ++lastdot;
     }
+    strcpy(foutname,name);
     if( py )
       strcat(foutname,".py");
     else
@@ -56,7 +58,7 @@ int main(int argc, char *argv[])
         fclose(fin);
         continue;
       }
-      OutputTokenizerSource(fout,dfa,prefix,py,minimal);
+      OutputTokenizerSource(fout,dfa,name,prefix,py,minimal);
     } else if( getParseError((const ParseError**)&pe) ) {
       fprintf(stderr, "Parse Error %s(%d:%d) : %s\n", fname, pe->line, pe->col, String_Chars(&pe->err));
       clearParseError();

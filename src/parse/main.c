@@ -63,6 +63,18 @@ void parseArgs(int argc, char *argv[], int *pverbosity, int *ptimed, LanguageOut
     *pfname = argv[i];
     break;
   }
+  options->name = "";
+  if( *pfname ) {
+    char *name = (char*)malloc(strlen(*pfname)+1);
+    strcpy(name,*pfname);
+    char *lastdot = strrchr(name,'.');
+    while( *lastdot ) {
+      lastdot[0] = lastdot[1];
+      ++lastdot;
+    }
+    options->name = name;
+  }
+
   // get the lexer name, if not provided
   if (!options->m_lexerName && *pfname) {
     const char *fname = *pfname;

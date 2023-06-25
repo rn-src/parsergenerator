@@ -32,6 +32,8 @@ struct LanguageOutputter {
 
 void CLanguageOutputter_outTop(const LanguageOutputter* This, const LanguageOutputOptions* outputOptions, FILE* out) {
   ImportAs *extraImports = outputOptions->m_extraImports;
+  fprintf(out, "#ifndef __%s_h\n", outputOptions->name);
+  fprintf(out, "#define __%s_h\n", outputOptions->name);
   fputs("#include \"lrparse.h\"\n", out);
   fprintf(out, "#include \"%s.h\"\n", outputOptions->m_lexerName);
   while( extraImports->import ) {
@@ -57,6 +59,7 @@ void CLanguageOutputter_outBottom(const LanguageOutputter* This, const LanguageO
   fputs("  sizeof(stack_t),\n", out);
   fputs("  (reducefnct)reduce,\n", out);
   fputs("};\n", out);
+  fprintf(out, "#endif __%s_h\n", outputOptions->name);
 }
 void CLanguageOutputter_outTypeDecl(const LanguageOutputter* This, FILE* out, const char* type, const char* name) {
   fputs("typedef ", out); fputs(type, out); fputc(' ', out); fputs(name, out);

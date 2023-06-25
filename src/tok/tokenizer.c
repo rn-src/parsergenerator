@@ -1542,12 +1542,15 @@ struct LanguageOutputter {
   void (*outChar)(const LanguageOutputter *This, FILE *out, int c);
   void (*outInt)(const LanguageOutputter *This, FILE *out, int i);
   const char *prefix;
+  const char *name;
   bool minimal;
 };
 
 void CLanguageOutputter_outTop(const LanguageOutputter* This, FILE* out) {
   if( This->minimal )
     return;
+  fprintf(out, "#ifndef __%s_h\n", This->name);
+  fprintf(out, "#define __%s_h\n", This->name);
   fputs("#include \"tokenizer.h\"\n\n", out);
 }
 void CLanguageOutputter_outBottom(const LanguageOutputter* This, FILE* out) {
@@ -1564,6 +1567,7 @@ void CLanguageOutputter_outBottom(const LanguageOutputter* This, FILE* out) {
   fprintf(out, "  %stransitionOffset,\n", This->prefix);
   fprintf(out, "  %stokens\n", This->prefix);
   fputs("};\n", out);
+  fprintf(out, "#endif // __%s_h\n", This->name);
 }
 void CLanguageOutputter_outDecl(const LanguageOutputter *This, FILE *out, const char *type, const char *name) {
   fprintf(out, "%s %s%s", type, This->prefix, name);
@@ -1808,8 +1812,9 @@ static void OutputDfaSource(FILE *out, const Nfa *dfa, const LanguageOutputter *
   Scope_Pop();
 }
 
-void OutputTokenizerSource(FILE *out, const Nfa *dfa, const char *prefix, bool py, bool minimal) {
+void OutputTokenizerSource(FILE *out, const Nfa *dfa, const char *name, const char *prefix, bool py, bool minimal) {
   LanguageOutputter *outputer = py ? &PyLanguageOutputter : &CLanguageOutputter;
+  outputer->name = name;
   outputer->prefix = prefix?prefix:"";
   outputer->minimal = minimal;
   OutputDfaSource(out,dfa,outputer);

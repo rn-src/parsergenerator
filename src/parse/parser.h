@@ -439,6 +439,7 @@ struct LanguageOutputOptions {
   OutputLanguage m_outputLanguage;
   const char *m_lexerName;
   ImportAs *m_extraImports;
+  const char *name;
 };
 
 void ParseParser(TokBuf *tokbuf, ParserDef *parser, FILE *vout, int verbosity);
