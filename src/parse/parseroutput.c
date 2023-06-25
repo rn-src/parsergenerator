@@ -59,7 +59,7 @@ void CLanguageOutputter_outBottom(const LanguageOutputter* This, const LanguageO
   fputs("  sizeof(stack_t),\n", out);
   fputs("  (reducefnct)reduce,\n", out);
   fputs("};\n", out);
-  fprintf(out, "#endif __%s_h\n", outputOptions->name);
+  fprintf(out, "#endif // __%s_h\n", outputOptions->name);
 }
 void CLanguageOutputter_outTypeDecl(const LanguageOutputter* This, FILE* out, const char* type, const char* name) {
   fputs("typedef ", out); fputs(type, out); fputc(' ', out); fputs(name, out);
