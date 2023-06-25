@@ -275,10 +275,10 @@ static int nexttoken(parsecontext *ctx) {
   return tok;
 }
 
-bool parse(tokenizer *toks, parseinfo *parseinfo, void *extra, int verbosity, writer *writer) {
+Token *parse(tokenizer *toks, parseinfo *parseinfo, void *extra, int verbosity, writer *writer) {
   parsecontext ctx;
   const char *err = 0;
-  bool ret = true;
+  Token *ret = 0;
   parsecontext_init(&ctx, toks, parseinfo, extra, verbosity, writer);
   int tok = -1;
   while( ctx.states.size > 0 ) {
@@ -293,12 +293,13 @@ bool parse(tokenizer *toks, parseinfo *parseinfo, void *extra, int verbosity, wr
       firstaction = nextaction(firstaction);
     }
     if( firstaction != lastaction ) {
-      if( action == ACTION_STOP )
-        break;
-      continue;
+      if( action != ACTION_STOP )
+        continue;
+      ret = (Token*)mrealloc(0,0,parseinfo->itemsize);
+      memcpy(ret,vectok_back(&ctx.values_inputqueue),parseinfo->itemsize);
+      break;
     }
     if( ! handleerror(&ctx, tok, err) ) {
-      ret = false;
       break;
     }
   }

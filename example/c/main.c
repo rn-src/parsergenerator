@@ -25,20 +25,25 @@ int main(int argc, char **argv) {
     ++i;
     verbosity++;
   }
-  rdr.rdr.name = "<stdin>";
-  rdr.f = stdin;
-  rdr.close = false;
   if( i < argc ) {
     fname = argv[i];
     rdr.rdr.name = fname;
-    rdr.rdr.read = (readfnct)filereader_read;
     rdr.f = fopen(fname, "r");
     rdr.close = true;
-    if( ! rdr.f )
+    if( ! rdr.f ) {
+      fprintf(stderr, "Unable to open %s", fname);
       return 1;
+    }
+  } else {
+    rdr.rdr.name = "<stdin>";
+    rdr.f = stdin;
+    rdr.close = false;
   }
+  rdr.rdr.read = (readfnct)filereader_read;
   tokenizer_init(&tok, &tkinfo, &rdr.rdr);
-  if( ! parse(&tok,&prsinfo,&extra,verbosity,stderr_writer()) )
+  writer *writer = stderr_writer();
+  stack_t *final = 0;
+  if( ! (final = (stack_t*)parse(&tok,&prsinfo,&extra,verbosity,writer)) )
     ret = 1;
   printf("%f", extra);
   tokenizer_destroy(&tok);

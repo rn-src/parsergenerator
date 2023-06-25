@@ -33,7 +33,7 @@ struct writer {
 };
 typedef struct writer writer;
 
-bool parse(tokenizer *tokenizer, parseinfo *parseinfo, void *extra, int verbosity, writer *out);
+Token *parse(tokenizer *tokenizer, parseinfo *parseinfo, void *extra, int verbosity, writer *out);
 writer *stderr_writer();
 
 #endif /* __lrparse_h */
