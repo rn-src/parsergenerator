@@ -57,7 +57,7 @@ struct charbuf {
   char *buf;
   size_t size;
   size_t capacity;
-}token;
+};
 typedef struct charbuf charbuf;
 
 void charbuf_init(charbuf *buf, size_t initial_capacity);

@@ -76,21 +76,6 @@ Token *vectok_back(vectok *v) {
   return (Token*)((char*)v->values+v->itemsize*(v->size-1));
 }
 
-struct memnode {
-  char *buf;
-  size_t tokens;
-  struct memnode *next;
-};
-typedef struct memnode memnode;
-
-static memnode *create_memnode(size_t tokens) {
-  memnode *node = (memnode*)mrealloc(0,0,sizeof(memnode));
-  node->buf = (char*)mrealloc(0,0,tokens*TOKEN_SIZE);
-  node->tokens = tokens;
-  node->next = 0;
-  return node;
-}
-
 bool findsymbol(int tok, const int *symbols, int nsymbols) {
   for( int i = 0; i < nsymbols; ++i )
     if( symbols[i] == tok )
@@ -115,14 +100,11 @@ const int *findmatchingaction(const int *firstaction, const int *lastaction, int
     int action = firstaction[0];
     *paction = action;
     if( action == ACTION_SHIFT ) {
-      int shiftto = firstaction[1];
       int nsymbols = firstaction[2];
       if( findsymbol(tok,firstaction+3,nsymbols) )
         break;
       firstaction = nextaction(firstaction);
     } else if( action == ACTION_REDUCE || action == ACTION_STOP ) {
-      int reduceby = firstaction[1];
-      int reducecount = firstaction[2];
       int nsymbols = firstaction[3];
       if( findsymbol(tok,firstaction+4,nsymbols) )
         break;
@@ -207,9 +189,7 @@ bool doaction(parsecontext *ctx,
   int action = firstaction[0];
   if( action == ACTION_SHIFT ) {
     int shiftto = firstaction[1];
-    int nsymbols = firstaction[2];
-    if( ctx->verbosity )
-      ctx->writer->printf(ctx->writer,"shift to %d\n", shiftto);
+    if( ctx->verbosity ) ctx->writer->printf(ctx->writer,"shift to %d\n", shiftto);
     vecint_push(&ctx->states,shiftto);
     vectok_push(&ctx->values,vectok_back(&ctx->values_inputqueue),ctx->parseinfo->itemsize);
     ctx->states_inputqueue.size -= 1;
@@ -218,7 +198,6 @@ bool doaction(parsecontext *ctx,
   } else if( action == ACTION_REDUCE || action == ACTION_STOP ) {
     int reduceby = firstaction[1];
     int reducecount = firstaction[2];
-    int nsymbols = firstaction[3];
     if( ctx->verbosity ) printreduceaction(ctx->toks,ctx->parseinfo,reduceby,reducecount,ctx->writer);
     size_t inputpos = ctx->values.size-reducecount;
     vectok_push(&ctx->values,0,0);
@@ -227,20 +206,17 @@ bool doaction(parsecontext *ctx,
     tmpout->tok = reduceby;
     tmpout->pos = vectok_back(&ctx->values_inputqueue)->pos;
     if( ctx->parseinfo->reduce(ctx->extra,reduceby,inputs,tmpout,err) ) {
-      if( ctx->verbosity )
-        ctx->writer->puts(ctx->writer,"YES\n");
+      if( ctx->verbosity ) ctx->writer->puts(ctx->writer,"YES\n");
       for( int ir = 0; ir < reducecount; ++ir )
         tokfree((char*)vectok_item(&ctx->values,inputpos+ir)->s);
       vecint_push(&ctx->states_inputqueue,reduceby);
       vectok_push(&ctx->values_inputqueue,tmpout,ctx->parseinfo->itemsize);
       ctx->states.size = inputpos;
       ctx->values.size = inputpos;
-      if( action == ACTION_STOP && ctx->verbosity )
-        ctx->writer->puts(ctx->writer,"ACCEPT\n");
+      if( action == ACTION_STOP && ctx->verbosity ) ctx->writer->puts(ctx->writer,"ACCEPT\n");
       return true;
     } else {
-      if( ctx->verbosity )
-        ctx->writer->puts(ctx->writer,"NO\n");
+      if( ctx->verbosity ) ctx->writer->puts(ctx->writer,"NO\n");
       ctx->values.size--;
       return false;
     }

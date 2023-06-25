@@ -184,26 +184,20 @@ static int peekc(tokenizer *tokenizer, size_t offset, size_t *bytes) {
     return buf[0];
   }
   if((buf[0] & 0xe0) == 0xc0) {
-    if(nreadable < 2 )
-      goto errn;
-    if( (buf[1]&0xc0) != 0x80)
-      goto err1;
+    if(nreadable < 2 ) goto errn;
+    if( (buf[1]&0xc0) != 0x80) goto err1;
     *bytes = 2;
     return ((buf[0] & 0x1f) << 6) | (buf[1] & 0x3f);
   }
   if ((buf[0] & 0xf0) == 0xe0) {
-    if (nreadable < 3)
-      goto errn;
-    if ((buf[1] & 0xc0) != 0x80 || (buf[2] & 0xc0) != 0x80)
-      goto err1;
+    if (nreadable < 3) goto errn;
+    if ((buf[1] & 0xc0) != 0x80 || (buf[2] & 0xc0) != 0x80) goto err1;
     *bytes= 3;
     return ((buf[0] & 0x1f) << 12) | ((buf[1] & 0x3f) << 6) | (buf[2] & 0x3f);
   }
   if((buf[0] & 0xf8) == 0xf0) {
-    if (nreadable < 4)
-      goto errn;
-    if((buf[1] & 0xc0) != 0x80 || (buf[2] & 0xc0) != 0x80 || (buf[3] & 0xc0) != 0x80)
-      goto err1;
+    if (nreadable < 4) goto errn;
+    if((buf[1] & 0xc0) != 0x80 || (buf[2] & 0xc0) != 0x80 || (buf[3] & 0xc0) != 0x80) goto err1;
     *bytes = 4;
     return ((buf[0] & 0x1f) << 18) | ((buf[1] & 0x3f) << 12) | ((buf[2] & 0x3f) << 6) | (buf[3] & 0x3f);
   }
@@ -216,7 +210,7 @@ errn: // not enough bytes to make full character
 }
 
 static void chomp(tokenizer* tokenizer, size_t n) {
-  tokenizer->bufoffset = (tokenizer->bufoffset += n) % tokenizer->readbuf.size;
+  tokenizer->bufoffset = (tokenizer->bufoffset + n) % tokenizer->readbuf.size;
 }
 
 int tokenizer_peek(tokenizer *tokenizer) {
@@ -227,7 +221,7 @@ int tokenizer_peek(tokenizer *tokenizer) {
     getanothertok = false;
     int cursection = vecint_back(&tokenizer->secstack);
     int state = nextstate(tokenizer->info,0,cursection);
-    int tok = -1, bytes = 0;
+    int tok = -1;
     size_t offset = 0, used = 0;
     toksize cursize = {0,0,0,0};
     toksize toksize = {0,0,0,0};

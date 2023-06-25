@@ -4,7 +4,7 @@ CFLAGS=-I. -g
 all: example
 
 example: $(OBJ) lrparse.h tokenizer.h exampleG.h exampleL.h
-	gcc -o $@ $^ $(CFLAGS)
+	gcc -o $@ $(OBJ) $(CFLAGS)
 
 %.o: %.c lrparse.h tokenizer.h exampleG.h exampleL.h
 	gcc -c -o $@ $< $(CFLAGS)
