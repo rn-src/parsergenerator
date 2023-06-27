@@ -76,7 +76,7 @@ size_t charbuf_putc_utf8(charbuf *buf, int c) {
   char *dst = buf->buf+buf->size;
   if( c < 0 || c >= 0x0010ffff)
     c = REPLACEMENT_CHARACTER;
-  if (c >= 0 && c <= 0x0077) {
+  if (c >= 0 && c <= 0x7f) {
     *dst++ = c;
   } else {
     if (c >= 0x0080 && c <= 0x07ff) {
