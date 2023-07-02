@@ -1,0 +1,96 @@
+from typing import Any,Sequence,Optional,Callable,IO
+from lrparse import ACTION_SHIFT,ACTION_REDUCE,ACTION_STOP
+from tok import Token
+from exampleL import TIMES,DIV,MINUS,PLUS,LPAREN,RPAREN,NUMBER
+START: int = 8
+EXTRA: int = 9
+PARSE_ERROR: int = 10
+e: int = 11
+PROD_0: int = 12
+PROD_1: int = 13
+PROD_2: int = 14
+PROD_3: int = 15
+PROD_4: int = 16
+PROD_5: int = 17
+PROD_6: int = 18
+PROD_7: int = 19
+PROD_8: int = 20
+nstates: int = 20
+actions: Sequence[int] = (
+# state 0 
+ACTION_SHIFT,1,1,MINUS,ACTION_SHIFT,2,1,PLUS,ACTION_SHIFT,3,1,LPAREN,ACTION_SHIFT,4,1,NUMBER,ACTION_SHIFT,5,6,PROD_1,PROD_2,PROD_3,PROD_4,PROD_5,PROD_8,ACTION_SHIFT,6,2,PROD_6,PROD_7
+# state 1 
+,ACTION_SHIFT,1,1,MINUS,ACTION_SHIFT,2,1,PLUS,ACTION_SHIFT,3,1,LPAREN,ACTION_SHIFT,4,1,NUMBER,ACTION_SHIFT,7,4,PROD_1,PROD_2,PROD_3,PROD_8
+# state 2 
+,ACTION_SHIFT,1,1,MINUS,ACTION_SHIFT,2,1,PLUS,ACTION_SHIFT,3,1,LPAREN,ACTION_SHIFT,4,1,NUMBER,ACTION_SHIFT,8,4,PROD_1,PROD_2,PROD_3,PROD_8
+# state 3 
+,ACTION_SHIFT,1,1,MINUS,ACTION_SHIFT,2,1,PLUS,ACTION_SHIFT,3,1,LPAREN,ACTION_SHIFT,4,1,NUMBER,ACTION_SHIFT,9,6,PROD_1,PROD_2,PROD_3,PROD_4,PROD_5,PROD_8,ACTION_SHIFT,10,2,PROD_6,PROD_7
+# state 4 
+,ACTION_REDUCE,PROD_8,1,6,TIMES,DIV,MINUS,PLUS,RPAREN,-1
+# state 5 
+,ACTION_SHIFT,11,1,TIMES,ACTION_SHIFT,12,1,DIV,ACTION_SHIFT,13,1,MINUS,ACTION_SHIFT,14,1,PLUS,ACTION_STOP,PROD_0,1,1,-1
+# state 6 
+,ACTION_SHIFT,13,1,MINUS,ACTION_SHIFT,14,1,PLUS,ACTION_STOP,PROD_0,1,1,-1
+# state 7 
+,ACTION_REDUCE,PROD_3,2,6,TIMES,DIV,MINUS,PLUS,RPAREN,-1
+# state 8 
+,ACTION_REDUCE,PROD_2,2,6,TIMES,DIV,MINUS,PLUS,RPAREN,-1
+# state 9 
+,ACTION_SHIFT,11,1,TIMES,ACTION_SHIFT,12,1,DIV,ACTION_SHIFT,13,1,MINUS,ACTION_SHIFT,14,1,PLUS,ACTION_SHIFT,15,1,RPAREN
+# state 10 
+,ACTION_SHIFT,13,1,MINUS,ACTION_SHIFT,14,1,PLUS,ACTION_SHIFT,15,1,RPAREN
+# state 11 
+,ACTION_SHIFT,1,1,MINUS,ACTION_SHIFT,2,1,PLUS,ACTION_SHIFT,3,1,LPAREN,ACTION_SHIFT,4,1,NUMBER,ACTION_SHIFT,16,4,PROD_1,PROD_2,PROD_3,PROD_8
+# state 12 
+,ACTION_SHIFT,1,1,MINUS,ACTION_SHIFT,2,1,PLUS,ACTION_SHIFT,3,1,LPAREN,ACTION_SHIFT,4,1,NUMBER,ACTION_SHIFT,17,4,PROD_1,PROD_2,PROD_3,PROD_8
+# state 13 
+,ACTION_SHIFT,1,1,MINUS,ACTION_SHIFT,2,1,PLUS,ACTION_SHIFT,3,1,LPAREN,ACTION_SHIFT,4,1,NUMBER,ACTION_SHIFT,18,6,PROD_1,PROD_2,PROD_3,PROD_4,PROD_5,PROD_8
+# state 14 
+,ACTION_SHIFT,1,1,MINUS,ACTION_SHIFT,2,1,PLUS,ACTION_SHIFT,3,1,LPAREN,ACTION_SHIFT,4,1,NUMBER,ACTION_SHIFT,19,6,PROD_1,PROD_2,PROD_3,PROD_4,PROD_5,PROD_8
+# state 15 
+,ACTION_REDUCE,PROD_1,3,6,TIMES,DIV,MINUS,PLUS,RPAREN,-1
+# state 16 
+,ACTION_REDUCE,PROD_4,3,6,TIMES,DIV,MINUS,PLUS,RPAREN,-1
+# state 17 
+,ACTION_REDUCE,PROD_5,3,6,TIMES,DIV,MINUS,PLUS,RPAREN,-1
+# state 18 
+,ACTION_SHIFT,11,1,TIMES,ACTION_SHIFT,12,1,DIV,ACTION_REDUCE,PROD_7,3,4,MINUS,PLUS,RPAREN,-1
+# state 19 
+,ACTION_SHIFT,11,1,TIMES,ACTION_SHIFT,12,1,DIV,ACTION_REDUCE,PROD_6,3,4,MINUS,PLUS,RPAREN,-1)
+actionstart: Sequence[int] = (0,30,53,76,106,116,137,150,160,170,190,202,225,248,273,298,308,318,328,344,360)
+nproductions: int = 9
+productions: Sequence[int] = (START,e,e,LPAREN,e,RPAREN,e,PLUS,e,e,MINUS,e,e,e,TIMES,e,e,e,DIV,e,e,e,PLUS,e,e,e,MINUS,e,e,NUMBER)
+productionstart: Sequence[int] = (0,2,6,9,12,16,20,24,28,30)
+nonterminals: Sequence[str] = ('START','EXTRA','PARSE_ERROR','e')
+extra_t = list[float]
+class stack_t:
+  __slots__ = ('tok','b')
+  def __init__(self) -> None:
+    self.tok: Token
+    self.b: float
+
+def reduce(extra: extra_t, productionidx: int, inputs: Sequence[stack_t], output: stack_t, err: IO) -> bool:
+  match productionidx:
+    case 12: # PROD_0:
+       extra.append(inputs[0].b); 
+    case 13: # PROD_1:
+       output.b = inputs[1].b 
+    case 14: # PROD_2:
+       output.b = inputs[1].b 
+    case 15: # PROD_3:
+       output.b = -inputs[1].b 
+    case 16: # PROD_4:
+       output.b = inputs[0].b * inputs[2].b 
+    case 17: # PROD_5:
+       output.b = inputs[0].b / inputs[2].b 
+    case 18: # PROD_6:
+       output.b = inputs[0].b + inputs[2].b 
+    case 19: # PROD_7:
+       output.b = inputs[0].b - inputs[2].b 
+    case 20: # PROD_8:
+       output.b = float(inputs[0].tok.s) 
+    case _:
+      pass
+  return True
+
+

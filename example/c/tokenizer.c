@@ -124,15 +124,32 @@ void tokenizer_destroy(tokenizer *tokenizer) {
   vecint_destroy(&tokenizer->secstack);
 }
 
+static unsigned int decodeuint(const unsigned char *c, const unsigned char **pnextc) {
+  return 0;
+}
+
+static int tokstate(tokinfo *info, int state) {
+  const unsigned char *cur = info->stateinfo+info->stateinfo_offset[state];
+  const unsigned char *end = info->stateinfo+info->stateinfo_offset[state+1];
+  if( cur < end )
+    return decodeuint(cur,&cur)-1;
+  return -1;
+}
+
 static int nextstate(tokinfo *info, int state, int c) {
-  const int *cur = info->transitions+info->transitionOffset[state];
-  const int *end = info->transitions+info->transitionOffset[state+1];
+  const unsigned char *cur = info->stateinfo+info->stateinfo_offset[state];
+  const unsigned char *end = info->stateinfo+info->stateinfo_offset[state+1];
+  if( cur < end )
+    decodeuint(cur,&cur); // tok
   while( cur != end ) {
-    int to = *cur++;
-    int cnt = *cur++;
+    int to = decodeuint(cur,&cur);
+    int cnt = decodeuint(cur,&cur);
+    int last = 0;
     for( int i = 0; i < cnt; ++i ) {
-      int low = *cur++;
-      int high = *cur++;
+      int low = decodeuint(cur,&cur)+last;
+      last = low;
+      int high = decodeuint(cur,&cur)+last;
+      last = high;
       if( c >=low && c <= high )
         return to;
     }
@@ -220,13 +237,14 @@ int tokenizer_peek(tokenizer *tokenizer) {
   while( getanothertok ) {
     getanothertok = false;
     int cursection = vecint_back(&tokenizer->secstack);
-    int state = nextstate(tokenizer->info,0,cursection);
     int tok = -1;
+    int t = -1;
+    int state = nextstate(tokenizer->info,0,cursection);
     size_t offset = 0, used = 0;
     toksize cursize = {0,0,0,0};
     toksize toksize = {0,0,0,0};
     while( state != -1 ) {
-      int t = tokenizer->info->tokens[state];
+      t = tokstate(tokenizer->info,t);
       if( t != -1 ) {
         tok = t;
         toksize = cursize;
@@ -256,16 +274,23 @@ int tokenizer_peek(tokenizer *tokenizer) {
     }
     chomp(tokenizer,offset);
     charbuf_putc_utf8(&tokenizer->tokstrbuf, 0);
-    const int *actions = tokenizer->info->tokenaction+(tok*tokenizer->info->sectionCount*2)+cursection*2;
-    int action = actions[0];
-    int actionarg = actions[1];
-    if( action == 1 )
-      vecint_push(&tokenizer->secstack,actionarg);
-    else if( action == 2 )
-      tokenizer->secstack.size--;
-    else if( action == 3 )
-      tokenizer->secstack.values[tokenizer->secstack.size-1] = actionarg;
-    if( tokenizer->info->isws[tok] ) {
+    const unsigned char *startsection = tokenizer->info->sectioninfo+tokenizer->info->sectioninfo_offset[cursection];
+    const unsigned char *endsection = tokenizer->info->sectioninfo+tokenizer->info->sectioninfo_offset[cursection+1];
+    while( startsection < endsection ) {
+      int actiontok = decodeuint(startsection,&startsection);
+      int action = decodeuint(startsection,&startsection);
+      int actionarg = decodeuint(startsection,&startsection);
+      if( actiontok == tok ) {
+        if( action == 1 )
+          vecint_push(&tokenizer->secstack,actionarg);
+        else if( action == 2 )
+          tokenizer->secstack.size--;
+        else if( action == 3 )
+          tokenizer->secstack.values[tokenizer->secstack.size-1] = actionarg;
+        break;
+      }
+    }
+    if( tokenizer->info->isws[tok/8]&(1<<(tok%8)) ) {
       getanothertok = true;
       continue;
     }

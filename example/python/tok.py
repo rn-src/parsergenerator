@@ -8,17 +8,17 @@ MAX_BUFFER_ACCUM: int = 128
 BUFFER_TRIM_KEEP: int = 16
 
 class TokenInfo:
-  __slots__ = ('tokenCount','sectionCount','tokenaction','tokenstr','isws','stateCount','transitions','transitionOffset','tokens')
+  __slots__ = ('tokenCount','sectionCount','sectioninfo','sectioninfo_offset','tokenstr','isws','stateCount','stateinfo','stateinfo_offset')
   def __init__(self, ns: Any):
     self.tokenCount: int = ns.tokenCount
     self.sectionCount: int = ns.sectionCount
-    self.tokenaction: Sequence[int] = ns.tokenaction
+    self.sectioninfo: Sequence[int] = ns.sectioninfo
+    self.sectioninfo_offset: Sequence[int] = ns.sectioninfo_offset
     self.tokenstr: Sequence[str] = ns.tokenstr
     self.isws: Sequence[bool] = ns.isws
     self.stateCount: int = ns.stateCount
-    self.transitions: Sequence[int] = ns.transitions
-    self.transitionOffset: Sequence[int] = ns.transitionOffset
-    self.tokens: Sequence[int] = ns.tokens
+    self.stateinfo: Sequence[int] = ns.stateinfo
+    self.stateinfo_offset: Sequence[int] = ns.stateinfo_offset
 
 class ParsePos:
   __slots__ = ('filename','line','col')
@@ -260,25 +260,34 @@ class TokBufTokenizer:
 
   def getTok(self, state: int) -> int:
     """get the token considered accepted by the state, returns -1 for none"""
-    return self.tokinfo.tokens[state]
+    curstateinfo: int = self.tokinfo.stateinfo_offset[state]
+    endstateinfo: int = self.tokinfo.stateinfo_offset[state+1]
+    if curstateinfo < endstateinfo:
+      return self.tokinfo.stateinfo[curstateinfo]-1
+    return -1
 
   def isWs(self, tok: int) -> bool:
     """Let the caller know if the provided token is considered whitespace"""
-    return self.tokinfo.isws[tok]
+    return self.tokinfo.isws[tok//8]&(1<<(tok%8))!=0
 
   def nextState(self, state: int, c: int) -> int:
     """Given a state, and a character, find the transition and return the next state, or -1 for none"""
-    curTransition: int = self.tokinfo.transitionOffset[state]
-    endTransition: int = self.tokinfo.transitionOffset[state+1]
-    while curTransition < endTransition:
-      to: int = self.tokinfo.transitions[curTransition]
-      pairCount: int = self.tokinfo.transitions[curTransition+1]
+    curstateinfo: int = self.tokinfo.stateinfo_offset[state]
+    endstateinfo: int = self.tokinfo.stateinfo_offset[state+1]
+    if curstateinfo < endstateinfo:
+      curstateinfo += 1 # tok
+    while curstateinfo < endstateinfo:
+      to: int = self.tokinfo.stateinfo[curstateinfo]
+      pairCount: int = self.tokinfo.stateinfo[curstateinfo+1]
+      last = 0
       for i in range(pairCount):
-        low: int = self.tokinfo.transitions[curTransition+2+i*2]
-        high: int = self.tokinfo.transitions[curTransition+2+i*2+1]
+        low: int = self.tokinfo.stateinfo[curstateinfo+2+i*2]+last
+        last = low
+        high: int = self.tokinfo.stateinfo[curstateinfo+2+i*2+1]+last
+        last = high
         if c >= low and c <= high:
           return to
-      curTransition += 2+pairCount*2
+      curstateinfo += 2+pairCount*2
     return -1
 
   def push(self, tokset: int) -> None:
@@ -318,7 +327,7 @@ class TokBufTokenizer:
         self.tok = -1
         self._toklen = 0
       state: int = self.nextState(0, curSection)
-      tok: int = -1
+      tok: int
       toklen: int = -1
       length: int = 0
       while state != -1:
@@ -332,15 +341,21 @@ class TokBufTokenizer:
       self.tok = tok
       self._toklen = toklen
       if self.tok != -1:
-        tokActions: int = (self.tok*self.tokinfo.sectionCount * 2) + curSection * 2
-        tokenaction: int = self.tokinfo.tokenaction[tokActions]
-        actionarg: int = self.tokinfo.tokenaction[tokActions+1]
-        if tokenaction == 1:
-          self.push(actionarg)
-        elif tokenaction == 2:
-          self.pop()
-        elif tokenaction == 3:
-          self.gotots(actionarg)
+        startsection: int = self.tokinfo.sectioninfo_offset[curSection]
+        endsection: int = self.tokinfo.sectioninfo_offset[curSection+1]
+        while startsection < endsection:
+          actiontok: int = self.tokinfo.sectioninfo[startsection]
+          action: int = self.tokinfo.sectioninfo[startsection+1]
+          actionarg: int = self.tokinfo.sectioninfo[startsection+2]
+          if actiontok == self.tok:
+            if action == 1:
+              self.push(actionarg)
+            elif action == 2:
+              self.pop()
+            elif action == 3:
+              self.gotots(actionarg)
+            break
+          startsection += 3
       if self.tok == -1 or not self.isWs(self.tok):
         break
     return self.tok

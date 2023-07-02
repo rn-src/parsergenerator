@@ -8,13 +8,13 @@ void *mrealloc(void *prev, size_t prevsize, size_t newsize);
 struct tokinfo {
   int tokenCount;
   int sectionCount;
-  const int *tokenaction;
+  const unsigned char *sectioninfo;
+  const int *sectioninfo_offset;
   const char **tokenstr;
-  const bool *isws;
+  const unsigned char *isws;
   int stateCount;
-  const int *transitions;
-  const int *transitionOffset;
-  const int *tokens;
+  const unsigned char *stateinfo;
+  const int *stateinfo_offset;
 };
 typedef struct tokinfo tokinfo;
 
