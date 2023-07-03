@@ -6,16 +6,19 @@ FLAGS=/Zi /Od /EHsc /DWIN32 /MD
 
 all: tokenizer.exe
 
-tokenizer.exe: tokenizer.obj main.obj tinytemplates.obj
+tokenizer.exe: tokenizer.obj tokenizeroutput.obj main.obj tinytemplates.obj
 	@echo linking...
-	@link /nologo /DEBUG /SUBSYSTEM:CONSOLE /OUT:tokenizer.exe tokenizer.obj tinytemplates.obj main.obj
-#	@link /nologo /SUBSYSTEM:CONSOLE /OUT:tokenizer.exe tokenizer.obj tinytemplates.obj main.obj
+	@link /nologo /DEBUG /SUBSYSTEM:CONSOLE /OUT:tokenizer.exe tokenizer.obj tokenizeroutput.obj tinytemplates.obj main.obj
+#	@link /nologo /SUBSYSTEM:CONSOLE /OUT:tokenizer.exe tokenizer.obj tokenizeroutput.obj tinytemplates.obj main.obj
 
 tinytemplates.obj: tinytemplates.c tinytemplates.h
 	@cl /nologo /c $(FLAGS) tinytemplates.c
 
 tokenizer.obj: tokenizer.c tokenizer.h tinytemplates.h
 	@cl /nologo /c $(FLAGS) tokenizer.c
+
+tokenizeroutput.obj: tokenizeroutput.c tokenizer.h tinytemplates.h
+	@cl /nologo /c $(FLAGS) tokenizeroutput.c
 
 main.obj: main.c tokenizer.h tinytemplates.h
 	@cl /nologo /c $(FLAGS) main.c

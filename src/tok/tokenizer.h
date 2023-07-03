@@ -201,5 +201,7 @@ struct Rx {
 
 Nfa *ParseTokenizerFile(TokStream *s);
 void OutputTokenizerSource(FILE *out, const Nfa *dfa, const char *name, const char *prefix, bool py, bool minimal);
+ElementOps *getTokenElement();
+void Nfa_getTokenDefs(const Nfa *This, VectorAny /*<Token>*/ *tokendefs);
 
 #endif /* __tokenizer_h */
