@@ -289,16 +289,116 @@ static bool OutputSections(FILE *out, const Nfa *dfa, const LanguageOutputter *l
   return true;
 }
 
+static void OutputStateInfo(FILE *out, const Nfa *dfa, const LanguageOutputter *lang) {
+  VectorAny /*<int>*/ stateinfo;
+  MapAny /*<int,int>*/ stateinfocounts;
+  Scope_Push();
+  MapAny_init(&stateinfocounts,getIntElement(),getIntElement(),true);
+  VectorAny_init(&stateinfo,getIntElement(),true);
+
+  MapAny_clear(&stateinfocounts);
+  // there typically aren't long runs of repeats, and values are usually
+  // small, so we use a simple encoding scheme to save space.
+  int lastfrom = -1;
+  for( int cur = 0, end = MapAny_size(&dfa->m_transitions); cur < end; ++cur ) {
+    const Transition *transition = 0;
+    const CharSet *ranges = 0;
+    int cnt = 0;
+    MapAny_getByIndexConst(&dfa->m_transitions,cur,(const void**)&transition,(const void**)&ranges);
+    if( lastfrom != transition->m_from ) {
+      while( ++lastfrom < transition->m_from ) {
+        if( MapAny_find(&stateinfocounts,&lastfrom) )
+          continue;
+        int tokfrm = Nfa_getStateToken(dfa,lastfrom);
+        if( tokfrm != -1 ) {
+          int tmp = tokfrm+1;
+          VectorAny_push_back(&stateinfo,&tmp);
+          tmp = 1;
+          MapAny_insert(&stateinfocounts,&lastfrom,&tmp);
+        }
+      }
+      // -1 is quite common, add one to shrink encoding
+      int tok = Nfa_getStateToken(dfa,transition->m_from);
+      int tmp = tok+1;
+      VectorAny_push_back(&stateinfo,&tmp);
+      ++cnt;
+    }
+    VectorAny_push_back(&stateinfo,&transition->m_to);
+    int sz = CharSet_size(ranges);
+    VectorAny_push_back(&stateinfo,&sz);
+    // range values increase, so subtracting the last value helps encoding
+    int last = 0;
+    for( int cur = 0, end = CharSet_size(ranges); cur != end; ++cur ) {
+      const CharRange *curRange = CharSet_getRange(ranges,cur);
+      int tmp = curRange->m_low-last;
+      VectorAny_push_back(&stateinfo,&tmp);
+      last = curRange->m_low;
+      tmp = curRange->m_high-last;
+      VectorAny_push_back(&stateinfo,&tmp);
+      last = curRange->m_high;
+    }
+    // keeping count of how many values are in each stateinfo
+    cnt += 2+2*CharSet_size(ranges);
+    if( ! MapAny_find(&stateinfocounts,&transition->m_from) )
+      MapAny_insert(&stateinfocounts,&transition->m_from,&cnt);
+    else
+      MapAny_findT(&stateinfocounts,&transition->m_from,int) += cnt;
+  }
+
+  lang->outArrayDecl(lang,out,"static const unsigned char","stateinfo");
+  fputs(" = ",out);
+  lang->outStartArray(lang,out);
+  int idxbase = 0;
+  for( int i = 0, n = MapAny_size(&stateinfocounts); i < n; ++i ) {
+    if( ! MapAny_findConst(&stateinfocounts,&i) )
+      continue;
+    int fullcnt = 0;
+    for( int j = 0, m = MapAny_findConstT(&stateinfocounts,&i,int); j < m; ++j ) {
+      if( i > 0 || j > 0 )
+        fputc(',',out);
+      int element = VectorAny_ArrayOpT(&stateinfo,j,int);
+      fullcnt += lang->encodeuint(lang,out,element);
+    }
+    idxbase += MapAny_findConstT(&stateinfocounts,&i,int);
+    MapAny_findT(&stateinfocounts,&i,int) = fullcnt;
+  }
+  lang->outEndArray(lang,out);
+  lang->outEndStmt(lang,out);
+  fputc('\n',out);
+
+  // stateinfo is variable length, this fixed size index lets us
+  // jump right to the data.  It is possible to recreate this
+  // from the stateinfo, and maybe we will one day, but for now
+  // prefer to just write this.
+  int offset = 0;
+  lang->outArrayDecl(lang,out,"static const int","stateinfo_offset");
+  fputs(" = ",out);
+  lang->outStartArray(lang,out);
+  for( int i = 0, n = Nfa_stateCount(dfa); i < n; ++i ) {
+    if( i > 0 )
+      fputc(',',out);
+    lang->outInt(lang,out,offset);
+    if( MapAny_findConst(&stateinfocounts,&i) )
+      offset += MapAny_findConstT(&stateinfocounts,&i,int);
+  }
+  if( Nfa_stateCount(dfa) > 0 )
+    fputc(',',out);
+  lang->outInt(lang,out,offset);
+  lang->outEndArray(lang,out);
+  lang->outEndStmt(lang,out);
+  fputc('\n',out);
+
+  Scope_Pop();
+}
+
 static void OutputDfaSource(FILE *out, const Nfa *dfa, const LanguageOutputter *lang) {
   bool first = true;
   // Going to assume there are no gaps in toking numbering
   VectorAny /*<Token>*/ tokens;
   VectorAny /*<int>*/ wsflags;
-  MapAny /*<int,int>*/ transitioncounts;
   Scope_Push();
   VectorAny_init(&tokens,getTokenElement(),true);
   VectorAny_init(&wsflags,getIntElement(),true);
-  MapAny_init(&transitioncounts,getIntElement(),getIntElement(),true);
   Nfa_getTokenDefs(dfa,&tokens);
 
   lang->outTop(lang,out);
@@ -360,89 +460,7 @@ static void OutputDfaSource(FILE *out, const Nfa *dfa, const LanguageOutputter *
 
   lang->outIntDecl(lang,out,"stateCount",Nfa_stateCount(dfa));
 
-  lang->outArrayDecl(lang,out,"static const unsigned char","stateinfo");
-  fputs(" = ",out);
-  lang->outStartArray(lang,out);
-  first = true;
-  MapAny_clear(&transitioncounts);
-  // there typically aren't long runs of repeats, and values are usually
-  // small, so we use a simple encoding scheme to save space.
-  int lastfrom = -1;
-  for( int cur = 0, end = MapAny_size(&dfa->m_transitions); cur < end; ++cur ) {
-    const Transition *transition = 0;
-    const CharSet *ranges = 0;
-    int cnt = 0;
-    MapAny_getByIndexConst(&dfa->m_transitions,cur,(const void**)&transition,(const void**)&ranges);
-    if( first )
-      first = false;
-    else
-      fputc(',',out);
-    if( lastfrom != transition->m_from ) {
-      while( ++lastfrom < transition->m_from ) {
-        if( MapAny_find(&transitioncounts,&lastfrom) )
-          continue;
-        int tokfrm = Nfa_getStateToken(dfa,lastfrom);
-        if( tokfrm != -1 ) {
-          int tokcnt = lang->encodeuint(lang,out,tokfrm+1);
-          fputc(',',out);
-          MapAny_insert(&transitioncounts,&lastfrom,&tokcnt);
-        }
-      }
-      int tok = Nfa_getStateToken(dfa,transition->m_from);
-      // -1 is quite common, add one to shrink encoding
-      cnt += lang->encodeuint(lang,out,tok+1);
-      fputc(',',out);
-    }
-    cnt += lang->encodeuint(lang,out,transition->m_to);
-    fputc(',',out);
-    cnt += lang->encodeuint(lang,out,CharSet_size(ranges));
-    // range values increase, so subtracting the last value helps encoding
-    int last = 0;
-    for( int cur = 0, end = CharSet_size(ranges); cur != end; ++cur ) {
-      const CharRange *curRange = CharSet_getRange(ranges,cur);
-      fputc(',',out);
-      cnt += lang->encodeuint(lang,out,curRange->m_low-last);
-      last = curRange->m_low;
-      fputc(',',out);
-      cnt += lang->encodeuint(lang,out,curRange->m_high-last);
-      last = curRange->m_high;
-    }
-    // keeping count of how many values are in each stateinfo
-    if( ! MapAny_find(&transitioncounts,&transition->m_from) )
-      MapAny_insert(&transitioncounts,&transition->m_from,&cnt);
-    else
-      MapAny_findT(&transitioncounts,&transition->m_from,int) += cnt;
-  }
-  lang->outEndArray(lang,out);
-  lang->outEndStmt(lang,out);
-  fputc('\n',out);
-
-  // stateinfo is variable length, this fixed size index lets us
-  // jump right to the data.  It is possible to recreate this
-  // from the stateinfo, and maybe we will one day, but for now
-  // prefer to just write this.
-  int offset = 0;
-  lang->outArrayDecl(lang,out,"static const int","stateinfo_offset");
-  fputs(" = ",out);
-  lang->outStartArray(lang,out);
-  first = true;
-  for( int i = 0, n = Nfa_stateCount(dfa); i < n; ++i ) {
-    if( first )
-      first = false;
-    else
-      fputc(',',out);
-    lang->outInt(lang,out,offset);
-    if( MapAny_findConst(&transitioncounts,&i) )
-      offset += MapAny_findConstT(&transitioncounts,&i,int);
-  }
-  if( first )
-    first = false;
-  else
-    fputc(',',out);
-  lang->outInt(lang,out,offset);
-  lang->outEndArray(lang,out);
-  lang->outEndStmt(lang,out);
-  fputc('\n',out);
+  OutputStateInfo(out, dfa, lang);
 
   fputs("\n",out);
   lang->outBottom(lang,out,hassections);
