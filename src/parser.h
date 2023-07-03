@@ -1,8 +1,8 @@
 #ifndef __parser_h
 #define __parser_h
 
-#include "../tok/tok.h"
-#include "../tok/tinytemplates.h"
+#include "tok.h"
+#include "tinytemplates.h"
 #define EOF_TOK (-1)
 #define MARKER_DOT (999999)
 

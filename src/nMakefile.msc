@@ -1,7 +1,7 @@
 # To build
 # start visual studio command line prompt
 # nmake -f nMakefile.msc
-OBJS=parser.obj parsersolve.obj parseroutput.obj main.obj parserrestrictfa.obj timer.obj  ../tok/tok.obj ../tok/tinytemplates.obj
+OBJS=parser.obj parsersolve.obj parseroutput.obj main.obj parserrestrictfa.obj timer.obj  tok.obj tinytemplates.obj tokenizer.obj tokenizeroutput.obj
 CFLAGS=/nologo /Zi /Od /EHsc /DWIN32 /MD /I.
 #CFLAGS=/nologo /O1 /EHsc /DWIN32 /MD /I.
 .SUFFIXES: .c .obj
@@ -16,16 +16,12 @@ parser.exe: parsertokL.h $(OBJS)
 #parsertokL.h: parsertok.L
 #	@..\tok\tokenizer.exe parsertok.L --prefix=PARSERTOK
 
-{../tok}.c{../tok}.obj:
-	@cl /nologo /c $(CFLAGS) $< /Fo$@
-
 .c.obj:
 	@cl /nologo /c $(CFLAGS) $< /Fo$@
 
 clean:
 	@-del parser.exe > NUL 2>&1
-	@-del ..\tok\tinytemplates.obj > NUL 2>&1
-	@-del ..\tok\tok.obj > NUL 2>&1
 	@-del *.obj > NUL 2>&1
 	@-del *.pdb > NUL 2>&1
 #	@-del parsertokL.h > NUL 2>&1
+
