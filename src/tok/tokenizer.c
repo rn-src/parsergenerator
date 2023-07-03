@@ -1529,7 +1529,7 @@ typedef struct LanguageOutputter LanguageOutputter;
 
 struct LanguageOutputter {
   void (*outTop)(const LanguageOutputter *This, FILE *out);
-  void (*outBottom)(const LanguageOutputter *This, FILE *out);
+  void (*outBottom)(const LanguageOutputter *This, FILE *out, bool hassections);
   void (*outDecl)(const LanguageOutputter *This, FILE *out, const char *type, const char *name);
   void (*outIntDecl)(const LanguageOutputter *This, FILE *out, const char *name, int i);
   void (*outArrayDecl)(const LanguageOutputter *This, FILE *out, const char *type, const char *name);
@@ -1554,14 +1554,18 @@ void CLanguageOutputter_outTop(const LanguageOutputter* This, FILE* out) {
   fprintf(out, "#define __%s_h\n", This->name);
   fputs("#include \"tokenizer.h\"\n\n", out);
 }
-void CLanguageOutputter_outBottom(const LanguageOutputter* This, FILE* out) {
+void CLanguageOutputter_outBottom(const LanguageOutputter* This, FILE* out, bool hassections) {
   if( This->minimal )
     return;
   fprintf(out, "struct tokinfo %stkinfo = {\n", This->prefix);
   fprintf(out, "  %stokenCount,\n", This->prefix);
   fprintf(out, "  %ssectionCount,\n", This->prefix);
-  fprintf(out, "  %ssectioninfo,\n", This->prefix);
-  fprintf(out, "  %ssectioninfo_offset,\n", This->prefix);
+  if( hassections ) {
+    fprintf(out, "  %ssectioninfo,\n", This->prefix);
+    fprintf(out, "  %ssectioninfo_offset,\n", This->prefix);
+  } else {
+    fputs("  0,\n  0,\n", out);
+  }
   fprintf(out, "  %stokenstr,\n", This->prefix);
   fprintf(out, "  %sisws,\n", This->prefix);
   fprintf(out, "  %sstateCount,\n", This->prefix);
@@ -1681,7 +1685,7 @@ static const char *pytype(const char *type) {
 }
 
 void PyLanguageOutputter_outTop(const LanguageOutputter* This, FILE* out) { fputs("from typing import Sequence\n", out); }
-void PyLanguageOutputter_outBottom(const LanguageOutputter* This, FILE* out) {}
+void PyLanguageOutputter_outBottom(const LanguageOutputter* This, FILE* out, bool hassections) {}
 void PyLanguageOutputter_outDecl(const LanguageOutputter* This, FILE* out, const char* type, const char* name) { fputs(name, out); fputs(": ",out); fputs(pytype(type), out); }
 void PyLanguageOutputter_outIntDecl(const LanguageOutputter* This, FILE* out, const char* name, int i) {
   fprintf(out, "%s: int = %d\n", name, i);
@@ -1728,37 +1732,32 @@ static int PyLanguageOutputter_encodeuint(const LanguageOutputter *lang, FILE *o
 
 LanguageOutputter PyLanguageOutputter = { PyLanguageOutputter_outTop, PyLanguageOutputter_outBottom, PyLanguageOutputter_outDecl, PyLanguageOutputter_outIntDecl, PyLanguageOutputter_outArrayDecl, PyLanguageOutputter_outStartArray, PyLanguageOutputter_outEndArray, PyLanguageOutputter_outEndStmt, PyLanguageOutputter_outNull, PyLanguageOutputter_outBool, PyLanguageOutputter_outStr, PyLanguageOutputter_outChar, PyLanguageOutputter_outInt, PyLanguageOutputter_encodeuint};
 
-static void OutputDfaSource(FILE *out, const Nfa *dfa, const LanguageOutputter *lang) {
-  bool first = true;
-  // Going to assume there are no gaps in toking numbering
-  VectorAny /*<Token>*/ tokens;
-  MapAny /*<int,int>*/ transitioncounts;
-  MapAny /*<int,int>*/ sectioncounts;
-  VectorAny /*<int>*/ wsflags;
-  Scope_Push();
-  VectorAny_init(&tokens,&TokenElement,true);
-  MapAny_init(&sectioncounts,getIntElement(),getIntElement(),true);
-  MapAny_init(&transitioncounts,getIntElement(),getIntElement(),true);
-  VectorAny_init(&wsflags,getIntElement(),true);
-  Nfa_getTokenDefs(dfa,&tokens);
-
-  lang->outTop(lang,out);
-
-  for( int cur = 0, end = VectorAny_size(&tokens); cur != end; ++cur ) {
-    const Token *curToken = &VectorAny_ArrayOpConstT(&tokens,cur,Token);
-    lang->outIntDecl(lang,out,String_Chars(&curToken->m_name),curToken->m_token);
+static bool OutputSections(FILE *out, const Nfa *dfa, const LanguageOutputter *lang, VectorAny /*<Token>*/ *tokens) {
+  bool hasactions = false;
+  for( int i = 0, n = Nfa_getSections(dfa); i < n; ++i ) {
+    for( int cur = 0, end = VectorAny_size(tokens); cur != end; ++cur ) {
+      const Token *token = &VectorAny_ArrayOpConstT(tokens,cur,Token);
+      const Action *action = &MapAny_findConstT(&token->m_actions,&i,Action);
+      if( ! action )
+        continue;
+      hasactions = true;
+      break;
+    }
+    if( hasactions )
+      break;
   }
-
-  lang->outIntDecl(lang,out,"tokenCount",VectorAny_size(&tokens));
-  lang->outIntDecl(lang,out,"sectionCount",Nfa_getSections(dfa));
-
+  if( ! hasactions )
+    return false;
+  MapAny /*<int,int>*/ sectioncounts;
+  Scope_Push();
+  MapAny_init(&sectioncounts,getIntElement(),getIntElement(),true);
   lang->outArrayDecl(lang,out, "static const unsigned char", "sectioninfo");
   fputs(" = ",out);
   lang->outStartArray(lang,out);
-  first = true;
+  bool first = true;
   for( int i = 0, n = Nfa_getSections(dfa); i < n; ++i ) {
-    for( int cur = 0, end = VectorAny_size(&tokens); cur != end; ++cur ) {
-      const Token *token = &VectorAny_ArrayOpConstT(&tokens,cur,Token);
+    for( int cur = 0, end = VectorAny_size(tokens); cur != end; ++cur ) {
+      const Token *token = &VectorAny_ArrayOpConstT(tokens,cur,Token);
       const Action *action = &MapAny_findConstT(&token->m_actions,&i,Action);
       if( ! action )
         continue;
@@ -1772,11 +1771,11 @@ static void OutputDfaSource(FILE *out, const Nfa *dfa, const LanguageOutputter *
       cnt += lang->encodeuint(lang,out,action->m_action);
       fputc(',',out);
       cnt += lang->encodeuint(lang,out,action->m_actionarg);
-      if( ! MapAny_find(&transitioncounts,&i) ) {
+      if( ! MapAny_find(&sectioncounts,&i) ) {
         int zero = 0;
-        MapAny_insert(&transitioncounts,&i,&zero);
+        MapAny_insert(&sectioncounts,&i,&zero);
       }
-      MapAny_findT(&transitioncounts,&i,int) += cnt;
+      MapAny_findT(&sectioncounts,&i,int) += cnt;
     }
   }
   lang->outEndArray(lang,out);
@@ -1805,6 +1804,33 @@ static void OutputDfaSource(FILE *out, const Nfa *dfa, const LanguageOutputter *
   lang->outEndArray(lang,out);
   lang->outEndStmt(lang,out);
   fputc('\n',out);
+  Scope_Pop();
+  return true;
+}
+
+static void OutputDfaSource(FILE *out, const Nfa *dfa, const LanguageOutputter *lang) {
+  bool first = true;
+  // Going to assume there are no gaps in toking numbering
+  VectorAny /*<Token>*/ tokens;
+  VectorAny /*<int>*/ wsflags;
+  MapAny /*<int,int>*/ transitioncounts;
+  Scope_Push();
+  VectorAny_init(&tokens,&TokenElement,true);
+  VectorAny_init(&wsflags,getIntElement(),true);
+  MapAny_init(&transitioncounts,getIntElement(),getIntElement(),true);
+  Nfa_getTokenDefs(dfa,&tokens);
+
+  lang->outTop(lang,out);
+
+  for( int cur = 0, end = VectorAny_size(&tokens); cur != end; ++cur ) {
+    const Token *curToken = &VectorAny_ArrayOpConstT(&tokens,cur,Token);
+    lang->outIntDecl(lang,out,String_Chars(&curToken->m_name),curToken->m_token);
+  }
+
+  lang->outIntDecl(lang,out,"tokenCount",VectorAny_size(&tokens));
+  lang->outIntDecl(lang,out,"sectionCount",Nfa_getSections(dfa));
+
+  bool hassections = OutputSections(out, dfa, lang, &tokens);
 
   lang->outArrayDecl(lang,out, "static const char*", "tokenstr");
   fputs(" = ",out);
@@ -1844,7 +1870,7 @@ static void OutputDfaSource(FILE *out, const Nfa *dfa, const LanguageOutputter *
         first = false;
       else
         fputc(',',out);
-      int flags = VectorAny_ArrayOpConstT(&tokens,i,int);
+      int flags = VectorAny_ArrayOpConstT(&wsflags,i,int);
       lang->outInt(lang,out,flags);
   }
   lang->outEndArray(lang,out);
@@ -1860,6 +1886,7 @@ static void OutputDfaSource(FILE *out, const Nfa *dfa, const LanguageOutputter *
   MapAny_clear(&transitioncounts);
   // there typically aren't long runs of repeats, and values are usually
   // small, so we use a simple encoding scheme to save space.
+  int lastfrom = -1;
   for( int cur = 0, end = MapAny_size(&dfa->m_transitions); cur < end; ++cur ) {
     const Transition *transition = 0;
     const CharSet *ranges = 0;
@@ -1869,10 +1896,22 @@ static void OutputDfaSource(FILE *out, const Nfa *dfa, const LanguageOutputter *
       first = false;
     else
       fputc(',',out);
-    int tok = Nfa_getStateToken(dfa,transition->m_from);
-    // -1 is quite common, add one to shrink encoding
-    cnt += lang->encodeuint(lang,out,tok+1);
-    fputc(',',out);
+    if( lastfrom != transition->m_from ) {
+      while( ++lastfrom < transition->m_from ) {
+        if( MapAny_find(&transitioncounts,&lastfrom) )
+          continue;
+        int tokfrm = Nfa_getStateToken(dfa,lastfrom);
+        if( tokfrm != -1 ) {
+          int tokcnt = lang->encodeuint(lang,out,tokfrm+1);
+          fputc(',',out);
+          MapAny_insert(&transitioncounts,&lastfrom,&tokcnt);
+        }
+      }
+      int tok = Nfa_getStateToken(dfa,transition->m_from);
+      // -1 is quite common, add one to shrink encoding
+      cnt += lang->encodeuint(lang,out,tok+1);
+      fputc(',',out);
+    }
     cnt += lang->encodeuint(lang,out,transition->m_to);
     fputc(',',out);
     cnt += lang->encodeuint(lang,out,CharSet_size(ranges));
@@ -1888,11 +1927,10 @@ static void OutputDfaSource(FILE *out, const Nfa *dfa, const LanguageOutputter *
       last = curRange->m_high;
     }
     // keeping count of how many values are in each stateinfo
-    if( ! MapAny_find(&transitioncounts,&transition->m_from) ) {
-      int zero = 0;
-      MapAny_insert(&transitioncounts,&transition->m_from,&zero);
-    }
-    MapAny_findT(&transitioncounts,&transition->m_from,int) += cnt;
+    if( ! MapAny_find(&transitioncounts,&transition->m_from) )
+      MapAny_insert(&transitioncounts,&transition->m_from,&cnt);
+    else
+      MapAny_findT(&transitioncounts,&transition->m_from,int) += cnt;
   }
   lang->outEndArray(lang,out);
   lang->outEndStmt(lang,out);
@@ -1926,7 +1964,7 @@ static void OutputDfaSource(FILE *out, const Nfa *dfa, const LanguageOutputter *
   fputc('\n',out);
 
   fputs("\n",out);
-  lang->outBottom(lang,out);
+  lang->outBottom(lang,out,hassections);
   Scope_Pop();
 }
 

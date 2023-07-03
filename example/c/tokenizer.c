@@ -125,7 +125,19 @@ void tokenizer_destroy(tokenizer *tokenizer) {
 }
 
 static unsigned int decodeuint(const unsigned char *c, const unsigned char **pnextc) {
-  return 0;
+  int leadbits = 0;
+  while( leadbits <= 8 && (0x80>>leadbits)&*c ) ++leadbits;
+  if( leadbits == 0 ) {
+    *pnextc = c+1;
+    return *c;
+  }
+  unsigned int i = (0xff<<(8-leadbits)) & *c++;
+  while( leadbits-- ) {
+    i <<= 8;
+    i |= *c++;
+  }
+  *pnextc = c;
+  return i;
 }
 
 static int tokstate(tokinfo *info, int state) {
@@ -244,7 +256,7 @@ int tokenizer_peek(tokenizer *tokenizer) {
     toksize cursize = {0,0,0,0};
     toksize toksize = {0,0,0,0};
     while( state != -1 ) {
-      t = tokstate(tokenizer->info,t);
+      t = tokstate(tokenizer->info,state);
       if( t != -1 ) {
         tok = t;
         toksize = cursize;
@@ -274,20 +286,22 @@ int tokenizer_peek(tokenizer *tokenizer) {
     }
     chomp(tokenizer,offset);
     charbuf_putc_utf8(&tokenizer->tokstrbuf, 0);
-    const unsigned char *startsection = tokenizer->info->sectioninfo+tokenizer->info->sectioninfo_offset[cursection];
-    const unsigned char *endsection = tokenizer->info->sectioninfo+tokenizer->info->sectioninfo_offset[cursection+1];
-    while( startsection < endsection ) {
-      int actiontok = decodeuint(startsection,&startsection);
-      int action = decodeuint(startsection,&startsection);
-      int actionarg = decodeuint(startsection,&startsection);
-      if( actiontok == tok ) {
-        if( action == 1 )
-          vecint_push(&tokenizer->secstack,actionarg);
-        else if( action == 2 )
-          tokenizer->secstack.size--;
-        else if( action == 3 )
-          tokenizer->secstack.values[tokenizer->secstack.size-1] = actionarg;
-        break;
+    if( tokenizer->info->sectioninfo ) {
+      const unsigned char *startsection = tokenizer->info->sectioninfo+tokenizer->info->sectioninfo_offset[cursection];
+      const unsigned char *endsection = tokenizer->info->sectioninfo+tokenizer->info->sectioninfo_offset[cursection+1];
+      while( startsection < endsection ) {
+        int actiontok = decodeuint(startsection,&startsection);
+        int action = decodeuint(startsection,&startsection);
+        int actionarg = decodeuint(startsection,&startsection);
+        if( actiontok == tok ) {
+          if( action == 1 )
+            vecint_push(&tokenizer->secstack,actionarg);
+          else if( action == 2 )
+            tokenizer->secstack.size--;
+          else if( action == 3 )
+            tokenizer->secstack.values[tokenizer->secstack.size-1] = actionarg;
+          break;
+        }
       }
     }
     if( tokenizer->info->isws[tok/8]&(1<<(tok%8)) ) {
