@@ -1,6 +1,6 @@
 all: exampleG.py exampleL.py
 
-exampleG.py: example.G
+exampleG.py: example.G exampleL.py
 	parser parser --py example.G
 
 exampleL.py: example.L
