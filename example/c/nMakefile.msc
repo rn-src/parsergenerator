@@ -14,10 +14,10 @@ example.exe: lrparse.h tokenizer.h exampleG.h exampleL.h $(OBJS)
 #	@link /nologo /SUBSYSTEM:CONSOLE /OUT:example.exe $(OBJS)
 
 exampleG.h: example.G
-	@parser.exe "--import=<stdlib.h>" example.G
+	@parser.exe parser "--import=<stdlib.h>" example.G
 
 exampleL.h: example.L
-	@tokenizer.exe example.L
+	@parser.exe tokenizer example.L
 
 .c.obj:
 	@cl /nologo /c $(CFLAGS) $< /Fo$@

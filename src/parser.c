@@ -17,47 +17,20 @@ void *zalloc(size_t len) {
   return ret;
 }
 
-static ParseError g_err;
-bool g_errInit = false;
-bool g_errSet = false;
-
-void setParseError(int line, int col, const String *err) {
-  if( ! g_errInit ) {
-    String_init(&g_err.err,false);
-    g_errInit = true;
-  }
-  clearParseError();
-  g_err.line = line;
-  g_err.col = col;
-  String_AssignString(&g_err.err,err);
-  g_errSet = true;
-  Scope_LongJmp(1);
-}
-
-bool getParseError(const ParseError **err) {
-  if( ! g_errSet )
-    return false;
-  *err = &g_err;
-  return true;
-}
-
-void clearParseError() {
-  if( g_errInit )
-    String_clear(&g_err.err);
-  g_errSet = false;
-}
-
 static void error(Tokenizer *tokenizer, const char *err) {
-  Scope_Push();
   String errstr;
+  String file;
+  Scope_Push();
   String_init(&errstr,true);
+  String_init(&file,true);
   String_AssignChars(&errstr,err);
-  setParseError(tokenizer->line(tokenizer),tokenizer->col(tokenizer),&errstr);
+  tokenizer->filename(tokenizer,&file);
+  setParseError(tokenizer->line(tokenizer),tokenizer->col(tokenizer),String_Chars(&file),&errstr);
   Scope_Pop();
 }
 
 static void errorString(Tokenizer *tokenizer, const String *err) {
-  setParseError(tokenizer->line(tokenizer),tokenizer->col(tokenizer),err);
+  error(tokenizer,String_Chars(err));
 }
 
 // parser : parsepart +

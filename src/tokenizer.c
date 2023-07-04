@@ -112,7 +112,7 @@ bool TokStream_fill(TokStream *This) {
   return true;
 }
 
-void TokStream_init(TokStream *This, FILE *in, bool onstack) {
+void TokStream_init(TokStream *This, FILE *in, const char *file, bool onstack) {
   This->m_buf = 0;
   This->m_next = 0;
   This->m_buffill = 0;
@@ -121,12 +121,15 @@ void TokStream_init(TokStream *This, FILE *in, bool onstack) {
   This->m_in = in;
   This->m_pos = 0;
   This->m_line = This->m_col = 1;
+  This->m_file = (char*)malloc(strlen(file)+1);
+  strcpy(This->m_file,file);
   if( onstack )
     Push_Destroy(This,(vpstack_destroyer)TokStream_destroy);
 }
 void TokStream_destroy(TokStream *This) {
   if( This->m_buf )
     free(This->m_buf);
+  free(This->m_file);
 }
 
 int TokStream_peekc(TokStream *This, int n) {
@@ -175,34 +178,8 @@ int TokStream_col(TokStream *This) {
   return This->m_col;
 }
 
-static ParseError g_err;
-bool g_errInit = false;
-bool g_errSet = false;
-
-void setParseError(int line, int col, const String *err) {
-  if( ! g_errInit ) {
-    String_init(&g_err.err,false);
-    g_errInit = true;
-  }
-  clearParseError();
-  g_err.line = line;
-  g_err.col = col;
-  String_AssignString(&g_err.err,err);
-  g_errSet = true;
-  Scope_LongJmp(1);
-}
-
-bool getParseError(const ParseError **err) {
-  if( ! g_errSet )
-    return false;
-  *err = &g_err;
-  return true;
-}
-
-void clearParseError() {
-  if( g_errInit )
-    String_clear(&g_err.err);
-  g_errSet = false;
+const char *TokStream_file(TokStream *This) {
+  return This->m_file;
 }
 
 static void error(TokStream *s, const char *err) {
@@ -210,12 +187,12 @@ static void error(TokStream *s, const char *err) {
   Scope_Push();
   String_init(&errstr,true);
   String_AssignChars(&errstr,err);
-  setParseError(TokStream_line(s),TokStream_col(s),&errstr);
+  setParseError(TokStream_line(s),TokStream_col(s),TokStream_file(s),&errstr);
   Scope_Pop();
 }
 
 static void errorString(TokStream *s, const String *err) {
-  setParseError(TokStream_line(s),TokStream_col(s),err);
+  setParseError(TokStream_line(s),TokStream_col(s),TokStream_file(s),err);
 }
 
 bool CharRange_LessThan(const CharRange *lhs, const CharRange *rhs) {

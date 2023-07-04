@@ -47,15 +47,15 @@ struct StackTokBufItem {
   String filename;
 };
 
-struct Token;
-typedef struct Token Token;
+struct Tok;
+typedef struct Tok Tok;
 
-void Token_init(Token *This, bool onstack);
-void Token_set(Token *This, String *s, String *filename, int wslines, int wscols, int wslen, int line, int col, int sym);
-const char *Token_Chars(const Token *This);
-void Token_Assign(Token *lhs, const Token *rhs);
+void Tok_init(Tok *This, bool onstack);
+void Tok_set(Tok *This, String *s, String *filename, int wslines, int wscols, int wslen, int line, int col, int sym);
+const char *Tok_Chars(const Tok *This);
+void Tok_Assign(Tok *lhs, const Tok *rhs);
 
-struct Token {
+struct Tok {
   String m_s;
   String m_filename;
   int m_wslines, m_wscols, m_wslen;
@@ -75,7 +75,7 @@ void StackTokBuf_setline(StackTokBuf *This, int lineno, String *filename);
 struct StackTokBuf {
   TokBuf m_tokbuf;
   VectorAny /*<StackTokBufItem>*/ m_stack;
-  Token m_endtok;
+  Tok m_endtok;
   void (*startBuf)(TokBuf *This, TokBuf *tokBuf);
   void (*endBuf)(TokBuf *This, TokBuf *tokBuf);
 };

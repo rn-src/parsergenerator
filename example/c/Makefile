@@ -10,10 +10,10 @@ example: $(OBJ) lrparse.h tokenizer.h exampleG.h exampleL.h
 	gcc -c -o $@ $< $(CFLAGS)
 
 exampleG.h: example.G
-	parser '--import=<stdlib.h>' example.G
+	parser parser '--import=<stdlib.h>' example.G
 
 exampleL.h: example.L
-	tokenizer example.L
+	parser tokenizer example.L
 
 clean:
 	-rm exampleG.h > /dev/null 2>&1

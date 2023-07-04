@@ -1,10 +1,10 @@
 all: exampleG.py exampleL.py
 
 exampleG.py: example.G
-	parser --py example.G
+	parser parser --py example.G
 
 exampleL.py: example.L
-	tokenizer --py example.L
+	parser tokenizer --py example.L
 
 clean:
 	-rm exampleG.py > /dev/null 2>&1
