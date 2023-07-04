@@ -169,13 +169,14 @@ static void OutputStateInfo(FILE *out, const Nfa *dfa, const LanguageOutputter *
     if( ! MapAny_findConst(&stateinfocounts,&i) )
       continue;
     int fullcnt = 0;
-    for( int j = 0, m = MapAny_findConstT(&stateinfocounts,&i,int); j < m; ++j ) {
+    int cnt = MapAny_findConstT(&stateinfocounts,&i,int);
+    for( int j = 0, m = cnt; j < m; ++j ) {
       if( i > 0 || j > 0 )
         fputc(',',out);
-      int element = VectorAny_ArrayOpT(&stateinfo,j,int);
+      int element = VectorAny_ArrayOpT(&stateinfo,idxbase+j,int);
       fullcnt += encodeuint(lang,out,element);
     }
-    idxbase += MapAny_findConstT(&stateinfocounts,&i,int);
+    idxbase += cnt;
     MapAny_findT(&stateinfocounts,&i,int) = fullcnt;
   }
   lang->outEndArray(lang,out);
