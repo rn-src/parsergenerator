@@ -1,8 +1,8 @@
-OBJ=parser.o parsersolve.o parseroutput.o main.o parserrestrictfa.o timer.o tinytemplates.o tok.o tokenizer.o tokenizeroutput.o
+OBJ=parser.o parsecommon.o parsersolve.o parseroutput.o main.o parserrestrictfa.o timer.o tinytemplates.o tok.o tokenizer.o tokenizeroutput.o
 
 #CFLAGS=-I. -g -O0
 CFLAGS=-I. -O2
-DEPS=parser.h tokenizer.h tinytemplates.h
+DEPS=parsecommon.h parser.h tokenizer.h tinytemplates.h
 
 all: parser
 

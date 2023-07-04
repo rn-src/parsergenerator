@@ -3,6 +3,7 @@
 
 #include "tok.h"
 #include "tinytemplates.h"
+#include "parsecommon.h"
 #define EOF_TOK (-1)
 #define MARKER_DOT (999999)
 
@@ -16,20 +17,6 @@ struct Production;
 typedef struct Production Production;
 struct RestrictAutomata;
 typedef struct RestrictAutomata RestrictAutomata;
-
-struct ParseError;
-typedef struct ParseError ParseError;
-
-void setParseError(int line, int col, const String *err);
-bool getParseError(const ParseError **err);
-void clearParseError();
-
-struct ParseError
-{
-  int line, col;
-  String file;
-  String err;
-};
 
 enum SymbolType {
   SymbolTypeUnknown,
@@ -203,21 +190,6 @@ void PrecedenceRule_push_back(PrecedenceRule *This, ProductionDescriptors *part)
 struct PrecedenceRule {
   VectorAny /*<ProductionDescriptors*>*/ m_productionDescriptors;
 };
-
-enum RxType {
-  RxType_None = 0,
-  RxType_Production = 1,
-  RxType_BinaryOp = 2,
-  RxType_Many = 3
-};
-typedef enum RxType RxType;
-
-enum BinaryOp {
-  BinaryOp_None = 0,
-  BinaryOp_Or = 1,
-  BinaryOp_Concat = 2
-};
-typedef enum BinaryOp BinaryOp;
 
 void ProductionRegex_init(ProductionRegex *This, bool onstack);
 void ProductionRegex_destroy(ProductionRegex *This);
@@ -414,32 +386,6 @@ struct LRParserSolution {
   VectorAny /*<state_t>*/ m_states;
   shiftmap_t m_shifts;
   reducemap_t m_reductions;
-};
-
-struct ImportAs;
-typedef struct ImportAs ImportAs;
-
-struct ImportAs {
-  const char *import;
-  const char *as;
-};
-
-struct LanguageOutputOptions;
-typedef struct LanguageOutputOptions LanguageOutputOptions;
-
-enum OutputLanguage {
-  OutputLanguage_C,
-  OutputLanguage_Python
-};
-typedef enum OutputLanguage OutputLanguage;
-
-struct LanguageOutputOptions {
-  int min_nt_value;
-  bool do_pound_line;
-  OutputLanguage m_outputLanguage;
-  const char *m_lexerName;
-  ImportAs *m_extraImports;
-  const char *name;
 };
 
 void ParseParser(TokBuf *tokbuf, ParserDef *parser, FILE *vout, int verbosity);

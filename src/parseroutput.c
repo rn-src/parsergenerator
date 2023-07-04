@@ -1,237 +1,25 @@
 #include "parser.h"
 #include <ctype.h>
 
-extern void *zalloc(size_t len);
-
-struct LanguageOutputter;
-typedef struct LanguageOutputter LanguageOutputter;
-
-struct LanguageOutputter {
-  void (*outTop)(const LanguageOutputter* This, const LanguageOutputOptions* outputOptions, FILE* out);
-  void (*outBottom)(const LanguageOutputter* This, const LanguageOutputOptions* outputOptions, FILE* out);
-  void (*outTypeDecl)(const LanguageOutputter* This, FILE* out, const char* type, const char* name);
-  void (*outDecl)(const LanguageOutputter *This, FILE *out, const char *type, const char *name);
-  void (*outIntDecl)(const LanguageOutputter *This, FILE *out, const char *name, int i);
-  void (*outOptionalDecl)(const LanguageOutputter* This, FILE* out, const char* type, const char* name);
-  void (*outArrayDecl)(const LanguageOutputter *This, FILE *out, const char *type, const char *name);
-  void (*outStartArray)(const LanguageOutputter *This, FILE *out);
-  void (*outEndArray)(const LanguageOutputter *This, FILE *out);
-  void (*outEndStmt)(const LanguageOutputter *This, FILE *out);
-  void (*outNull)(const LanguageOutputter *This, FILE *out);
-  void (*outBool)(const LanguageOutputter *This, FILE *out, bool b);
-  void (*outStr)(const LanguageOutputter *This, FILE *out, const char *str);
-  void (*outChar)(const LanguageOutputter *This, FILE *out, int c);
-  void (*outInt)(const LanguageOutputter *This, FILE *out, int i);
-  void (*outFunctionStart)(const LanguageOutputter *This, FILE *out, const char *rettype, const char *name);
-  void (*outStartParameters)(const LanguageOutputter *This, FILE *out);
-  void (*outEndParameters)(const LanguageOutputter *This, FILE *out);
-  void (*outStartFunctionCode)(const LanguageOutputter *This, FILE *out);
-  void (*outEndFunctionCode)(const LanguageOutputter *This, FILE *out);
-  void (*outStartLineComment)(const LanguageOutputter* This, FILE* out);
-};
-
-void CLanguageOutputter_outTop(const LanguageOutputter* This, const LanguageOutputOptions* outputOptions, FILE* out) {
-  ImportAs *extraImports = outputOptions->m_extraImports;
-  fprintf(out, "#ifndef __%s_h\n", outputOptions->name);
-  fprintf(out, "#define __%s_h\n", outputOptions->name);
-  fputs("#include \"lrparse.h\"\n", out);
-  fprintf(out, "#include \"%s.h\"\n", outputOptions->m_lexerName);
-  while( extraImports->import ) {
-    if( extraImports->import[0] == '<' || extraImports->import[0] == '"' )
-      fprintf(out, "#include %s\n", extraImports->import);
-    else
-      fprintf(out, "#include \"%s\"\n", extraImports->import);
-    ++extraImports;
+static void outBottom(const LanguageOutputter *This, FILE *out) {
+  if( This->options->outputLanguage == OutputLanguage_C ) {
+    fputs("parseinfo prsinfo = {\n", out);
+    fputs("  nstates,\n", out);
+    fputs("  actions,\n", out);
+    fputs("  actionstart,\n", out);
+    fputs("  PROD_0,\n", out);
+    fputs("  PARSE_ERROR,\n", out);
+    fputs("  nproductions,\n", out);
+    fputs("  productions,\n", out);
+    fputs("  productionstart,\n", out);
+    fputs("  START,\n", out);
+    fputs("  nonterminals,\n", out);
+    fputs("  sizeof(stack_t),\n", out);
+    fputs("  (reducefnct)reduce,\n", out);
+    fputs("};\n", out);
   }
+  This->outBottom(This,out);
 }
-void CLanguageOutputter_outBottom(const LanguageOutputter* This, const LanguageOutputOptions* outputOptions, FILE* out) {
-  fputs("parseinfo prsinfo = {\n", out);
-  fputs("  nstates,\n", out);
-  fputs("  actions,\n", out);
-  fputs("  actionstart,\n", out);
-  fputs("  PROD_0,\n", out);
-  fputs("  PARSE_ERROR,\n", out);
-  fputs("  nproductions,\n", out);
-  fputs("  productions,\n", out);
-  fputs("  productionstart,\n", out);
-  fputs("  START,\n", out);
-  fputs("  nonterminals,\n", out);
-  fputs("  sizeof(stack_t),\n", out);
-  fputs("  (reducefnct)reduce,\n", out);
-  fputs("};\n", out);
-  fprintf(out, "#endif // __%s_h\n", outputOptions->name);
-}
-void CLanguageOutputter_outTypeDecl(const LanguageOutputter* This, FILE* out, const char* type, const char* name) {
-  fputs("typedef ", out); fputs(type, out); fputc(' ', out); fputs(name, out);
-}
-void CLanguageOutputter_outDecl(const LanguageOutputter *This, FILE *out, const char *type, const char *name) { fputs(type,out); fputc(' ',out); fputs(name,out); }
-void CLanguageOutputter_outIntDecl(const LanguageOutputter *This, FILE *out, const char *name, int i) {
-  fprintf(out, "#define %s (%d)\n", name, i);
-}
-void CLanguageOutputter_outOptionalDecl(const LanguageOutputter* This, FILE* out, const char* type, const char* name) { fputs(type, out); fputc(' ', out); fputs(name, out); }
-void CLanguageOutputter_outArrayDecl(const LanguageOutputter *This, FILE *out, const char *type, const char *name) { fputs(type,out); fputc(' ',out); fputs(name,out); fputs("[]",out); }
-void CLanguageOutputter_outStartArray(const LanguageOutputter *This, FILE *out) { fputc('{',out); }
-void CLanguageOutputter_outEndArray(const LanguageOutputter *This, FILE *out) { fputc('}',out); }
-void CLanguageOutputter_outEndStmt(const LanguageOutputter *This, FILE *out) { fputc(';',out); }
-void CLanguageOutputter_outNull(const LanguageOutputter *This, FILE *out) { fputc('0',out); }
-void CLanguageOutputter_outBool(const LanguageOutputter *This, FILE *out, bool b) { fputs((b ? "true" : "false"),out); }
-void CLanguageOutputter_outStr(const LanguageOutputter *This, FILE *out, const char *str)  { fputc('"',out); fputs(str,out); fputc('"',out); }
-void CLanguageOutputter_outChar(const LanguageOutputter *This, FILE *out, int c)  {
-  if(c == '\r' ) {
-    fputs("'\\r'",out);
-  } else if(c == '\n' ) {
-    fputs("'\\n'",out);
-  } else if(c == '\v' ) {
-    fputs("'\\v'",out);
-  } else if(c == ' ' ) {
-    fputs("' '",out);
-  } else if(c == '\t' ) {
-    fputs("'\\t'",out);
-  } else if(c == '\\' || c == '\'' ) {
-    fprintf(out,"'\\%c'",c);
-  } else if( c <= 126 && isgraph(c) ) {
-    fprintf(out,"'%c'",c);
-  } else
-    fprintf(out,"%d",c);
-}
-void CLanguageOutputter_outInt(const LanguageOutputter *This, FILE *out, int i)  { fprintf(out,"%d",i); }
-void CLanguageOutputter_outFunctionStart(const LanguageOutputter *This, FILE *out, const char *rettype, const char *name) {
-    fprintf(out, "%s %s", rettype, name);
-}
-void CLanguageOutputter_outStartParameters(const LanguageOutputter *This, FILE *out) {
-  fputs("(", out);
-}
-void CLanguageOutputter_outEndParameters(const LanguageOutputter *This, FILE *out) {
-  fputs(")", out);
-}
-void CLanguageOutputter_outStartFunctionCode(const LanguageOutputter *This, FILE *out) {
-  fputs("{", out);
-}
-void CLanguageOutputter_outEndFunctionCode(const LanguageOutputter *This, FILE *out) {
-  fputs("}", out);
-}
-void CLanguageOutputter_outStartLineComment(const LanguageOutputter* This, FILE* out) {
-  fputs("//", out);
-}
-LanguageOutputter CLanguageOutputter = {CLanguageOutputter_outTop, CLanguageOutputter_outBottom, CLanguageOutputter_outTypeDecl, CLanguageOutputter_outDecl, CLanguageOutputter_outIntDecl, CLanguageOutputter_outTypeDecl, CLanguageOutputter_outArrayDecl, CLanguageOutputter_outStartArray, CLanguageOutputter_outEndArray, CLanguageOutputter_outEndStmt, CLanguageOutputter_outNull, CLanguageOutputter_outBool, CLanguageOutputter_outStr, CLanguageOutputter_outChar, CLanguageOutputter_outInt, CLanguageOutputter_outFunctionStart, CLanguageOutputter_outStartParameters, CLanguageOutputter_outEndParameters, CLanguageOutputter_outStartFunctionCode, CLanguageOutputter_outEndFunctionCode, CLanguageOutputter_outStartLineComment };
-
-static const char* pytype(const char* type) {
-  if (strncmp(type, "static", 6) == 0)
-    type += 6;
-  while (*type == ' ')
-    ++type;
-  if( strncmp(type,"const",5) == 0)
-    type += 5;
-  while( *type == ' ')
-    ++type;
-  if( strncmp("char*",type,5) == 0)
-    return "str";
-  return type;
-}
-
-void PyLanguageOutputter_outTop(const LanguageOutputter* This, const LanguageOutputOptions* outputOptions, FILE* out) {
-  fputs("from typing import Any,Sequence,Optional,Callable,IO\n", out);
-  // in C we can depend on the preprocessor, in python we must import
-  fputs("from lrparse import ACTION_SHIFT,ACTION_REDUCE,ACTION_STOP\n", out);
-  fputs("from tok import Token\n", out);
-  ImportAs *extraImports = outputOptions->m_extraImports;
-  while (extraImports->import) {
-    if( extraImports->as )
-      fprintf(out, "import %s as %s\n", extraImports->import, extraImports->as);
-    else
-      fprintf(out, "import %s\n", extraImports->import);
-    ++extraImports;
-  }
-}
-void PyLanguageOutputter_outBottom(const LanguageOutputter* This, const LanguageOutputOptions* outputOptions, FILE* out) {
-}
-void PyLanguageOutputter_outDecl(const LanguageOutputter* This, FILE* out, const char* type, const char* name) {
-  fputs(name,out);
-  fputs(": ",out);
-  fputs(pytype(type), out);
-}
-void PyLanguageOutputter_outIntDecl(const LanguageOutputter* This, FILE* out, const char* name, int i) {
-  fprintf(out, "%s: int = %d\n", name, i);
-}
-void PyLanguageOutputter_outOptionalDecl(const LanguageOutputter* This, FILE* out, const char* type, const char* name) {
-  fputs(name, out);
-  fputs(": Optional[", out);
-  fputs(pytype(type), out);
-  fputs("]", out);
-}
-void PyLanguageOutputter_outTypeDecl(const LanguageOutputter* This, FILE* out, const char* type, const char* name) {
-  fputs(name, out);
-  fputs(" = ", out);
-  fputs(pytype(type), out);
-}
-void PyLanguageOutputter_outArrayDecl(const LanguageOutputter* This, FILE* out, const char* type, const char* name) {
-  fputs(name,out);
-  fputs(": ", out);
-  fputs("Sequence[",out);
-  fputs(pytype(type), out);
-  fputs("]",out);
-}
-void PyLanguageOutputter_outStartArray(const LanguageOutputter* This, FILE* out) {
-  fputc('(', out);
-}
-void PyLanguageOutputter_outEndArray(const LanguageOutputter* This, FILE* out) {
-  fputc(')', out);
-}
-void PyLanguageOutputter_outEndStmt(const LanguageOutputter* This, FILE* out) {
-}
-void PyLanguageOutputter_outNull(const LanguageOutputter* This, FILE* out) {
-  fputs("None", out);
-}
-void PyLanguageOutputter_outBool(const LanguageOutputter* This, FILE* out, bool b) {
-  fputs((b ? "True" : "False"), out);
-}
-void PyLanguageOutputter_outStr(const LanguageOutputter* This, FILE* out, const char* str) {
-  fputc('\'', out); fputs(str, out); fputc('\'', out);
-}
-void PyLanguageOutputter_outChar(const LanguageOutputter* This, FILE* out, int c) {
-  if (c == '\r') {
-    fputs("'\\r'", out);
-  }
-  else if (c == '\n') {
-    fputs("'\\n'", out);
-  }
-  else if (c == '\v') {
-    fputs("'\\v'", out);
-  }
-  else if (c == ' ') {
-    fputs("' '", out);
-  }
-  else if (c == '\t') {
-    fputs("'\\t'", out);
-  }
-  else if (c == '\\' || c == '\'') {
-    fprintf(out, "'\\%c'", c);
-  }
-  else if (c <= 126 && isgraph(c)) {
-    fprintf(out, "'%c'", c);
-  }
-  else
-    fprintf(out, "%d", c);
-}
-void PyLanguageOutputter_outInt(const LanguageOutputter* This, FILE* out, int i) { fprintf(out, "%d", i); }
-void PyLanguageOutputter_outFunctionStart(const LanguageOutputter* This, FILE* out, const char* rettype, const char* name) {
-  fputs("def ", out);
-  fputs(name, out);
-}
-void PyLanguageOutputter_outStartParameters(const LanguageOutputter* This, FILE* out) {
-  fputs("(", out);
-}
-void PyLanguageOutputter_outEndParameters(const LanguageOutputter* This, FILE* out) {
-  fputs(")", out);
-}
-void PyLanguageOutputter_outStartFunctionCode(const LanguageOutputter* This, FILE* out) {
-  fputs(":", out);
-}
-void PyLanguageOutputter_outEndFunctionCode(const LanguageOutputter* This, FILE* out) {}
-void PyLanguageOutputter_outStartLineComment(const LanguageOutputter* This, FILE* out) {
-  fputs("#", out);
-}
-LanguageOutputter PyLanguageOutputter = { PyLanguageOutputter_outTop, PyLanguageOutputter_outBottom, PyLanguageOutputter_outTypeDecl, PyLanguageOutputter_outDecl, PyLanguageOutputter_outIntDecl, PyLanguageOutputter_outOptionalDecl, PyLanguageOutputter_outArrayDecl, PyLanguageOutputter_outStartArray, PyLanguageOutputter_outEndArray, PyLanguageOutputter_outEndStmt, PyLanguageOutputter_outNull, PyLanguageOutputter_outBool, PyLanguageOutputter_outStr, PyLanguageOutputter_outChar, PyLanguageOutputter_outInt, PyLanguageOutputter_outFunctionStart, PyLanguageOutputter_outStartParameters, PyLanguageOutputter_outEndParameters, PyLanguageOutputter_outStartFunctionCode, PyLanguageOutputter_outEndFunctionCode, PyLanguageOutputter_outStartLineComment };
 
 static void PrintExtraType(FILE *out, const ParserDef *parser, const LanguageOutputter *lang, const LanguageOutputOptions *outputOptions) {
   int extraNt = ParserDef_getExtraNt(parser);
@@ -254,7 +42,7 @@ static void PrintSymbolType(FILE *out, const ParserDef *parser, const LanguageOu
   String_AssignChars(&token_str, "Token");
   String_AssignChars(&tok_str, "tok");
   MapAny_insert(tfields, &token_str, &tok_str);
-  if( outputOptions->m_outputLanguage == OutputLanguage_Python ) {
+  if( outputOptions->outputLanguage == OutputLanguage_Python ) {
     fputs("class stack_t:\n", out);
     fputs("  __slots__ = ('tok'", out);
     int slot = 0;
@@ -286,7 +74,7 @@ static void PrintSymbolType(FILE *out, const ParserDef *parser, const LanguageOu
     fputs("struct stack_t;\ntypedef struct stack_t stack_t;\n", out);
     fputs("struct stack_t {\n", out);
   }
-  if (outputOptions->m_outputLanguage == OutputLanguage_Python)
+  if (outputOptions->outputLanguage == OutputLanguage_Python)
     fputs("    self.",out);
   lang->outDecl(lang, out, "Token", "tok");
   lang->outEndStmt(lang,out);
@@ -308,7 +96,7 @@ static void PrintSymbolType(FILE *out, const ParserDef *parser, const LanguageOu
         i /= 26;
       }
       MapAny_insert(tfields, &symdef->m_semantictype, &fld);
-      if (outputOptions->m_outputLanguage == OutputLanguage_Python)
+      if (outputOptions->outputLanguage == OutputLanguage_Python)
         fputs("    self.", out);
       lang->outDecl(lang, out, String_Chars(&symdef->m_semantictype), String_Chars(&fld));
       lang->outEndStmt(lang,out);
@@ -316,7 +104,7 @@ static void PrintSymbolType(FILE *out, const ParserDef *parser, const LanguageOu
       Scope_Pop();
     }
   }
-  if (outputOptions->m_outputLanguage != OutputLanguage_Python)
+  if (outputOptions->outputLanguage != OutputLanguage_Python)
     fputc('}',out);
   lang->outEndStmt(lang,out);
   fputs("\n", out);
@@ -341,27 +129,22 @@ static void AssignTokenValues(const ParserDef *parser, MapAny /*<int,int>*/ *pid
   *pnonterminals = nonterminals;
 }
 
-static void PrintTokenConstants(FILE *out, const ParserDef *parser, const LanguageOutputter *lang, const LanguageOutputOptions *outputOptions, MapAny /*<int,int>*/ *pid2idx, MapAny /*<int,int>*/ *nt2idx, int terminals, int nonterminals) {
+static void ImportTokenConstants(FILE *out, const ParserDef *parser, const LanguageOutputter *lang, LanguageOutputOptions *outputOptions, MapAny /*<int,int>*/ *pid2idx, MapAny /*<int,int>*/ *nt2idx, int terminals, int nonterminals) {
+  if( outputOptions->outputLanguage != OutputLanguage_Python )
+    return;
+  LanguageOutputOptions_import(outputOptions, outputOptions->lexerName, 0);
+  for (int curtok = 0, endtok = MapAny_size(&parser->m_tokdefs); curtok != endtok; ++curtok) {
+    const int* tokid = 0;
+    const SymbolDef* tok = 0;
+    MapAny_getByIndexConst(&parser->m_tokdefs, curtok, (const void**)&tokid, (const void**)&tok);
+    if (tok->m_symboltype == SymbolTypeTerminal)
+      LanguageOutputOptions_importitem(outputOptions, String_Chars(&tok->m_name), 0);
+  }
+}
+
+static void PrintProductionConstants(FILE *out, const ParserDef *parser, const LanguageOutputter *lang, const LanguageOutputOptions *outputOptions, MapAny /*<int,int>*/ *pid2idx, MapAny /*<int,int>*/ *nt2idx, int terminals, int nonterminals) {
   int firstnt = outputOptions->min_nt_value>(terminals + 1) ? outputOptions->min_nt_value : (terminals + 1);
   int firstproduction = firstnt + nonterminals;
-  if( outputOptions->m_outputLanguage == OutputLanguage_Python ) {
-    bool first = true;
-    fprintf(out, "from %s import ", outputOptions->m_lexerName);
-    for (int curtok = 0, endtok = MapAny_size(&parser->m_tokdefs); curtok != endtok; ++curtok) {
-      const int* tokid = 0;
-      const SymbolDef* tok = 0;
-      MapAny_getByIndexConst(&parser->m_tokdefs, curtok, (const void**)&tokid, (const void**)&tok);
-      if (tok->m_symboltype == SymbolTypeTerminal) {
-        if (first) {
-          first = false;
-        } else {
-          fputs(",", out);
-        }
-        fputs(String_Chars(&tok->m_name), out);
-      }
-    }
-    fputc('\n', out);
-  }
   for (int curtok = 0, endtok = MapAny_size(&parser->m_tokdefs); curtok != endtok; ++curtok) {
     const int *tokid = 0;
     const SymbolDef *tok = 0;
@@ -380,7 +163,7 @@ static void PrintTokenConstants(FILE *out, const ParserDef *parser, const Langua
 
 static void WriteSemanticAction(const Production *p, FILE *out, const ParserDef *parser, const LanguageOutputter *lang, const LanguageOutputOptions *outputOptions, MapAny /*<String,String>*/ *tfields) {
   if( ! VectorAny_size(&p->m_action) ) {
-    if( outputOptions->m_outputLanguage == OutputLanguage_Python )
+    if( outputOptions->outputLanguage == OutputLanguage_Python )
       fputs("pass",out);
     return;
   }
@@ -389,18 +172,18 @@ static void WriteSemanticAction(const Production *p, FILE *out, const ParserDef 
   String_init(&s, true);
   String_AssignString(&s, &p->m_filename);
   String_ReplaceAll(&s, "\\", "\\\\");
-  if (outputOptions->do_pound_line && outputOptions->m_outputLanguage == OutputLanguage_C )
+  if (outputOptions->do_pound_line && outputOptions->outputLanguage == OutputLanguage_C )
     fprintf(out, "#line %d \"%s\"\n", p->m_lineno, String_Chars(&s));
   for (int curaction = 0, endaction = VectorAny_size(&p->m_action); curaction != endaction; ++curaction) {
     const ActionItem *item = &VectorAny_ArrayOpConstT(&p->m_action, curaction, ActionItem);
     if (item->m_actiontype == ActionTypeSrc) {
       // skip the enclosing curly braces if python
-      if (outputOptions->m_outputLanguage == OutputLanguage_Python && (curaction == 0 || curaction == endaction-1) )
+      if (outputOptions->outputLanguage == OutputLanguage_Python && (curaction == 0 || curaction == endaction-1) )
         continue;
       fputs(String_Chars(&item->m_str), out);
     }
     else if (item->m_actiontype == ActionTypeDollarExtra) {
-      if( outputOptions->m_outputLanguage == OutputLanguage_Python )
+      if( outputOptions->outputLanguage == OutputLanguage_Python )
         fputs("extra", out);
       else
         fputs("(*extra)", out);
@@ -408,7 +191,7 @@ static void WriteSemanticAction(const Production *p, FILE *out, const ParserDef 
     else if (item->m_actiontype == ActionTypeDollarDollar) {
       const String *semtype = &MapAny_findConstT(&parser->m_tokdefs, &p->m_nt, SymbolDef).m_semantictype;
       const String *fld = &MapAny_findConstT(tfields, semtype, String);
-      if( outputOptions->m_outputLanguage == OutputLanguage_Python )
+      if( outputOptions->outputLanguage == OutputLanguage_Python )
         fprintf(out, "output.%s", String_Chars(fld));
       else
         fprintf(out, "output->%s", String_Chars(fld));
@@ -436,7 +219,7 @@ static void WriteSemanticAction(const Production *p, FILE *out, const ParserDef 
   Scope_Pop();
 }
 
-static void OutputLRParser(FILE *out, const ParserDef *parser, const LRParserSolution *solution, const LanguageOutputter *lang, const LanguageOutputOptions *outputOptions) {
+static void OutputLRParser(FILE *out, const ParserDef *parser, const LRParserSolution *solution, const LanguageOutputter *lang, LanguageOutputOptions *outputOptions) {
   bool first = true;
   MapAny /*<int,int>*/ pid2idx;
   MapAny /*<int,int>*/ nt2idx;
@@ -454,9 +237,10 @@ static void OutputLRParser(FILE *out, const ParserDef *parser, const LRParserSol
   VectorAny_init(&sidxtoaoffset,getIntElement(),true);
   MapAny_init(&tfields, getStringElement(), getStringElement(), true);
 
-  lang->outTop(lang, outputOptions, out);
   AssignTokenValues(parser, &pid2idx, &nt2idx, &terminals, &nonterminals);
-  PrintTokenConstants(out, parser, lang, outputOptions, &pid2idx, &nt2idx, terminals, nonterminals);
+  ImportTokenConstants(out, parser, lang, outputOptions, &pid2idx, &nt2idx, terminals, nonterminals);
+  lang->outTop(lang, out);
+  PrintProductionConstants(out, parser, lang, outputOptions, &pid2idx, &nt2idx, terminals, nonterminals);
 
   int firstnt = outputOptions->min_nt_value>(terminals + 1) ? outputOptions->min_nt_value : (terminals + 1);
   int firstproduction = firstnt + nonterminals;
@@ -643,7 +427,7 @@ static void OutputLRParser(FILE *out, const ParserDef *parser, const LRParserSol
 
   lang->outFunctionStart(lang,out,"static bool", "reduce");
   lang->outStartParameters(lang,out);
-  if( outputOptions->m_outputLanguage == OutputLanguage_Python ) {
+  if( outputOptions->outputLanguage == OutputLanguage_Python ) {
     lang->outDecl(lang, out, "extra_t", "extra");
     fputs(", ", out);
     lang->outDecl(lang, out, "int", "productionidx");
@@ -664,12 +448,12 @@ static void OutputLRParser(FILE *out, const ParserDef *parser, const LRParserSol
     lang->outDecl(lang, out, "const char**", "err");
   }
   lang->outEndParameters(lang, out);
-  if (outputOptions->m_outputLanguage == OutputLanguage_Python) {
+  if (outputOptions->outputLanguage == OutputLanguage_Python) {
     fputs(" -> bool", out);
   }
   lang->outStartFunctionCode(lang, out);
   fputc('\n',out);
-  if (outputOptions->m_outputLanguage == OutputLanguage_Python) {
+  if (outputOptions->outputLanguage == OutputLanguage_Python) {
     fputs("  match productionidx:\n", out);
   } else {
     fputs("  switch(productionidx) {\n", out);
@@ -678,19 +462,19 @@ static void OutputLRParser(FILE *out, const ParserDef *parser, const LRParserSol
     const Production *p = VectorAny_ArrayOpConstT(&parser->m_productions,curp,Production*);
     if( VectorAny_size(&p->m_action) == 0 )
       continue;
-    if( outputOptions->m_outputLanguage == OutputLanguage_Python) {
+    if( outputOptions->outputLanguage == OutputLanguage_Python) {
       int prodIdx = MapAny_findConstT(&pid2idx,&p->m_pid,int);
       fprintf(out,"    case %d: # PROD_%d:\n      ", prodIdx+firstproduction, prodIdx);
     } else {
       fprintf(out,"    case PROD_%d:\n      ", MapAny_findConstT(&pid2idx,&p->m_pid,int));
     }
     WriteSemanticAction(p, out, parser, lang, outputOptions, &tfields);
-    if( outputOptions->m_outputLanguage == OutputLanguage_C) {
+    if( outputOptions->outputLanguage == OutputLanguage_C) {
       fputs("\n      break;\n", out);
     }
     fputc('\n',out);
   }
-  if (outputOptions->m_outputLanguage == OutputLanguage_Python) {
+  if (outputOptions->outputLanguage == OutputLanguage_Python) {
     fputs("    case _:\n      pass\n", out);
   }
   else {
@@ -704,14 +488,33 @@ static void OutputLRParser(FILE *out, const ParserDef *parser, const LRParserSol
   fputc('\n', out);
   lang->outEndFunctionCode(lang,out);
   fputc('\n', out);
-  lang->outBottom(lang, outputOptions, out);
+  outBottom(lang,out);
   fputc('\n', out);
   Scope_Pop();
 }
 
 void OutputLRParserSolution(FILE *out, const ParserDef *parser, const LRParserSolution *solution, LanguageOutputOptions *options) {
-  LanguageOutputter *outputer = options->m_outputLanguage == OutputLanguage_Python ? &PyLanguageOutputter : &CLanguageOutputter;
-  OutputLRParser(out,parser,solution,outputer,options);
+  LanguageOutputter outputter;
+  LanguageOutputter_init(&outputter,options);
+  if( options->outputLanguage == OutputLanguage_C ) {
+    LanguageOutputOptions_import(options,"lrparse",0);
+    LanguageOutputOptions_import(options,options->lexerName,0);
+  }
+  if( options->outputLanguage == OutputLanguage_Python ) {
+    LanguageOutputOptions_import(options,"typing",0);
+    LanguageOutputOptions_importitem(options,"Any",0);
+    LanguageOutputOptions_importitem(options,"Sequence",0);
+    LanguageOutputOptions_importitem(options,"Optional",0);
+    LanguageOutputOptions_importitem(options,"Callable",0);
+    LanguageOutputOptions_importitem(options,"IO",0);
+    LanguageOutputOptions_import(options,"lrparse",0);
+    LanguageOutputOptions_importitem(options,"ACTION_SHIFT",0);
+    LanguageOutputOptions_importitem(options,"ACTION_REDUCE",0);
+    LanguageOutputOptions_importitem(options,"ACTION_STOP",0);
+    LanguageOutputOptions_import(options,"tok",0);
+    LanguageOutputOptions_importitem(options,"Token",0);
+  }
+  OutputLRParser(out,parser,solution,&outputter,options);
 }
 
 const char *SymbolName(const ParserDef *parser, int tok) {

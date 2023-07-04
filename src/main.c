@@ -18,7 +18,7 @@ char *makeFOutName(const char *fname, LanguageOutputOptions *options) {
     lastdot[0] = lastdot[1];
     ++lastdot;
   }
-  if( options->m_outputLanguage == OutputLanguage_Python )
+  if( options->outputLanguage == OutputLanguage_Python )
     strcat(foutname, ".py");
   else
     strcat(foutname, ".h");
@@ -28,8 +28,11 @@ char *makeFOutName(const char *fname, LanguageOutputOptions *options) {
 void parseArgs(int argc, char *argv[], int *pverbosity, int *ptimed, LanguageOutputOptions *options, const char **pfname) {
   int verbosity = 0;
   int timed = 0;
-  int nImports = 0;
   const char *arg;
+  if (getarg(argc, argv, "--help")) {
+    *pfname = 0;
+    return;
+  }
   if (getarg(argc, argv, "-vvv"))
     verbosity = 3;
   else if (getarg(argc, argv, "-vv"))
@@ -37,7 +40,7 @@ void parseArgs(int argc, char *argv[], int *pverbosity, int *ptimed, LanguageOut
   else if (getarg(argc, argv, "-v"))
     verbosity = 1;
   if ((arg = getarg(argc, argv, "--lexer=")))
-    options->m_lexerName = arg + 8;
+    options->lexerName = arg + 8;
   if ((arg = getarg(argc, argv, "--minnt=")))
     options->min_nt_value = atoi(arg + 8);
   if ((arg = getarg(argc, argv, "--no-pound-line")))
@@ -45,19 +48,14 @@ void parseArgs(int argc, char *argv[], int *pverbosity, int *ptimed, LanguageOut
   if (getarg(argc, argv, "--timed"))
     timed = 1;
   if (getarg(argc, argv, "--c"))
-    options->m_outputLanguage = OutputLanguage_C;
+    options->outputLanguage = OutputLanguage_C;
   if (getarg(argc, argv, "--py"))
-    options->m_outputLanguage = OutputLanguage_Python;
+    options->outputLanguage = OutputLanguage_Python;
   for (int i = 1; i < argc; ++i) {
-    if (strncmp(argv[i], "--import=",9) == 0) {
-      options->m_extraImports[nImports++].import = argv[i]+9;
-      options->m_extraImports[nImports].import = 0;
-      options->m_extraImports[nImports].as = 0;
-    }
-    if (strncmp(argv[i],"--as=",5) == 0) {
-      if( nImports )
-        options->m_extraImports[nImports-1].as = argv[i]+5;
-    }
+    if (strncmp(argv[i], "--import=",9) == 0)
+      LanguageOutputOptions_import(options,argv[i]+9,0);
+    if (strncmp(argv[i],"--as=",5) == 0)
+      LanguageOutputOptions_import(options,0,argv[i]+5);
   }
   for (int i = 1; i < argc; ++i) {
     if (argv[i][0] == '-')
@@ -78,7 +76,7 @@ void parseArgs(int argc, char *argv[], int *pverbosity, int *ptimed, LanguageOut
   }
 
   // get the lexer name, if not provided
-  if (!options->m_lexerName && *pfname) {
+  if (!options->lexerName && *pfname) {
     const char *fname = *pfname;
     char* foutname = (char*)malloc(strlen(fname) + 3);
     strcpy(foutname, fname);
@@ -99,7 +97,7 @@ void parseArgs(int argc, char *argv[], int *pverbosity, int *ptimed, LanguageOut
     int len = strlen(lexerName);
     lexerName[len] = 'L';
     lexerName[len+1] = 0;
-    options->m_lexerName = lexerName;
+    options->lexerName = lexerName;
   }
   *pverbosity = verbosity;
   *ptimed = timed;
@@ -109,8 +107,10 @@ int parse_main(int argc, char *argv[]) {
   int verbosity = 0;
   int timed = 0;
   const char *fname = 0;
-  ImportAs extraImports[32] = {0};
-  LanguageOutputOptions options = { 0, true, OutputLanguage_C, 0, extraImports };
+  LanguageOutputOptions options;
+  memset(&options,0,sizeof(options));
+  options.do_pound_line = true;
+  options.outputLanguage = OutputLanguage_C;
 
   parseArgs(argc, argv, &verbosity, &timed, &options, &fname);
 
@@ -205,57 +205,76 @@ int tok_main(int argc, char *argv[])
       }
     }
   }
+  const char *fname = 0;
   for( int i = 1; i < argc; ++i ) {
     if( argv[i][0] == '-' )
       continue;
-    const char *fname = argv[i];
-    FILE *fin = fopen(fname,"r");
-    if( !fin ) {
-      fprintf(stderr, "Unable to open %s for reading\n", fname);
-      continue;
-    }
-    
-    FILE *fout = 0;
-    char *foutname = (char*)malloc(strlen(fname)+3);
-    char *name = (char*)malloc(strlen(fname)+3);
-    strcpy(name,fname);
-    char *lastdot = strrchr(name,'.');
-    while( *lastdot ) {
-      lastdot[0] = lastdot[1];
-      ++lastdot;
-    }
-    strcpy(foutname,name);
-    if( py )
-      strcat(foutname,".py");
-    else
-     strcat(foutname,".h");
-
-    ParseError *pe;
-    TokStream s;
-    Scope_Push();
-    TokStream_init(&s,fin,true);
-    int ret = 0;
-    Scope_SetJmp(ret);
-    if( ! ret ) {
-      Nfa *dfa = ParseTokenizerFile(&s);
-      fout = fopen(foutname,"w");
-      if( ! fout ) {
-        fprintf(stderr, "Unable to open %s for writing\n", foutname);
-        fclose(fin);
-        continue;
-      }
-      OutputTokenizerSource(fout,dfa,name,prefix,py,minimal);
-    } else if( getParseError((const ParseError**)&pe) ) {
-      fprintf(stderr, "Parse Error %s(%d:%d) : %s\n", fname, pe->line, pe->col, String_Chars(&pe->err));
-      clearParseError();
-    } else {
-      fputs("Unknown Error\n", stderr);
-    }
-    fclose(fin);
-    if( fout )
-      fclose(fout);
-    Scope_Pop();
+    fname = argv[i];
+    break;
   }
+
+  if (!fname) {
+    fputs("usage : tokenizer [--prefix] [--minimal] [--py] filename\n"
+          "--prefix       : prefix for output values\n"
+          "--minimal      : skip the structure declaration at the bottom (C only)\n"
+          "--py           : output python (default C)\n", stderr);
+    return -1;
+  }
+
+  FILE *fin = fopen(fname,"r");
+  if( !fin ) {
+    fprintf(stderr, "Unable to open %s for reading\n", fname);
+    return 1;
+  }
+    
+  FILE *fout = 0;
+  char *foutname = (char*)malloc(strlen(fname)+3);
+  char *name = (char*)malloc(strlen(fname)+3);
+  strcpy(name,fname);
+  char *lastdot = strrchr(name,'.');
+  while( *lastdot ) {
+    lastdot[0] = lastdot[1];
+    ++lastdot;
+  }
+  strcpy(foutname,name);
+  if( py )
+    strcat(foutname,".py");
+  else
+   strcat(foutname,".h");
+
+  ParseError *pe;
+  TokStream s;
+  Scope_Push();
+  TokStream_init(&s,fin,fname,true);
+  int ret = 0;
+  Scope_SetJmp(ret);
+  if( ! ret ) {
+    Nfa *dfa = ParseTokenizerFile(&s);
+    fout = fopen(foutname,"w");
+    if( ! fout ) {
+      fprintf(stderr, "Unable to open %s for writing\n", foutname);
+      fclose(fin);
+      goto cleanup;
+    }
+    LanguageOutputOptions options;
+    memset(&options,0,sizeof(options));
+    options.name = name;
+    options.prefix = prefix;
+    options.outputLanguage = py ? OutputLanguage_Python : OutputLanguage_C;
+    options.minimal = minimal;
+    OutputTokenizerSource(fout,dfa,&options);
+  } else if( getParseError((const ParseError**)&pe) ) {
+    fprintf(stderr, "Parse Error %s(%d:%d) : %s\n", fname, pe->line, pe->col, String_Chars(&pe->err));
+    clearParseError();
+  } else {
+    fputs("Unknown Error\n", stderr);
+  }
+cleanup:
+  if( fin )
+    fclose(fin);
+  if( fout )
+    fclose(fout);
+  Scope_Pop();
   return 0;
 }
 
@@ -263,9 +282,10 @@ int main(int argc, char *argv[]) {
   if( argc > 1 ) {
     if( strcmp(argv[1],"parser")==0)
       return parse_main(argc-1,argv+1);
-    if( strcmp(argv[1],"tokenizer")==0)
+    else if( strcmp(argv[1],"tokenizer")==0)
       return tok_main(argc-1,argv+1);
   }
-  return 0;
+  fputs("usage: parser [parser|tokenizer]\n", stdout);
+  return 1;
 }
 

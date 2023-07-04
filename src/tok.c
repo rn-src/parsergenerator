@@ -22,9 +22,9 @@ void StackTokBufItem_Assign(StackTokBufItem *lhs, const StackTokBufItem *rhs) {
   String_AssignString(&lhs->filename,&rhs->filename);
 }
 
-void Token_destroy(Token *This);
+void Tok_destroy(Tok *This);
 
-void Token_init(Token *This, bool onstack) {
+void Tok_init(Tok *This, bool onstack) {
   String_init(&This->m_s,false);
   String_init(&This->m_filename,false);
   This->m_wslines = 0;
@@ -34,15 +34,15 @@ void Token_init(Token *This, bool onstack) {
   This->m_col = -1;
   This->m_sym = -1;
   if( onstack )
-    Push_Destroy(This,(vpstack_destroyer)Token_destroy);
+    Push_Destroy(This,(vpstack_destroyer)Tok_destroy);
 }
 
-void Token_destroy(Token *This) {
+void Tok_destroy(Tok *This) {
   String_clear(&This->m_s);
   String_clear(&This->m_filename);
 }
 
-void Token_set(Token *This, String *s, String *filename, int wslines, int wscols, int wslen, int line, int col, int sym) {
+void Tok_set(Tok *This, String *s, String *filename, int wslines, int wscols, int wslen, int line, int col, int sym) {
     String_AssignString(&This->m_s,s);
     String_AssignString(&This->m_filename,filename);
     This->m_wslines = wslines;
@@ -53,11 +53,11 @@ void Token_set(Token *This, String *s, String *filename, int wslines, int wscols
     This->m_sym = sym;
 }
 
-const char *Token_Chars(const Token *This) {
+const char *Tok_Chars(const Tok *This) {
   return String_Chars(&This->m_s);
 }
 
-void Token_Assign(Token *lhs, const Token *rhs) {
+void Tok_Assign(Tok *lhs, const Tok *rhs) {
   String_AssignString(&lhs->m_s,&rhs->m_s);
   String_AssignString(&lhs->m_filename,&rhs->m_filename);
   lhs->m_wslines = rhs->m_wslines;
@@ -77,7 +77,7 @@ static void StackTokBuf_getParsePos(StackTokBuf *This, VectorAny /*<ParsePos>*/ 
 
 void StackTokBuf_init(StackTokBuf *This, bool onstack) {
   VectorAny_init(&This->m_stack, &StackTokBufItemElement, false);
-  Token_init(&This->m_endtok, false);
+  Tok_init(&This->m_endtok, false);
   This->m_tokbuf.peekc = (TokBuf_peekc)StackTokBuf_peekc;
   This->m_tokbuf.discard = (TokBuf_discard)StackTokBuf_discard;
   This->m_tokbuf.line = (TokBuf_line)StackTokBuf_line;
@@ -90,12 +90,12 @@ void StackTokBuf_init(StackTokBuf *This, bool onstack) {
 
 void StackTokBuf_destroy(StackTokBuf *This) {
   VectorAny_destroy(&This->m_stack);
-  Token_destroy(&This->m_endtok);
+  Tok_destroy(&This->m_endtok);
 }
 
 void StackTokBuf_assign(StackTokBuf *lhs, const StackTokBuf *rhs) {
   VectorAny_Assign(&lhs->m_stack, &rhs->m_stack);
-  Token_Assign(&lhs->m_endtok, &rhs->m_endtok);
+  Tok_Assign(&lhs->m_endtok, &rhs->m_endtok);
 }
 
 void StackTokBuf_push(StackTokBuf *This, TokBuf *tokbuf) {

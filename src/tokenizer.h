@@ -3,6 +3,7 @@
 
 #include <stdio.h>
 #include "tinytemplates.h"
+#include "parsecommon.h"
 #ifndef __cplusplus
 #include <stdbool.h>
 #endif
@@ -10,7 +11,7 @@
 struct TokStream;
 typedef struct TokStream TokStream;
 
-void TokStream_init(TokStream *This, FILE *in, bool onstack);
+void TokStream_init(TokStream *This, FILE *in, const char *file, bool onstack);
 void TokStream_destroy(TokStream *This);
 bool TokStream_fill(TokStream *This);
 int TokStream_peekc(TokStream *This, int n /*= 0*/);
@@ -19,24 +20,13 @@ int TokStream_readc(TokStream *This);
 void TokStream_discard(TokStream *This, int n /*=1*/);
 int TokStream_line(TokStream *This);
 int TokStream_col(TokStream *This);
+const char *TokStream_file(TokStream *This);
 
 struct TokStream {
   char *m_buf, *m_next;
   int m_buflen, m_buffill, m_bufpos, m_pos, m_line, m_col;
   FILE *m_in;
-};
-
-struct ParseError;
-typedef struct ParseError ParseError;
-
-void setParseError(int line, int col, const String *err);
-bool getParseError(const ParseError **err);
-void clearParseError();
-
-struct ParseError
-{
-  int line, col;
-  String err;
+  char *m_file;
 };
 
 struct CharRange;
@@ -149,8 +139,6 @@ void Nfa_stateTransitions(const Nfa *This, const SetAny /*<int>*/ *states, CharS
 bool Nfa_hasEndState(const Nfa *This, const SetAny /*<int>*/ *states);
 int Nfa_lowToken(const Nfa *This, const SetAny /*<int>*/ *states);
 
-
-
 struct Nfa {
   int m_nextState;
   SetAny /*<int>*/ m_startStates;
@@ -161,21 +149,6 @@ struct Nfa {
   MapAny /*<int,Token>*/ m_tokendefs;
   int m_sections;
 };
-
-enum RxType {
-  RxType_None = 0,
-  RxType_CharSet = 1,
-  RxType_BinaryOp = 2,
-  RxType_Many = 3
-};
-typedef enum RxType RxType;
-
-enum BinaryOp {
-  BinaryOp_None = 0,
-  BinaryOp_Or = 1,
-  BinaryOp_Concat = 2
-};
-typedef enum BinaryOp BinaryOp;
 
 struct Rx;
 typedef struct Rx Rx;
@@ -200,7 +173,7 @@ struct Rx {
 };
 
 Nfa *ParseTokenizerFile(TokStream *s);
-void OutputTokenizerSource(FILE *out, const Nfa *dfa, const char *name, const char *prefix, bool py, bool minimal);
+void OutputTokenizerSource(FILE *out, const Nfa *dfa, LanguageOutputOptions *options);
 ElementOps *getTokenElement();
 void Nfa_getTokenDefs(const Nfa *This, VectorAny /*<Token>*/ *tokendefs);
 

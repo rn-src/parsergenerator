@@ -5,213 +5,29 @@
 #include <string.h>
 #include "tokenizer.h"
 
-struct LanguageOutputter;
-typedef struct LanguageOutputter LanguageOutputter;
-
-struct LanguageOutputter {
-  void (*outTop)(const LanguageOutputter *This, FILE *out);
-  void (*outBottom)(const LanguageOutputter *This, FILE *out, bool hassections);
-  void (*outDecl)(const LanguageOutputter *This, FILE *out, const char *type, const char *name);
-  void (*outIntDecl)(const LanguageOutputter *This, FILE *out, const char *name, int i);
-  void (*outArrayDecl)(const LanguageOutputter *This, FILE *out, const char *type, const char *name);
-  void (*outStartArray)(const LanguageOutputter *This, FILE *out);
-  void (*outEndArray)(const LanguageOutputter *This, FILE *out);
-  void (*outEndStmt)(const LanguageOutputter *This, FILE *out);
-  void (*outNull)(const LanguageOutputter *This, FILE *out);
-  void (*outBool)(const LanguageOutputter *This, FILE *out, bool b);
-  void (*outStr)(const LanguageOutputter *This, FILE *out, const char *str);
-  void (*outChar)(const LanguageOutputter *This, FILE *out, int c);
-  void (*outInt)(const LanguageOutputter *This, FILE *out, int i);
-  int  (*encodeuint)(const LanguageOutputter *lang, FILE *out, unsigned int i);
-  const char *prefix;
-  const char *name;
-  bool minimal;
-};
-
-void CLanguageOutputter_outTop(const LanguageOutputter* This, FILE* out) {
-  if( This->minimal )
+void outBottom(const LanguageOutputter* This, FILE* out, bool hassections) {
+  if( This->options->minimal )
     return;
-  fprintf(out, "#ifndef __%s_h\n", This->name);
-  fprintf(out, "#define __%s_h\n", This->name);
-  fputs("#include \"tokenizer.h\"\n\n", out);
-}
-void CLanguageOutputter_outBottom(const LanguageOutputter* This, FILE* out, bool hassections) {
-  if( This->minimal )
-    return;
-  fprintf(out, "struct tokinfo %stkinfo = {\n", This->prefix);
-  fprintf(out, "  %stokenCount,\n", This->prefix);
-  fprintf(out, "  %ssectionCount,\n", This->prefix);
-  if( hassections ) {
-    fprintf(out, "  %ssectioninfo,\n", This->prefix);
-    fprintf(out, "  %ssectioninfo_offset,\n", This->prefix);
-  } else {
-    fputs("  0,\n  0,\n", out);
-  }
-  fprintf(out, "  %stokenstr,\n", This->prefix);
-  fprintf(out, "  %sisws,\n", This->prefix);
-  fprintf(out, "  %sstateCount,\n", This->prefix);
-  fprintf(out, "  %sstateinfo,\n", This->prefix);
-  fprintf(out, "  %sstateinfo_offset,\n", This->prefix);
-  fputs("};\n", out);
-  fprintf(out, "#endif // __%s_h\n", This->name);
-}
-void CLanguageOutputter_outDecl(const LanguageOutputter *This, FILE *out, const char *type, const char *name) {
-  fprintf(out, "%s %s%s", type, This->prefix, name);
-}
-void CLanguageOutputter_outIntDecl(const LanguageOutputter *This, FILE *out, const char *name, int i) {
-  fprintf(out, "#define %s (%d)\n", name, i);
-}
-void CLanguageOutputter_outArrayDecl(const LanguageOutputter *This, FILE *out, const char *type, const char *name) {
-  fprintf(out, "%s %s%s[]", type, This->prefix, name);
-}
-void CLanguageOutputter_outStartArray(const LanguageOutputter *This, FILE *out) { fputc('{',out); }
-void CLanguageOutputter_outEndArray(const LanguageOutputter *This, FILE *out) { fputc('}',out); }
-void CLanguageOutputter_outEndStmt(const LanguageOutputter *This, FILE *out) { fputc(';',out); }
-void CLanguageOutputter_outNull(const LanguageOutputter *This, FILE *out) { fputc('0',out); }
-void CLanguageOutputter_outBool(const LanguageOutputter *This, FILE *out, bool b) { fputs((b ? "true" : "false"),out); }
-void CLanguageOutputter_outStr(const LanguageOutputter *This, FILE *out, const char *str)  {
-  fprintf(out, "\"%s\"", str);
-}
-void CLanguageOutputter_outChar(const LanguageOutputter *This, FILE *out, int c)  {
-  if(c == '\r' ) {
-    fputs("'\\r'",out);
-  } else if(c == '\n' ) {
-    fputs("'\\n'",out);
-  } else if(c == '\v' ) {
-    fputs("'\\v'",out);
-  } else if(c == ' ' ) {
-    fputs("' '",out);
-  } else if(c == '\t' ) {
-    fputs("'\\t'",out);
-  } else if(c == '\\' || c == '\'' ) {
-    fprintf(out,"'\\%c'",c);
-  } else if( c <= 126 && isgraph(c) ) {
-    fprintf(out,"'%c'",c);
-  } else
-    fprintf(out,"%d",c);
-}
-void CLanguageOutputter_outInt(const LanguageOutputter *This, FILE *out, int i)  { fprintf(out,"%d",i); }
-
-static int modup(int lhs, int rhs) {
-  return lhs/rhs+((lhs%rhs)?1:0);
-}
-
-static unsigned int lshift(unsigned int i, unsigned int b) {
-  // workaround bit-shift quirks
-  if( b==0 )
-    return i;
-  else if( b >= 32 )
-    return 0;
-  return i<<b;
-}
-
-static unsigned int rshift(unsigned int i, unsigned int b) {
-  // workaround bit-shift quirks
-  if( b==0 )
-    return i;
-  else if( b >= 32 )
-    return 0;
-  return i>>b;
-}
-
-// A simple encoding scheme for unsigned 4 byte integers.
-// In practice, almost all integers where we use this end
-// up being 1 byte encodings, but we have to handle up to
-// 4 byte integers, so we save 75% typically.
-// First bytes contains...
-// 1 byte encoding 0xxxxxxx
-// 2 byte encoding 10xxxxxx xxxxxxxx
-// 3 byte encoding 110xxxxx xxxxxxxx xxxxxxxx
-// 4 byte encoding 1110xxxx xxxxxxxx xxxxxxxx xxxxxxxx
-// 5 byte encoding 111110xx xxxxxxxx xxxxxxxx xxxxxxxx xxxxxxxx
-// Note: first byte of 5 byte encoding will be 11111000 due to
-// all 32 bits being consumed in the final 4 bytes.
-static int CLanguageOutputter_encodeuint(const LanguageOutputter *lang, FILE *out, unsigned int i) {
-  if( i == 0 ) {
-    lang->outInt(lang,out,0);
-    return 1;
-  }
-  unsigned int nbits = 0;
-  unsigned char c = 0;
-  while( (lshift(0xffffffff,nbits)&i) != 0 ) ++nbits;
-  unsigned int bytes = modup(nbits,7);
-  unsigned int mask = 0;
-  unsigned int first = 8-bytes;
-  for( unsigned int b = bytes; b > 0; --b ) {
-    if( b == bytes ) {
-      mask = 0xff & ~lshift(0xff,first);
-      c = 0xff & lshift(0xff,first+1);
+  if( This->options->outputLanguage == OutputLanguage_C ) {
+    const char *prefix = This->options->prefix ? This->options->prefix : "";
+    fprintf(out, "struct tokinfo %stkinfo = {\n", prefix);
+    fprintf(out, "  %stokenCount,\n", prefix);
+    fprintf(out, "  %ssectionCount,\n", prefix);
+    if( hassections ) {
+      fprintf(out, "  %ssectioninfo,\n", prefix);
+      fprintf(out, "  %ssectioninfo_offset,\n", prefix);
     } else {
-      mask = 0xff;
-      fputc(',',out);
+      fputs("  0,\n  0,\n", out);
     }
-    c |= mask & rshift(i,(b-1)*8);
-    lang->outInt(lang,out,c);
-  } 
-  return bytes;
+    fprintf(out, "  %stokenstr,\n", prefix);
+    fprintf(out, "  %sisws,\n", prefix);
+    fprintf(out, "  %sstateCount,\n", prefix);
+    fprintf(out, "  %sstateinfo,\n", prefix);
+    fprintf(out, "  %sstateinfo_offset,\n", prefix);
+    fputs("};\n", out);
+  }
+  This->outBottom(This,out);
 }
-
-LanguageOutputter CLanguageOutputter = {CLanguageOutputter_outTop, CLanguageOutputter_outBottom, CLanguageOutputter_outDecl, CLanguageOutputter_outIntDecl, CLanguageOutputter_outArrayDecl, CLanguageOutputter_outStartArray, CLanguageOutputter_outEndArray, CLanguageOutputter_outEndStmt, CLanguageOutputter_outNull, CLanguageOutputter_outBool, CLanguageOutputter_outStr, CLanguageOutputter_outChar, CLanguageOutputter_outInt, CLanguageOutputter_encodeuint};
-
-static const char *pytype(const char *type) {
-  if( strstr(type,"int") )
-    return "int";
-  if( strstr(type,"bool") )
-    return "bool";
-  if( strstr(type,"unsigned char") )
-    return "int";
-  if( strstr(type,"char") )
-    return "str";
-  return "Any";
-}
-
-void PyLanguageOutputter_outTop(const LanguageOutputter* This, FILE* out) { fputs("from typing import Sequence\n", out); }
-void PyLanguageOutputter_outBottom(const LanguageOutputter* This, FILE* out, bool hassections) {}
-void PyLanguageOutputter_outDecl(const LanguageOutputter* This, FILE* out, const char* type, const char* name) { fputs(name, out); fputs(": ",out); fputs(pytype(type), out); }
-void PyLanguageOutputter_outIntDecl(const LanguageOutputter* This, FILE* out, const char* name, int i) {
-  fprintf(out, "%s: int = %d\n", name, i);
-}
-void PyLanguageOutputter_outArrayDecl(const LanguageOutputter* This, FILE* out, const char* type, const char* name) { fputs(name, out); fputs(": Sequence[", out);  fputs(pytype(type), out); fputs("]", out); }
-void PyLanguageOutputter_outStartArray(const LanguageOutputter* This, FILE* out) { fputc('[', out); }
-void PyLanguageOutputter_outEndArray(const LanguageOutputter* This, FILE* out) { fputc(']', out); }
-void PyLanguageOutputter_outEndStmt(const LanguageOutputter* This, FILE* out) {}
-void PyLanguageOutputter_outNull(const LanguageOutputter* This, FILE* out) { fputc('0', out); }
-void PyLanguageOutputter_outBool(const LanguageOutputter* This, FILE* out, bool b) { fputs((b ? "True" : "False"), out); }
-void PyLanguageOutputter_outStr(const LanguageOutputter* This, FILE* out, const char* str) { fputc('\'', out); fputs(str, out); fputc('\'', out); }
-void PyLanguageOutputter_outChar(const LanguageOutputter* This, FILE* out, int c) {
-  if (c == '\r') {
-    fputs("ord('\\r')", out);
-  }
-  else if (c == '\n') {
-    fputs("ord('\\n')", out);
-  }
-  else if (c == '\v') {
-    fputs("ord('\\v')", out);
-  }
-  else if (c == ' ') {
-    fputs("ord(' ')", out);
-  }
-  else if (c == '\t') {
-    fputs("ord('\\t')", out);
-  }
-  else if (c == '\\' || c == '\'') {
-    fprintf(out, "ord('\\%c')", c);
-  }
-  else if (c <= 126 && isgraph(c)) {
-    fprintf(out, "ord('%c')", c);
-  }
-  else
-    fprintf(out, "%d", c);
-}
-void PyLanguageOutputter_outInt(const LanguageOutputter* This, FILE* out, int i) { fprintf(out, "%d", i); }
-
-static int PyLanguageOutputter_encodeuint(const LanguageOutputter *lang, FILE *out, unsigned int i) {
-  // don't bother encoding in python
-  lang->outInt(lang,out,i);
-  return 1;
-}
-
-LanguageOutputter PyLanguageOutputter = { PyLanguageOutputter_outTop, PyLanguageOutputter_outBottom, PyLanguageOutputter_outDecl, PyLanguageOutputter_outIntDecl, PyLanguageOutputter_outArrayDecl, PyLanguageOutputter_outStartArray, PyLanguageOutputter_outEndArray, PyLanguageOutputter_outEndStmt, PyLanguageOutputter_outNull, PyLanguageOutputter_outBool, PyLanguageOutputter_outStr, PyLanguageOutputter_outChar, PyLanguageOutputter_outInt, PyLanguageOutputter_encodeuint};
 
 static bool OutputSections(FILE *out, const Nfa *dfa, const LanguageOutputter *lang, VectorAny /*<Token>*/ *tokens) {
   bool hasactions = false;
@@ -247,11 +63,11 @@ static bool OutputSections(FILE *out, const Nfa *dfa, const LanguageOutputter *l
         first = false;
       else
         fputc(',',out);
-      cnt += lang->encodeuint(lang,out,token->m_token);
+      cnt += encodeuint(lang,out,token->m_token);
       fputc(',',out);
-      cnt += lang->encodeuint(lang,out,action->m_action);
+      cnt += encodeuint(lang,out,action->m_action);
       fputc(',',out);
-      cnt += lang->encodeuint(lang,out,action->m_actionarg);
+      cnt += encodeuint(lang,out,action->m_actionarg);
       if( ! MapAny_find(&sectioncounts,&i) ) {
         int zero = 0;
         MapAny_insert(&sectioncounts,&i,&zero);
@@ -357,7 +173,7 @@ static void OutputStateInfo(FILE *out, const Nfa *dfa, const LanguageOutputter *
       if( i > 0 || j > 0 )
         fputc(',',out);
       int element = VectorAny_ArrayOpT(&stateinfo,j,int);
-      fullcnt += lang->encodeuint(lang,out,element);
+      fullcnt += encodeuint(lang,out,element);
     }
     idxbase += MapAny_findConstT(&stateinfocounts,&i,int);
     MapAny_findT(&stateinfocounts,&i,int) = fullcnt;
@@ -431,7 +247,7 @@ static void OutputDfaSource(FILE *out, const Nfa *dfa, const LanguageOutputter *
 
   int zero = 0;
   int ntokens = VectorAny_size(&tokens);
-  int nwsflags = modup(ntokens,8);
+  int nwsflags = ntokens/8+((ntokens%8)?1:0);
   for( int i = 0, end = nwsflags; i < end; ++i )
     VectorAny_push_back(&wsflags,&zero);
   for( int i = 0, end = ntokens; i < end; ++i ) {
@@ -463,15 +279,19 @@ static void OutputDfaSource(FILE *out, const Nfa *dfa, const LanguageOutputter *
   OutputStateInfo(out, dfa, lang);
 
   fputs("\n",out);
-  lang->outBottom(lang,out,hassections);
+  outBottom(lang,out,hassections);
   Scope_Pop();
 }
 
-void OutputTokenizerSource(FILE *out, const Nfa *dfa, const char *name, const char *prefix, bool py, bool minimal) {
-  LanguageOutputter *outputer = py ? &PyLanguageOutputter : &CLanguageOutputter;
-  outputer->name = name;
-  outputer->prefix = prefix?prefix:"";
-  outputer->minimal = minimal;
-  OutputDfaSource(out,dfa,outputer);
+void OutputTokenizerSource(FILE *out, const Nfa *dfa, LanguageOutputOptions *options) {
+  LanguageOutputter outputter;
+  LanguageOutputter_init(&outputter,options);
+  if( options->outputLanguage == OutputLanguage_C )
+    LanguageOutputOptions_import(options, "tokenizer", 0);
+  if( options->outputLanguage == OutputLanguage_Python ) {
+    LanguageOutputOptions_import(options, "typing", 0);
+    LanguageOutputOptions_importitem(options, "Sequence", 0);
+  }
+  OutputDfaSource(out,dfa,&outputter);
   fputc('\n',out);
 }
