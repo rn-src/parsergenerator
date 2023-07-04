@@ -170,6 +170,7 @@ static void AssignTokenValues(const ParserDef *parser, LanguageOutputOptions *ou
   Scope_Push();
   String_init(&idstr,true);
   String_init(&fname,true);
+  String_init(&line, true);
 
   int maxterminal = -1, nonterminals = 0;
   
@@ -183,6 +184,8 @@ static void AssignTokenValues(const ParserDef *parser, LanguageOutputOptions *ou
     fprintf(stderr, "Unable to open the token file \"%s\" to import token values, stopping.\n", String_Chars(&fname));
     Scope_LongJmp(1);
   } else {
+    Scope_Push();
+    Push_Destroy(f, (vpstack_destroyer)fclose);
     while( readline(f,&line) ) {
       int terminal = 0;
       if( ! readtok(String_Chars(&line),&idstr,&terminal,outputOptions->outputLanguage) )
@@ -201,7 +204,7 @@ static void AssignTokenValues(const ParserDef *parser, LanguageOutputOptions *ou
           maxterminal = terminal;
       }
     }
-    fclose(f);
+    Scope_Pop();
   }
 
   for (int curtok = 0, endtok = MapAny_size(&parser->m_tokdefs); curtok != endtok; ++curtok) {
