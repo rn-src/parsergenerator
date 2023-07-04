@@ -15,4 +15,3 @@ parser: $(OBJ)
 clean:
 	-rm *.o > /dev/null 2>&1
 	-rm parser > /dev/null 2>&1
-

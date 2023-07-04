@@ -284,4 +284,3 @@ int main(int argc, char *argv[]) {
   fputs("usage: parser [parser|tokenizer]\n", stdout);
   return 1;
 }
-

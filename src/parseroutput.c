@@ -610,5 +610,3 @@ const char *ProductionSymbolName(const ParserDef *parser, const Production *p, i
   int tok = VectorAny_ArrayOpConstT(&p->m_symbols,index,int);
   return SymbolName(parser,tok);
 }
-
-
