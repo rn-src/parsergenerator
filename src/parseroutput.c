@@ -1,6 +1,10 @@
 #include "parser.h"
 #include <ctype.h>
 
+#define MAX_LINE_LENGTH (512)
+
+extern void *zalloc(size_t len);
+
 static void outBottom(const LanguageOutputter *This, FILE *out) {
   if( This->options->outputLanguage == OutputLanguage_C ) {
     fputs("parseinfo prsinfo = {\n", out);
@@ -112,52 +116,142 @@ static void PrintSymbolType(FILE *out, const ParserDef *parser, const LanguageOu
   Scope_Pop();
 }
 
-static void AssignTokenValues(const ParserDef *parser, MapAny /*<int,int>*/ *pid2idx, MapAny /*<int,int>*/ *nt2idx, int *pterminals, int *pnonterminals) {
-  int terminals = 0, nonterminals = 0;
+static bool readline(FILE *f, String *line) {
+  int c = 0;
+  int len = 0;
+  String_clear(line);
+  while( (c=fgetc(f)) != EOF ) {
+    ++len;
+    String_AddCharInPlace(line,c);
+    if( c == '\n' )
+      break;
+  }
+  return len > 0;
+}
+
+static bool readtok(const char *line, String *idout, int *pterminal, OutputLanguage language) {
+  const char *front = line; 
+  if( language == OutputLanguage_C ) {
+    if( strncmp(front,"#define ",8) != 0 )
+      return false;
+    front += 8;
+  }
+  if( ! isalnum(*front) && *front != '_' )
+    return false;
+  const char *id = front;
+  while( *front && (isalnum(*front) || *front == '_') ) ++front;
+  String_AssignNChars(idout,id,front-id);
+  if( language == OutputLanguage_Python ) {
+    if( strncmp(front,": int = ",8) != 0 )
+      return false;
+    front += 8;
+  } else {
+    ++front;
+  }
+  while( *front == ' ' ) ++front;
+  if( language == OutputLanguage_C && *front == '(' )
+    ++front;
+  if( ! isdigit(*front) )
+    return 0;
+  int terminal = 0;
+  while( *front && isdigit(*front) ) {
+    terminal *= 10;
+    terminal += *front - '0';
+    ++front;
+  }
+  *pterminal = terminal;
+  return true;
+}
+
+static void AssignTokenValues(const ParserDef *parser, LanguageOutputOptions *outputOptions, MapAny /*<int,int>*/ *tok2idx, int *pmaxterminal, int *pmaxnonterminal) {
+  String fname;
+  String idstr;
+  String line;
+  Scope_Push();
+  String_init(&idstr,true);
+  String_init(&fname,true);
+  String_init(&line, true);
+
+  int maxterminal = -1, nonterminals = 0;
+  
+  String_AssignChars(&fname,outputOptions->lexerName);
+  if( outputOptions->outputLanguage == OutputLanguage_C )
+    String_AddCharsInPlace(&fname,".h");
+  else if( outputOptions->outputLanguage == OutputLanguage_Python )
+    String_AddCharsInPlace(&fname,".py");
+  FILE *f = fopen(String_Chars(&fname),"r");
+  if( ! f ) {
+    fprintf(stderr, "Unable to open the token file \"%s\" to import token values, stopping.\n", String_Chars(&fname));
+    Scope_LongJmp(1);
+  } else {
+    Scope_Push();
+    Push_Destroy(f, (vpstack_destroyer)fclose);
+    while( readline(f,&line) ) {
+      int terminal = 0;
+      if( ! readtok(String_Chars(&line),&idstr,&terminal,outputOptions->outputLanguage) )
+        continue;
+      if( strcmp(String_Chars(&idstr),"tokenCount") == 0 ) {
+        maxterminal = terminal-1;
+        break;
+      }
+      int *tokid = (int*)MapAny_findConst(&parser->m_tokens,&idstr);
+      if( ! tokid )
+        continue;
+      SymbolDef *tok = (SymbolDef*)MapAny_findConst(&parser->m_tokdefs,tokid);
+      if (tok->m_symboltype == SymbolTypeTerminal) {
+        MapAny_insert(tok2idx, &tok->m_tokid, &terminal);
+        if( terminal > maxterminal )
+          maxterminal = terminal;
+      }
+    }
+    Scope_Pop();
+  }
+
   for (int curtok = 0, endtok = MapAny_size(&parser->m_tokdefs); curtok != endtok; ++curtok) {
     const int *tokid = 0;
     const SymbolDef *tok = 0;
     MapAny_getByIndexConst(&parser->m_tokdefs, curtok, (const void**)&tokid, (const void**)&tok);
-    if (tok->m_symboltype == SymbolTypeTerminal)
-      ++terminals;
-    else if (tok->m_symboltype == SymbolTypeNonterminal) {
-      MapAny_insert(nt2idx, &tok->m_tokid, &nonterminals);
+    if (tok->m_symboltype == SymbolTypeNonterminal) {
+      int idx = maxterminal+1+nonterminals;
+      MapAny_insert(tok2idx, &tok->m_tokid, &idx);
       ++nonterminals;
     }
   }
-  *pterminals = terminals;
-  *pnonterminals = nonterminals;
+
+  *pmaxterminal = maxterminal;
+  *pmaxnonterminal = maxterminal+nonterminals;
+
+  Scope_Pop();
 }
 
-static void ImportTokenConstants(FILE *out, const ParserDef *parser, const LanguageOutputter *lang, LanguageOutputOptions *outputOptions, MapAny /*<int,int>*/ *pid2idx, MapAny /*<int,int>*/ *nt2idx, int terminals, int nonterminals) {
-  if( outputOptions->outputLanguage != OutputLanguage_Python )
-    return;
-  LanguageOutputOptions_import(outputOptions, outputOptions->lexerName, 0);
+static void PrintTokenConstants(FILE *out, const ParserDef *parser, const LanguageOutputter *lang, const LanguageOutputOptions *outputOptions, MapAny /*<int,int>*/ *pid2idx, MapAny /*<int,int>*/ *tok2idx, int maxnonterminal) {
+  int firstproduction = maxnonterminal+1;
   for (int curtok = 0, endtok = MapAny_size(&parser->m_tokdefs); curtok != endtok; ++curtok) {
-    const int* tokid = 0;
-    const SymbolDef* tok = 0;
+    const int *tokid = 0;
+    const SymbolDef *tok = 0;
     MapAny_getByIndexConst(&parser->m_tokdefs, curtok, (const void**)&tokid, (const void**)&tok);
-    if (tok->m_symboltype == SymbolTypeTerminal)
-      LanguageOutputOptions_importitem(outputOptions, String_Chars(&tok->m_name), 0);
+    if (tok->m_symboltype == SymbolTypeTerminal ) {
+      lang->outStartLineComment(lang,out);
+      lang->outIntDecl(lang,out,String_Chars(&tok->m_name),MapAny_findT(tok2idx, &tok->m_tokid, int));
+    }
   }
-}
 
-static void PrintProductionConstants(FILE *out, const ParserDef *parser, const LanguageOutputter *lang, const LanguageOutputOptions *outputOptions, MapAny /*<int,int>*/ *pid2idx, MapAny /*<int,int>*/ *nt2idx, int terminals, int nonterminals) {
-  int firstnt = outputOptions->min_nt_value>(terminals + 1) ? outputOptions->min_nt_value : (terminals + 1);
-  int firstproduction = firstnt + nonterminals;
   for (int curtok = 0, endtok = MapAny_size(&parser->m_tokdefs); curtok != endtok; ++curtok) {
     const int *tokid = 0;
     const SymbolDef *tok = 0;
     MapAny_getByIndexConst(&parser->m_tokdefs, curtok, (const void**)&tokid, (const void**)&tok);
     if (tok->m_symboltype == SymbolTypeNonterminal)
-      lang->outIntDecl(lang,out,String_Chars(&tok->m_name),firstnt + MapAny_findT(nt2idx, &tok->m_tokid, int));
+      lang->outIntDecl(lang,out,String_Chars(&tok->m_name),MapAny_findT(tok2idx, &tok->m_tokid, int));
   }
 
   for (int i = 0; i < VectorAny_size(&parser->m_productions); ++i) {
     char buf[64];
-    MapAny_insert(pid2idx, &VectorAny_ArrayOpConstT(&parser->m_productions, i, Production*)->m_pid, &i);
+    int idx=i+firstproduction;
+    MapAny_insert(pid2idx, &VectorAny_ArrayOpConstT(&parser->m_productions, i, Production*)->m_pid, &idx);
+    if( i != 0 )
+      lang->outStartLineComment(lang,out);
     sprintf(buf, "PROD_%d", i);
-    lang->outIntDecl(lang,out,buf,firstproduction+i);
+    lang->outIntDecl(lang,out,buf,idx);
   }
 }
 
@@ -213,37 +307,30 @@ static void WriteSemanticAction(const Production *p, FILE *out, const ParserDef 
       Scope_Pop();
     }
   }
-  // Once upon a time, this would reset the line/file
-  //if (outputOptions->do_pound_line && outputOptions->m_outputLanguage == OutputLanguage_C)
-  //  fputs("\n#line\n", out);
   Scope_Pop();
 }
 
 static void OutputLRParser(FILE *out, const ParserDef *parser, const LRParserSolution *solution, const LanguageOutputter *lang, LanguageOutputOptions *outputOptions) {
   bool first = true;
   MapAny /*<int,int>*/ pid2idx;
-  MapAny /*<int,int>*/ nt2idx;
+  MapAny /*<int,int>*/ tok2idx;
   VectorAny /*<int>*/ pidxtopoffset;
   VectorAny /*<int>*/ sidxtoaoffset;
   MapAny /*<String,String>*/ tfields;
   int poffset = 0;
-  int terminals = 0;
-  int nonterminals = 0;
+  int maxterminal = 0;
+  int maxnonterminal = 0;
 
   Scope_Push();
   MapAny_init(&pid2idx,getIntElement(),getIntElement(),true);
-  MapAny_init(&nt2idx,getIntElement(),getIntElement(),true);
+  MapAny_init(&tok2idx,getIntElement(),getIntElement(),true);
   VectorAny_init(&pidxtopoffset,getIntElement(),true);
   VectorAny_init(&sidxtoaoffset,getIntElement(),true);
   MapAny_init(&tfields, getStringElement(), getStringElement(), true);
 
-  AssignTokenValues(parser, &pid2idx, &nt2idx, &terminals, &nonterminals);
-  ImportTokenConstants(out, parser, lang, outputOptions, &pid2idx, &nt2idx, terminals, nonterminals);
+  AssignTokenValues(parser, outputOptions, &tok2idx, &maxterminal, &maxnonterminal);
   lang->outTop(lang, out);
-  PrintProductionConstants(out, parser, lang, outputOptions, &pid2idx, &nt2idx, terminals, nonterminals);
-
-  int firstnt = outputOptions->min_nt_value>(terminals + 1) ? outputOptions->min_nt_value : (terminals + 1);
-  int firstproduction = firstnt + nonterminals;
+  PrintTokenConstants(out, parser, lang, outputOptions, &pid2idx, &tok2idx, maxnonterminal);
 
   lang->outIntDecl(lang,out,"nstates",VectorAny_size(&solution->m_states));
 
@@ -270,7 +357,7 @@ static void OutputLRParser(FILE *out, const ParserDef *parser, const LRParserSol
         else
           fputc(',',out);
         // action=shift
-        fputs("ACTION_SHIFT",out);
+        lang->outInt(lang,out,0); // ACTION_SHIFT
         // shift to
         fputc(',',out);
         lang->outInt(lang,out,*tokid);
@@ -281,15 +368,13 @@ static void OutputLRParser(FILE *out, const ParserDef *parser, const LRParserSol
           int s = SetAny_getByIndexConstT(curShiftSymbols,curs,int);
           fputc(',',out);
           if( ParserDef_getSymbolType(parser,s) == SymbolTypeTerminal )
-            fputs(String_Chars(&MapAny_findConstT(&parser->m_tokdefs,&s,SymbolDef).m_name),out);
+            lang->outInt(lang,out,MapAny_findConstT(&tok2idx,&s,int));
           else
-            fprintf(out,"PROD_%d",MapAny_findT(&pid2idx,&s,int));
+            lang->outInt(lang,out,MapAny_findT(&pid2idx,&s,int)); // PROD_%d
         }
         actionidx += SetAny_size(curShiftSymbols)+3;
       }
     }
-    // typedef MapAny /*<Production*,Set<int> >*/ reducebysymbols_t;
-    // typedef MapAny /*<int,reducebysymbols_t>*/ reducemap_t;
     const reducebysymbols_t *reducebysymbols = &MapAny_findConstT(&solution->m_reductions,&i,reducebysymbols_t);
     if( reducebysymbols ) {
       VectorAny /*<Production*>*/ reduces;
@@ -314,12 +399,12 @@ static void OutputLRParser(FILE *out, const ParserDef *parser, const LRParserSol
           fputc(',',out);
         // action=reduce
         if( p->m_nt == ParserDef_getStartNt(parser) )
-          fputs("ACTION_STOP",out);
+          lang->outInt(lang,out,2); // ACTION_STOP
         else
-          fputs("ACTION_REDUCE",out);
+          lang->outInt(lang,out,1); // ACTION_REDUCE
         // reduce by
         fputc(',',out);
-        fprintf(out,"PROD_%d",MapAny_findT(&pid2idx,&p->m_pid,int));
+        lang->outInt(lang,out,MapAny_findT(&pid2idx,&p->m_pid,int)); // PROD_%d
         // reduce count
         fputc(',',out);
         lang->outInt(lang,out,VectorAny_size(&p->m_symbols));
@@ -332,9 +417,9 @@ static void OutputLRParser(FILE *out, const ParserDef *parser, const LRParserSol
           if( s == -1 )
             lang->outInt(lang,out,-1);
           else if( ParserDef_getSymbolType(parser,s) == SymbolTypeTerminal )
-            fputs(String_Chars(&MapAny_findConstT(&parser->m_tokdefs,&s,SymbolDef).m_name),out);
+            lang->outInt(lang,out,MapAny_findConstT(&tok2idx,&s,int));
           else
-            fprintf(out,"PROD_%d",MapAny_findT(&pid2idx,&s,int));
+            lang->outInt(lang,out,MapAny_findT(&pid2idx,&s,int)); // PROD_%d
         }
         actionidx += SetAny_size(syms)+4;
       }
@@ -376,10 +461,11 @@ static void OutputLRParser(FILE *out, const ParserDef *parser, const LRParserSol
       first = false;
     else
       fputc(',',out);
-    fputs(String_Chars(&MapAny_findConstT(&parser->m_tokdefs,&p->m_nt,SymbolDef).m_name),out);
+    lang->outInt(lang,out,MapAny_findT(&tok2idx,&p->m_nt,int));
     for( int sidx = 0; sidx < VectorAny_size(&p->m_symbols); ++sidx ) {
       fputc(',',out);
-      fputs(String_Chars(&MapAny_findConstT(&parser->m_tokdefs,&VectorAny_ArrayOpConstT(&p->m_symbols,sidx,int),SymbolDef).m_name),out);
+      int s = VectorAny_ArrayOpConstT(&p->m_symbols,sidx,int);
+      lang->outInt(lang,out,MapAny_findConstT(&tok2idx,&s,int));
     }
     poffset += VectorAny_size(&p->m_symbols)+1;
   }
@@ -462,12 +548,10 @@ static void OutputLRParser(FILE *out, const ParserDef *parser, const LRParserSol
     const Production *p = VectorAny_ArrayOpConstT(&parser->m_productions,curp,Production*);
     if( VectorAny_size(&p->m_action) == 0 )
       continue;
-    if( outputOptions->outputLanguage == OutputLanguage_Python) {
-      int prodIdx = MapAny_findConstT(&pid2idx,&p->m_pid,int);
-      fprintf(out,"    case %d: # PROD_%d:\n      ", prodIdx+firstproduction, prodIdx);
-    } else {
-      fprintf(out,"    case PROD_%d:\n      ", MapAny_findConstT(&pid2idx,&p->m_pid,int));
-    }
+    int prodIdx = MapAny_findConstT(&pid2idx,&p->m_pid,int);
+    fprintf(out,"    case %d: ", prodIdx);
+    lang->outStartLineComment(lang,out);
+    fprintf(out," PROD_%d\n      ", prodIdx);
     WriteSemanticAction(p, out, parser, lang, outputOptions, &tfields);
     if( outputOptions->outputLanguage == OutputLanguage_C) {
       fputs("\n      break;\n", out);
@@ -526,5 +610,3 @@ const char *ProductionSymbolName(const ParserDef *parser, const Production *p, i
   int tok = VectorAny_ArrayOpConstT(&p->m_symbols,index,int);
   return SymbolName(parser,tok);
 }
-
-

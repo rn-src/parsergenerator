@@ -226,7 +226,8 @@ int tok_main(int argc, char *argv[])
     fprintf(stderr, "Unable to open %s for reading\n", fname);
     return 1;
   }
-    
+  Scope_Push();
+  Push_Destroy(fin, (vpstack_destroyer)fin);
   FILE *fout = 0;
   char *foutname = (char*)malloc(strlen(fname)+3);
   char *name = (char*)malloc(strlen(fname)+3);
@@ -244,7 +245,6 @@ int tok_main(int argc, char *argv[])
 
   ParseError *pe;
   TokStream s;
-  Scope_Push();
   TokStream_init(&s,fin,fname,true);
   int ret = 0;
   Scope_SetJmp(ret);
@@ -253,9 +253,9 @@ int tok_main(int argc, char *argv[])
     fout = fopen(foutname,"w");
     if( ! fout ) {
       fprintf(stderr, "Unable to open %s for writing\n", foutname);
-      fclose(fin);
       goto cleanup;
     }
+    Push_Destroy(fout, (vpstack_destroyer)fout);
     LanguageOutputOptions options;
     memset(&options,0,sizeof(options));
     options.name = name;
@@ -270,10 +270,6 @@ int tok_main(int argc, char *argv[])
     fputs("Unknown Error\n", stderr);
   }
 cleanup:
-  if( fin )
-    fclose(fin);
-  if( fout )
-    fclose(fout);
   Scope_Pop();
   return 0;
 }
@@ -288,4 +284,3 @@ int main(int argc, char *argv[]) {
   fputs("usage: parser [parser|tokenizer]\n", stdout);
   return 1;
 }
-

@@ -9,7 +9,7 @@ example: $(OBJ) lrparse.h tokenizer.h exampleG.h exampleL.h
 %.o: %.c lrparse.h tokenizer.h exampleG.h exampleL.h
 	gcc -c -o $@ $< $(CFLAGS)
 
-exampleG.h: example.G
+exampleG.h: example.G exampleL.h
 	parser parser '--import=<stdlib.h>' example.G
 
 exampleL.h: example.L

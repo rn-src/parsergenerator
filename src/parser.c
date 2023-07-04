@@ -1739,7 +1739,6 @@ void ParseParser(TokBuf *tokbuf, ParserDef *parser, FILE *vout, int verbosity) {
   Scope_Push();
   TokBufTokenizer_init(&toks,tokbuf,&parsertok_pptokinfo,true);
   ParserDef_findOrAddSymbolIdChars(parser,&toks.m_tokenizer,"START",SymbolTypeNonterminal);
-  ParserDef_findOrAddSymbolIdChars(parser,&toks.m_tokenizer,"EXTRA",SymbolTypeNonterminal);
   ParserDef_findOrAddSymbolIdChars(parser,&toks.m_tokenizer,"PARSE_ERROR",SymbolTypeNonterminal);
   ParseStart(&toks.m_tokenizer,parser);
   if( toks.m_tokenizer.peek(&toks.m_tokenizer) != -1 )
