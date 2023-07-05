@@ -124,7 +124,7 @@ void tokenizer_destroy(tokenizer *tokenizer) {
   vecint_destroy(&tokenizer->secstack);
 }
 
-static unsigned int decodeuint(const unsigned char *c, const unsigned char **pnextc) {
+unsigned int decodeuint(const unsigned char *c, const unsigned char **pnextc) {
   int leadbits = 0;
   while( leadbits <= 8 && (0x80>>leadbits)&*c ) ++leadbits;
   if( leadbits == 0 ) {

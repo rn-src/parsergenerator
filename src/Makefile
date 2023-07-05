@@ -1,7 +1,7 @@
 OBJ=parser.o parsecommon.o parsersolve.o parseroutput.o main.o parserrestrictfa.o timer.o tinytemplates.o tok.o tokenizer.o tokenizeroutput.o
 
-CFLAGS=-I. -g -O0
-#CFLAGS=-I. -O2
+CFLAGS=-I. -g -O0 -fno-unwind-tables -fno-asynchronous-unwind-tables
+#CFLAGS=-I. -Os -s -fno-unwind-tables -fno-asynchronous-unwind-tables
 DEPS=parsecommon.h parser.h tokenizer.h tinytemplates.h
 
 all: parser
