@@ -161,6 +161,8 @@ int parse_main(int argc, char *argv[]) {
     if( !fout ) {
       fprintf(stderr, "Unable to open %s for writing\n", foutname);
       ret = -1;
+
+
       goto end;
     }
     Push_Destroy(fout, (vpstack_destroyer)fclose);
@@ -221,7 +223,7 @@ int tok_main(int argc, char *argv[])
     return 1;
   }
   Scope_Push();
-  Push_Destroy(fin, (vpstack_destroyer)fin);
+  Push_Destroy(fin, (vpstack_destroyer)fclose);
   FILE *fout = 0;
   char *foutname = (char*)malloc(strlen(fname)+3);
   char *name = (char*)malloc(strlen(fname)+3);
@@ -249,7 +251,7 @@ int tok_main(int argc, char *argv[])
       fprintf(stderr, "Unable to open %s for writing\n", foutname);
       goto cleanup;
     }
-    Push_Destroy(fout, (vpstack_destroyer)fout);
+    Push_Destroy(fout, (vpstack_destroyer)fclose);
     LanguageOutputOptions options;
     memset(&options,0,sizeof(options));
     options.name = name;
