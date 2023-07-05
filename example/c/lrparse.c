@@ -108,20 +108,16 @@ const unsigned char *findmatchingaction(const unsigned char *firstaction, const 
     *paction = action;
     if( action == ACTION_SHIFT ) {
       decodeuint(actionpos,&actionpos); // shift-to
-      int nsymbols = decodeuint(actionpos,&actionpos);
-      if( findsymbol(tok,actionpos,nsymbols) )
-        break;
-      while( nsymbols-- )
-        decodeuint(actionpos,&actionpos);
     } else if( action == ACTION_REDUCE || action == ACTION_STOP ) {
       decodeuint(actionpos,&actionpos); // reduce-by
       decodeuint(actionpos,&actionpos); // reduce-count
-      int nsymbols = decodeuint(actionpos,&actionpos);
-      if( findsymbol(tok,actionpos,nsymbols) )
-        break;
-      while( nsymbols-- )
-        decodeuint(actionpos,&actionpos);
     }
+    int nsymbols = decodeuint(actionpos,&actionpos);
+    if( findsymbol(tok,actionpos,nsymbols) )
+      break;
+    while( nsymbols-- )
+      decodeuint(actionpos,&actionpos);
+    firstaction = actionpos;
   }
   return firstaction;
 }

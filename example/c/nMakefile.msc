@@ -13,7 +13,7 @@ example.exe: lrparse.h tokenizer.h exampleG.h exampleL.h $(OBJS)
 	@link /nologo /DEBUG /SUBSYSTEM:CONSOLE /OUT:example.exe $(OBJS)
 #	@link /nologo /SUBSYSTEM:CONSOLE /OUT:example.exe $(OBJS)
 
-exampleG.h: example.G
+exampleG.h: example.G exampleL.h
 	@parser.exe parser "--import=<stdlib.h>" example.G
 
 exampleL.h: example.L
