@@ -315,7 +315,9 @@ static void OutputLRParser(FILE *out, const ParserDef *parser, const LRParserSol
   MapAny /*<int,int>*/ pid2idx;
   MapAny /*<int,int>*/ tok2idx;
   VectorAny /*<int>*/ pidxtopoffset;
+  VectorAny /*<int>*/ sidxtoacnt;
   VectorAny /*<int>*/ sidxtoaoffset;
+  VectorAny /*<int>*/ actions;
   MapAny /*<String,String>*/ tfields;
   int maxterminal = 0;
   int maxnonterminal = 0;
@@ -324,7 +326,9 @@ static void OutputLRParser(FILE *out, const ParserDef *parser, const LRParserSol
   MapAny_init(&pid2idx,getIntElement(),getIntElement(),true);
   MapAny_init(&tok2idx,getIntElement(),getIntElement(),true);
   VectorAny_init(&pidxtopoffset,getIntElement(),true);
+  VectorAny_init(&sidxtoacnt,getIntElement(),true);
   VectorAny_init(&sidxtoaoffset,getIntElement(),true);
+  VectorAny_init(&actions,getIntElement(),true);
   MapAny_init(&tfields, getStringElement(), getStringElement(), true);
 
   AssignTokenValues(parser, outputOptions, &tok2idx, &maxterminal, &maxnonterminal);
@@ -333,16 +337,7 @@ static void OutputLRParser(FILE *out, const ParserDef *parser, const LRParserSol
 
   lang->outIntDecl(lang,out,"nstates",VectorAny_size(&solution->m_states));
 
-  lang->outArrayDecl(lang,out,"static const unsigned char", "actions");
-  fputs(" = ",out);
-  lang->outStartArray(lang,out);
-  first = true;
-  int actionidx = 0;
   for( int i = 0; i < VectorAny_size(&solution->m_states); ++i ) {
-    fputs("\n",out);
-    lang->outStartLineComment(lang,out);
-    fprintf(out," state %d \n", i);
-    VectorAny_push_back(&sidxtoaoffset,&actionidx);
     const shifttosymbols_t *shifttosymbols = &MapAny_findConstT(&solution->m_shifts,&i,shifttosymbols_t);
     if( shifttosymbols ) {
       for( int curshift = 0, endshift = MapAny_size(shifttosymbols); curshift != endshift; ++curshift ) {
@@ -351,26 +346,23 @@ static void OutputLRParser(FILE *out, const ParserDef *parser, const LRParserSol
         MapAny_getByIndexConst(shifttosymbols,curshift,(const void**)&tokid,(const void**)&curShiftSymbols);
         if( SetAny_size(curShiftSymbols) == 0 )
           continue;
-        if( first )
-          first = false;
-        else
-          fputc(',',out);
         // action=shift
-        actionidx += encodeuint(lang,out,0); // ACTION_SHIFT
+        int value = 0;
+        VectorAny_push_back(&actions,&value); // ACTION_SHIFT
         // shift to
-        fputc(',',out);
-        actionidx += encodeuint(lang,out,*tokid);
+        VectorAny_push_back(&actions,tokid);
         // symbols
-        fputc(',',out);
-        actionidx += encodeuint(lang,out,SetAny_size(curShiftSymbols));
-        for( int curs = 0, ends = SetAny_size(curShiftSymbols); curs != ends; ++curs) {
+        int symcnt = SetAny_size(curShiftSymbols);
+        VectorAny_push_back(&actions,&symcnt);
+        for( int curs = 0, ends = symcnt; curs != ends; ++curs) {
           int s = SetAny_getByIndexConstT(curShiftSymbols,curs,int);
-          fputc(',',out);
           if( ParserDef_getSymbolType(parser,s) == SymbolTypeTerminal )
-            actionidx += encodeuint(lang,out,MapAny_findConstT(&tok2idx,&s,int));
+            VectorAny_push_back(&actions,&MapAny_findConstT(&tok2idx,&s,int));
           else
-            actionidx += encodeuint(lang,out,MapAny_findT(&pid2idx,&s,int)); // PROD_%d
+            VectorAny_push_back(&actions,&MapAny_findT(&pid2idx,&s,int)); // PROD_%d
         }
+        int actioncnt = 3+symcnt;
+        VectorAny_push_back(&sidxtoacnt,&actioncnt);
       }
     }
     const reducebysymbols_t *reducebysymbols = &MapAny_findConstT(&solution->m_reductions,&i,reducebysymbols_t);
@@ -391,40 +383,55 @@ static void OutputLRParser(FILE *out, const ParserDef *parser, const LRParserSol
         const SetAny /*<int>*/ *syms = &MapAny_findConstT(reducebysymbols,&p,SetAny);
         if( SetAny_size(syms) == 0 )
           continue;
-        if( first )
-          first = false;
-        else
-          fputc(',',out);
         // action=reduce
-        if( p->m_nt == ParserDef_getStartNt(parser) )
-          actionidx += encodeuint(lang,out,2); // ACTION_STOP
-        else
-          actionidx += encodeuint(lang,out,1); // ACTION_REDUCE
-        // reduce by
-        fputc(',',out);
-        actionidx += encodeuint(lang,out,MapAny_findT(&pid2idx,&p->m_pid,int)); // PROD_%d
-        // reduce count
-        fputc(',',out);
-        actionidx += encodeuint(lang,out,VectorAny_size(&p->m_symbols));
-        // symbols
-        fputc(',',out);
-        actionidx += encodeuint(lang,out,SetAny_size(syms));
-        for( int curs = 0, ends = SetAny_size(syms); curs != ends; ++curs ) {
-          int s = SetAny_getByIndexConstT(syms,curs,int);
-          fputc(',',out);
-          if( s == -1 )
-            actionidx += encodeuint(lang,out,-1);
-          else if( ParserDef_getSymbolType(parser,s) == SymbolTypeTerminal )
-            actionidx += encodeuint(lang,out,MapAny_findConstT(&tok2idx,&s,int));
-          else
-            actionidx += encodeuint(lang,out,MapAny_findT(&pid2idx,&s,int)); // PROD_%d
+        if( p->m_nt == ParserDef_getStartNt(parser) ) {
+          int value = 2; // ACTION_STOP
+          VectorAny_push_back(&actions,&value);
+        } else {
+          int value = 1; // ACTION_REDUCE
+          VectorAny_push_back(&actions,&value);
         }
+        // reduce by
+        VectorAny_push_back(&actions,&MapAny_findT(&pid2idx,&p->m_pid,int)); // PROD_%d
+        // reduce count
+        int reducecnt = VectorAny_size(&p->m_symbols);
+        VectorAny_push_back(&actions,&reducecnt);
+        // symbols
+        int symcnt = SetAny_size(syms);
+        VectorAny_push_back(&actions,&symcnt);
+        for( int curs = 0, ends = symcnt; curs != ends; ++curs ) {
+          int s = SetAny_getByIndexConstT(syms,curs,int);
+          if( s == -1 ) {
+            int end = -1;
+            VectorAny_push_back(&actions,&end);
+          } else if( ParserDef_getSymbolType(parser,s) == SymbolTypeTerminal )
+            VectorAny_push_back(&actions,&MapAny_findConstT(&tok2idx,&s,int));
+          else
+            VectorAny_push_back(&actions,&MapAny_findT(&pid2idx,&s,int)); // PROD_%d
+        }
+        int actioncnt = 4+symcnt;
+        VectorAny_push_back(&sidxtoacnt,&actioncnt);
       }
       Scope_Pop();
     }
   }
-  VectorAny_push_back(&sidxtoaoffset,&actionidx);
 
+  lang->outArrayDecl(lang,out,"static const unsigned char", "actions");
+  fputs(" = ",out);
+  lang->outStartArray(lang,out);
+  int aoffset = 0;
+  int aidx = 0;
+  VectorAny_push_back(&sidxtoaoffset,&aoffset);
+  for( int i = 0, n = VectorAny_size(&sidxtoacnt); i < n; ++i ) {
+    for( int j = 0, m = VectorAny_ArrayOpConstT(&sidxtoacnt,i,int); j < m; ++j ) {
+      if( aidx > 0 )
+        fputs(",",out);
+      int value = VectorAny_ArrayOpConstT(&actions,aidx,int);
+      aidx++;
+      aoffset += encodeuint(lang,out,value);
+    }
+    VectorAny_push_back(&sidxtoaoffset,&aoffset);
+  }
   lang->outEndArray(lang,out);
   lang->outEndStmt(lang,out);
   fputc('\n',out);
