@@ -144,8 +144,8 @@ int parse_main(int argc, char *argv[]) {
     fin = fopen(fname, "r");
     if (!fin) {
       fprintf(stderr, "Unable to open %s for reading\n", fname);
-      Scope_Pop();
-      return -1;
+      ret = -1;
+      goto end;
     }
     Push_Destroy(fin, (vpstack_destroyer)fclose);
     foutname = makeFOutName(fname,&options);
@@ -154,19 +154,14 @@ int parse_main(int argc, char *argv[]) {
     FileTokBuf_init(&tokbuf,fin,fname,true);
     LRParserSolution_init(&solution, true);
     ParseParser(&tokbuf.m_tokbuf,&parser,vout,verbosity);
-    int n = 0;
-
-    n = LR_SolveParser(&parser, &solution, vout, verbosity, timed);
-
-    if( n != 0 ) {
-      Scope_Pop();
-      return n;
-    }
+    ret = LR_SolveParser(&parser, &solution, vout, verbosity, timed);
+    if( ret != 0 )
+      goto end;
     fout = fopen(foutname,"w");
     if( !fout ) {
       fprintf(stderr, "Unable to open %s for writing\n", foutname);
-      Scope_Pop();
-      return -1;
+      ret = -1;
+      goto end;
     }
     Push_Destroy(fout, (vpstack_destroyer)fclose);
 
@@ -176,15 +171,14 @@ int parse_main(int argc, char *argv[]) {
       fprintf(stderr, "%s(%d:%d) : %s\n", String_Chars(&pe->file), pe->line, pe->col, String_Chars(&pe->err));
     else
       fputs(String_Chars(&pe->err),stderr);
-    Scope_Pop();
-    return -1;
+    ret = -1;
   } else {
     fputs("Unknown error\n", stderr);
-    Scope_Pop();
-    return -1;
+    ret = -1;
   }
+end:
   Scope_Pop();
-  return 0;
+  return ret;
 }
 
 int tok_main(int argc, char *argv[])
