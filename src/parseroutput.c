@@ -317,7 +317,6 @@ static void OutputLRParser(FILE *out, const ParserDef *parser, const LRParserSol
   VectorAny /*<int>*/ pidxtopoffset;
   VectorAny /*<int>*/ sidxtoaoffset;
   MapAny /*<String,String>*/ tfields;
-  int poffset = 0;
   int maxterminal = 0;
   int maxnonterminal = 0;
 
@@ -334,7 +333,7 @@ static void OutputLRParser(FILE *out, const ParserDef *parser, const LRParserSol
 
   lang->outIntDecl(lang,out,"nstates",VectorAny_size(&solution->m_states));
 
-  lang->outArrayDecl(lang,out,"static const int", "actions");
+  lang->outArrayDecl(lang,out,"static const unsigned char", "actions");
   fputs(" = ",out);
   lang->outStartArray(lang,out);
   first = true;
@@ -357,22 +356,21 @@ static void OutputLRParser(FILE *out, const ParserDef *parser, const LRParserSol
         else
           fputc(',',out);
         // action=shift
-        lang->outInt(lang,out,0); // ACTION_SHIFT
+        actionidx += encodeuint(lang,out,0); // ACTION_SHIFT
         // shift to
         fputc(',',out);
-        lang->outInt(lang,out,*tokid);
+        actionidx += encodeuint(lang,out,*tokid);
         // symbols
         fputc(',',out);
-        lang->outInt(lang,out,SetAny_size(curShiftSymbols));
+        actionidx += encodeuint(lang,out,SetAny_size(curShiftSymbols));
         for( int curs = 0, ends = SetAny_size(curShiftSymbols); curs != ends; ++curs) {
           int s = SetAny_getByIndexConstT(curShiftSymbols,curs,int);
           fputc(',',out);
           if( ParserDef_getSymbolType(parser,s) == SymbolTypeTerminal )
-            lang->outInt(lang,out,MapAny_findConstT(&tok2idx,&s,int));
+            actionidx += encodeuint(lang,out,MapAny_findConstT(&tok2idx,&s,int));
           else
-            lang->outInt(lang,out,MapAny_findT(&pid2idx,&s,int)); // PROD_%d
+            actionidx += encodeuint(lang,out,MapAny_findT(&pid2idx,&s,int)); // PROD_%d
         }
-        actionidx += SetAny_size(curShiftSymbols)+3;
       }
     }
     const reducebysymbols_t *reducebysymbols = &MapAny_findConstT(&solution->m_reductions,&i,reducebysymbols_t);
@@ -399,29 +397,28 @@ static void OutputLRParser(FILE *out, const ParserDef *parser, const LRParserSol
           fputc(',',out);
         // action=reduce
         if( p->m_nt == ParserDef_getStartNt(parser) )
-          lang->outInt(lang,out,2); // ACTION_STOP
+          actionidx += encodeuint(lang,out,2); // ACTION_STOP
         else
-          lang->outInt(lang,out,1); // ACTION_REDUCE
+          actionidx += encodeuint(lang,out,1); // ACTION_REDUCE
         // reduce by
         fputc(',',out);
-        lang->outInt(lang,out,MapAny_findT(&pid2idx,&p->m_pid,int)); // PROD_%d
+        actionidx += encodeuint(lang,out,MapAny_findT(&pid2idx,&p->m_pid,int)); // PROD_%d
         // reduce count
         fputc(',',out);
-        lang->outInt(lang,out,VectorAny_size(&p->m_symbols));
+        actionidx += encodeuint(lang,out,VectorAny_size(&p->m_symbols));
         // symbols
         fputc(',',out);
-        lang->outInt(lang,out,SetAny_size(syms));
+        actionidx += encodeuint(lang,out,SetAny_size(syms));
         for( int curs = 0, ends = SetAny_size(syms); curs != ends; ++curs ) {
           int s = SetAny_getByIndexConstT(syms,curs,int);
           fputc(',',out);
           if( s == -1 )
-            lang->outInt(lang,out,-1);
+            actionidx += encodeuint(lang,out,-1);
           else if( ParserDef_getSymbolType(parser,s) == SymbolTypeTerminal )
-            lang->outInt(lang,out,MapAny_findConstT(&tok2idx,&s,int));
+            actionidx += encodeuint(lang,out,MapAny_findConstT(&tok2idx,&s,int));
           else
-            lang->outInt(lang,out,MapAny_findT(&pid2idx,&s,int)); // PROD_%d
+            actionidx += encodeuint(lang,out,MapAny_findT(&pid2idx,&s,int)); // PROD_%d
         }
-        actionidx += SetAny_size(syms)+4;
       }
       Scope_Pop();
     }
@@ -449,25 +446,21 @@ static void OutputLRParser(FILE *out, const ParserDef *parser, const LRParserSol
 
   lang->outIntDecl(lang,out,"nproductions",VectorAny_size(&parser->m_productions));
 
-
-  lang->outArrayDecl(lang,out,"static const int", "productions");
+  int poffset = 0;
+  lang->outArrayDecl(lang,out,"static const unsigned char", "productions");
   fputs(" = ",out);
   lang->outStartArray(lang,out);
-  first = true;
   for( int i = 0; i < VectorAny_size(&parser->m_productions); ++i ) {
     const Production *p = VectorAny_ArrayOpConstT(&parser->m_productions,i,Production*);
     VectorAny_push_back(&pidxtopoffset,&poffset);
-    if( first )
-      first = false;
-    else
+    if( i > 0 )
       fputc(',',out);
-    lang->outInt(lang,out,MapAny_findT(&tok2idx,&p->m_nt,int));
+    poffset += encodeuint(lang,out,MapAny_findT(&tok2idx,&p->m_nt,int));
     for( int sidx = 0; sidx < VectorAny_size(&p->m_symbols); ++sidx ) {
       fputc(',',out);
       int s = VectorAny_ArrayOpConstT(&p->m_symbols,sidx,int);
-      lang->outInt(lang,out,MapAny_findConstT(&tok2idx,&s,int));
+      poffset += encodeuint(lang,out,MapAny_findConstT(&tok2idx,&s,int));
     }
-    poffset += VectorAny_size(&p->m_symbols)+1;
   }
   VectorAny_push_back(&pidxtopoffset,&poffset);
   lang->outEndArray(lang,out);
@@ -478,9 +471,7 @@ static void OutputLRParser(FILE *out, const ParserDef *parser, const LRParserSol
   lang->outStartArray(lang,out);
   first = true;
   for( int i = 0; i < VectorAny_size(&pidxtopoffset); ++i ) {
-    if( first )
-      first = false;
-    else
+    if( i > 0 )
       fputc(',',out);
     lang->outInt(lang,out,VectorAny_ArrayOpT(&pidxtopoffset,i,int));
   }

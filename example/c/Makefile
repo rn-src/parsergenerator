@@ -1,5 +1,6 @@
 OBJ=main.o lrparse.o tokenizer.o
-CFLAGS=-I. -g
+CFLAGS=-I. -g -O0 -fno-unwind-tables -fno-asynchronous-unwind-tables
+#CFLAGS=-I. -Os -s -fno-unwind-tables -fno-asynchronous-unwind-tables
 
 all: example
 
