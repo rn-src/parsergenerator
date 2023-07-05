@@ -25,6 +25,12 @@ char *makeFOutName(const char *fname, LanguageOutputOptions *options) {
   return foutname;
 }
 
+static bool boolvalue(const char *v) {
+  if( *v == 't' || *v == 'T' || *v == 'y' || *v == 'Y' || *v == '1' )
+    return true;
+  return false;
+}
+
 void parseArgs(int argc, char *argv[], int *pverbosity, int *ptimed, LanguageOutputOptions *options, const char **pfname) {
   int verbosity = 0;
   int timed = 0;
@@ -47,10 +53,15 @@ void parseArgs(int argc, char *argv[], int *pverbosity, int *ptimed, LanguageOut
     options->do_pound_line = false;
   if (getarg(argc, argv, "--timed"))
     timed = 1;
-  if (getarg(argc, argv, "--c"))
-    options->outputLanguage = OutputLanguage_C;
-  if (getarg(argc, argv, "--py"))
+  if (getarg(argc, argv, "--py")) {
     options->outputLanguage = OutputLanguage_Python;
+    options->encode = false;
+    options->compress = false;
+  }
+  if(arg = getarg(argc, argv, "--encode="))
+    options->encode = boolvalue(arg+9); 
+  if(arg = getarg(argc, argv, "--compress="))
+    options->compress = boolvalue(arg+11); 
   for (int i = 1; i < argc; ++i) {
     if (strncmp(argv[i], "--import=",9) == 0)
       LanguageOutputOptions_import(options,argv[i]+9,0);
@@ -111,6 +122,8 @@ int parse_main(int argc, char *argv[]) {
   memset(&options,0,sizeof(options));
   options.do_pound_line = true;
   options.outputLanguage = OutputLanguage_C;
+  options.encode = true;
+  options.compress = true;
 
   parseArgs(argc, argv, &verbosity, &timed, &options, &fname);
 
@@ -185,22 +198,26 @@ end:
 
 int tok_main(int argc, char *argv[])
 {
-  const char *prefix = 0;
-  bool py = false;
-  bool minimal = false;
-  for( int i = 1; i < argc; ++i ) {
-    if( argv[i][0] == '-' ) {
-      if (strncmp(argv[i],"--prefix=",9) == 0) {
-        prefix = argv[i] + 9;
-      }
-      if (strncmp(argv[i],"--minimal",10) == 0) {
-        minimal = true;
-      }
-      if (strncmp(argv[i], "--py", 4) == 0) {
-        py = true;
-      }
-    }
+  LanguageOutputOptions options;
+  memset(&options,0,sizeof(options));
+  options.outputLanguage = OutputLanguage_C;
+  options.encode = true;
+  options.compress = true;
+		
+  const char *arg = 0;
+  if( arg = getarg(argc, argv, "--prefix="))
+    options.prefix = arg+9;
+  if(getarg(argc,argv,"--minimal="))
+    options.minimal = boolvalue(arg+10);
+  if(getarg(argc,argv,"--py")) {
+    options.outputLanguage = OutputLanguage_Python;
+    options.encode = false;
+    options.compress = false;
   }
+  if(arg = getarg(argc,argv,"--encode="))
+    options.encode = boolvalue(arg+9);
+  if(arg = getarg(argc,argv,"--compress="))
+    options.compress = boolvalue(arg+11);
   const char *fname = 0;
   for( int i = 1; i < argc; ++i ) {
     if( argv[i][0] == '-' )
@@ -233,8 +250,9 @@ int tok_main(int argc, char *argv[])
     lastdot[0] = lastdot[1];
     ++lastdot;
   }
+  options.name = name;
   strcpy(foutname,name);
-  if( py )
+  if( options.outputLanguage == OutputLanguage_Python )
     strcat(foutname,".py");
   else
    strcat(foutname,".h");
@@ -252,12 +270,6 @@ int tok_main(int argc, char *argv[])
       goto cleanup;
     }
     Push_Destroy(fout, (vpstack_destroyer)fclose);
-    LanguageOutputOptions options;
-    memset(&options,0,sizeof(options));
-    options.name = name;
-    options.prefix = prefix;
-    options.outputLanguage = py ? OutputLanguage_Python : OutputLanguage_C;
-    options.minimal = minimal;
     OutputTokenizerSource(fout,dfa,&options);
   } else if( getParseError((const ParseError**)&pe) ) {
     fprintf(stderr, "Parse Error %s(%d:%d) : %s\n", fname, pe->line, pe->col, String_Chars(&pe->err));

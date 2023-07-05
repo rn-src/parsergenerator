@@ -62,7 +62,8 @@ struct LanguageOutputOptions {
   const char *prefix;
   const char *name;
   bool minimal;
-  bool encodeuints;
+  bool encode;
+  bool compress;
 };
 
 void LanguageOutputOptions_import(LanguageOutputOptions *options, const char *name, const char *as);

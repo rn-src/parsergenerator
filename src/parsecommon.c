@@ -329,7 +329,6 @@ void LanguageOutputter_init(LanguageOutputter *outputter, LanguageOutputOptions 
     outputter->outStartFunctionCode = CLanguageOutputter_outStartFunctionCode;
     outputter->outEndFunctionCode = CLanguageOutputter_outEndFunctionCode;
     outputter->outStartLineComment = CLanguageOutputter_outStartLineComment;
-    options->encodeuints = true;
   }
   else if( options->outputLanguage == OutputLanguage_Python ) {
     outputter->outTop = PyLanguageOutputter_outTop;
@@ -353,7 +352,6 @@ void LanguageOutputter_init(LanguageOutputter *outputter, LanguageOutputOptions 
     outputter->outStartFunctionCode = PyLanguageOutputter_outStartFunctionCode;
     outputter->outEndFunctionCode = PyLanguageOutputter_outEndFunctionCode;
     outputter->outStartLineComment = PyLanguageOutputter_outStartLineComment;
-    options->encodeuints = false;
   }
 }
 
@@ -393,7 +391,7 @@ static unsigned int rshift(unsigned int i, unsigned int b) {
 // Note: first byte of 5 byte encoding will be 11111000 due to
 // all 32 bits being consumed in the final 4 bytes.
 int encodeuint(const LanguageOutputter *lang, FILE *out, unsigned int i) {
-  if( ! lang->options->encodeuints ) {
+  if( ! lang->options->encode ) {
     lang->outInt(lang,out,i);
     return 1;
   }

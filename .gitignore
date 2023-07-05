@@ -10,3 +10,4 @@ x64
 *.exe
 .mypy_cache
 __pycache__
+parser
