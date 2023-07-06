@@ -316,7 +316,6 @@ static void OutputLRParser(FILE *out, const ParserDef *parser, const LRParserSol
   MapAny /*<int,int>*/ tok2idx;
   VectorAny /*<int>*/ pidxtopoffset;
   VectorAny /*<int>*/ sidxtoacnt;
-  VectorAny /*<int>*/ sidxtoaoffset;
   VectorAny /*<int>*/ actions;
   MapAny /*<String,String>*/ tfields;
   int maxterminal = 0;
@@ -327,7 +326,6 @@ static void OutputLRParser(FILE *out, const ParserDef *parser, const LRParserSol
   MapAny_init(&tok2idx,getIntElement(),getIntElement(),true);
   VectorAny_init(&pidxtopoffset,getIntElement(),true);
   VectorAny_init(&sidxtoacnt,getIntElement(),true);
-  VectorAny_init(&sidxtoaoffset,getIntElement(),true);
   VectorAny_init(&actions,getIntElement(),true);
   MapAny_init(&tfields, getStringElement(), getStringElement(), true);
 
@@ -416,41 +414,16 @@ static void OutputLRParser(FILE *out, const ParserDef *parser, const LRParserSol
     }
   }
 
-  lang->outArrayDecl(lang,out,"static const unsigned char", "actions");
-  fputs(" = ",out);
-  lang->outStartArray(lang,out);
-  int aoffset = 0;
-  int aidx = 0;
-  VectorAny_push_back(&sidxtoaoffset,&aoffset);
-  for( int i = 0, n = VectorAny_size(&sidxtoacnt); i < n; ++i ) {
-    for( int j = 0, m = VectorAny_ArrayOpConstT(&sidxtoacnt,i,int); j < m; ++j ) {
-      if( aidx > 0 )
-        fputs(",",out);
-      int value = VectorAny_ArrayOpConstT(&actions,aidx,int);
-      aidx++;
-      aoffset += encodeuint(lang,out,value);
-    }
-    VectorAny_push_back(&sidxtoaoffset,&aoffset);
-  }
-  lang->outEndArray(lang,out);
-  lang->outEndStmt(lang,out);
-  fputc('\n',out);
-
-  lang->outArrayDecl(lang,out,"static const int", "actionstart");
-  fputs(" = ",out);
-  lang->outStartArray(lang,out);
-  first = true;
-  for( int i = 0; i < VectorAny_size(&sidxtoaoffset); ++i ) {
-    if( first )
-      first = false;
-    else
-      fputc(',',out);
-    lang->outInt(lang,out,VectorAny_ArrayOpT(&sidxtoaoffset,i,int));
-  }
-  lang->outEndArray(lang,out);
-  lang->outEndStmt(lang,out);
-  fputc('\n',out);
-
+  WriteIndexedArray(lang, out,
+		  outputOptions->encode,
+		  outputOptions->compress,
+		  &actions,
+		  "static const unsigned char",
+		  "actions",
+		  &sidxtoacnt,
+		  "static const int",
+		  "actionstart");
+  
   lang->outIntDecl(lang,out,"nproductions",VectorAny_size(&parser->m_productions));
 
   int poffset = 0;

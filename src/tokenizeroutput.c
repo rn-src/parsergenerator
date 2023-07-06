@@ -93,9 +93,7 @@ static bool OutputSections(FILE *out, const Nfa *dfa, const LanguageOutputter *l
     if( MapAny_findConst(&sectioncounts,&i) )
       secoffset += MapAny_findConstT(&sectioncounts,&i,int);
   }
-  if( first )
-    first = false;
-  else
+  if( ! first )
     fputc(',',out);
   lang->outInt(lang,out,secoffset);
   lang->outEndArray(lang,out);
@@ -107,12 +105,11 @@ static bool OutputSections(FILE *out, const Nfa *dfa, const LanguageOutputter *l
 
 static void OutputStateInfo(FILE *out, const Nfa *dfa, const LanguageOutputter *lang) {
   VectorAny /*<int>*/ stateinfo;
-  MapAny /*<int,int>*/ stateinfocounts;
+  VectorAny /*<int>*/ stateinfocounts;
   Scope_Push();
-  MapAny_init(&stateinfocounts,getIntElement(),getIntElement(),true);
+  VectorAny_init(&stateinfocounts,getIntElement(),true);
   VectorAny_init(&stateinfo,getIntElement(),true);
 
-  MapAny_clear(&stateinfocounts);
   // there typically aren't long runs of repeats, and values are usually
   // small, so we use a simple encoding scheme to save space.
   int lastfrom = -1;
@@ -123,15 +120,14 @@ static void OutputStateInfo(FILE *out, const Nfa *dfa, const LanguageOutputter *
     MapAny_getByIndexConst(&dfa->m_transitions,cur,(const void**)&transition,(const void**)&ranges);
     if( lastfrom != transition->m_from ) {
       while( ++lastfrom < transition->m_from ) {
-        if( MapAny_find(&stateinfocounts,&lastfrom) )
-          continue;
         int tokfrm = Nfa_getStateToken(dfa,lastfrom);
+	int cnttmp = 0;
         if( tokfrm != -1 ) {
           int tmp = tokfrm+1;
           VectorAny_push_back(&stateinfo,&tmp);
-          tmp = 1;
-          MapAny_insert(&stateinfocounts,&lastfrom,&tmp);
-        }
+          ++cnttmp;
+	}
+        VectorAny_push_back(&stateinfocounts,&cnttmp);
       }
       // -1 is quite common, add one to shrink encoding
       int tok = Nfa_getStateToken(dfa,transition->m_from);
@@ -155,56 +151,22 @@ static void OutputStateInfo(FILE *out, const Nfa *dfa, const LanguageOutputter *
     }
     // keeping count of how many values are in each stateinfo
     cnt += 2+2*CharSet_size(ranges);
-    if( ! MapAny_find(&stateinfocounts,&transition->m_from) )
-      MapAny_insert(&stateinfocounts,&transition->m_from,&cnt);
+    if( VectorAny_size(&stateinfocounts) == transition->m_from )
+      VectorAny_push_back(&stateinfocounts,&cnt);
     else
-      MapAny_findT(&stateinfocounts,&transition->m_from,int) += cnt;
+      VectorAny_ArrayOpT(&stateinfocounts,transition->m_from,int) += cnt;
   }
 
-  lang->outArrayDecl(lang,out,"static const unsigned char","stateinfo");
-  fputs(" = ",out);
-  lang->outStartArray(lang,out);
-  int idxbase = 0;
-  for( int i = 0, n = MapAny_size(&stateinfocounts); i < n; ++i ) {
-    if( ! MapAny_findConst(&stateinfocounts,&i) )
-      continue;
-    int fullcnt = 0;
-    int cnt = MapAny_findConstT(&stateinfocounts,&i,int);
-    for( int j = 0, m = cnt; j < m; ++j ) {
-      if( i > 0 || j > 0 )
-        fputc(',',out);
-      int element = VectorAny_ArrayOpT(&stateinfo,idxbase+j,int);
-      fullcnt += encodeuint(lang,out,element);
-    }
-    idxbase += cnt;
-    MapAny_findT(&stateinfocounts,&i,int) = fullcnt;
-  }
-  lang->outEndArray(lang,out);
-  lang->outEndStmt(lang,out);
-  fputc('\n',out);
-
-  // stateinfo is variable length, this fixed size index lets us
-  // jump right to the data.  It is possible to recreate this
-  // from the stateinfo, and maybe we will one day, but for now
-  // prefer to just write this.
-  int offset = 0;
-  lang->outArrayDecl(lang,out,"static const int","stateinfo_offset");
-  fputs(" = ",out);
-  lang->outStartArray(lang,out);
-  for( int i = 0, n = Nfa_stateCount(dfa); i < n; ++i ) {
-    if( i > 0 )
-      fputc(',',out);
-    lang->outInt(lang,out,offset);
-    if( MapAny_findConst(&stateinfocounts,&i) )
-      offset += MapAny_findConstT(&stateinfocounts,&i,int);
-  }
-  if( Nfa_stateCount(dfa) > 0 )
-    fputc(',',out);
-  lang->outInt(lang,out,offset);
-  lang->outEndArray(lang,out);
-  lang->outEndStmt(lang,out);
-  fputc('\n',out);
-
+  WriteIndexedArray(lang, out,
+		  lang->options->encode,
+		  lang->options->compress,
+		  &stateinfo,
+		  "static const unsigned char",
+		  "stateinfo",
+		  &stateinfocounts,
+		  "static const int",
+		  "stateinfo_offset");
+  
   Scope_Pop();
 }
 

@@ -102,4 +102,15 @@ void LanguageOutputter_init(LanguageOutputter *outputter, LanguageOutputOptions 
 // Language agnostic functions
 int encodeuint(const LanguageOutputter *lang, FILE *out, unsigned int i);
 
+void WriteIndexedArray(const LanguageOutputter *lang,
+		FILE *out,
+		bool encode,
+		bool compress,
+		VectorAny /*<int>*/ *values,
+		const char *values_type,
+		const char *values_name,
+		VectorAny /*<int>*/ *counts,
+		const char *counts_type,
+		const char *counts_name);
+
 #endif //__parsecommon_h

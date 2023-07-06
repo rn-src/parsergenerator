@@ -391,10 +391,6 @@ static unsigned int rshift(unsigned int i, unsigned int b) {
 // Note: first byte of 5 byte encoding will be 11111000 due to
 // all 32 bits being consumed in the final 4 bytes.
 int encodeuint(const LanguageOutputter *lang, FILE *out, unsigned int i) {
-  if( ! lang->options->encode ) {
-    lang->outInt(lang,out,i);
-    return 1;
-  }
   if( i == 0 ) {
     lang->outInt(lang,out,0);
     return 1;
@@ -445,4 +441,58 @@ void LanguageOutputOptions_importitem(LanguageOutputOptions *options, const char
     return;
   options_import(&options->importTail->itemHead, &options->importTail->itemTail, name, as);
 }
+
+void WriteIndexedArray(const LanguageOutputter *lang,
+		FILE *out,
+		bool encode,
+		bool compress,
+		VectorAny /*<int>*/ *values,
+		const char *values_type,
+		const char *values_name,
+		VectorAny /*<int>*/ *counts,
+		const char *counts_type,
+		const char *counts_name) {
+  VectorAny /*<int>*/ offsets;
+  Scope_Push();
+  VectorAny_init(&offsets,getIntElement(),true);
+  lang->outArrayDecl(lang,out,values_name,values_type);
+  fputs(" = ",out);
+  lang->outStartArray(lang,out);
+  int offset = 0;
+  int idx = 0;
+  VectorAny_push_back(&offsets,&offset);
+  for( int i = 0, n = VectorAny_size(counts); i < n; ++i ) {
+    for( int j = 0, m = VectorAny_ArrayOpConstT(counts,i,int); j < m; ++j ) {
+      if( idx > 0 )
+        fputs(",",out);
+      int value = VectorAny_ArrayOpConstT(values,idx,int);
+      idx++;
+      if( encode )
+        offset += encodeuint(lang,out,value);
+      else {
+	++offset;
+	lang->outInt(lang,out,value);
+      }
+    }
+    VectorAny_push_back(&offsets,&offset);
+  }
+  lang->outEndArray(lang,out);
+  lang->outEndStmt(lang,out);
+  fputc('\n',out);
+
+  lang->outArrayDecl(lang,out,counts_type,counts_name);
+  fputs(" = ",out);
+  lang->outStartArray(lang,out);
+  for( int i = 0; i < VectorAny_size(&offsets); ++i ) {
+    if( i > 0 )
+      fputc(',',out);
+    lang->outInt(lang,out,VectorAny_ArrayOpT(&offsets,i,int));
+  }
+  lang->outEndArray(lang,out);
+  lang->outEndStmt(lang,out);
+  fputc('\n',out);
+
+  Scope_Pop();
+}
+
 
