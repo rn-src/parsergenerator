@@ -442,6 +442,28 @@ void LanguageOutputOptions_importitem(LanguageOutputOptions *options, const char
   options_import(&options->importTail->itemHead, &options->importTail->itemTail, name, as);
 }
 
+void LongestMatch(VectorAny /*<int>*/ *values,
+                int testoff,
+                int testlen,
+                int *pmatchlen,
+                int *pmatchoff) {
+  const int *p = &VectorAny_ArrayOpConstT(values,0,int);
+  int bestoff = 0, bestlen = 0;
+  for( int i = 0; i < testoff; ++i ) {
+    for( int j = 0; j < testlen; ++j ) {
+      if( p[i] != p[testoff+i] )
+        break;
+      if( j > bestlen ) {
+        bestlen = j;
+        bestoff = i;
+      }
+    }
+  }
+  *pmatchlen = bestlen;
+  *pmatchoff = bestoff;
+}
+
+
 void WriteIndexedArray(const LanguageOutputter *lang,
 		FILE *out,
 		bool encode,
@@ -460,18 +482,29 @@ void WriteIndexedArray(const LanguageOutputter *lang,
   lang->outStartArray(lang,out);
   int offset = 0;
   int idx = 0;
-  VectorAny_push_back(&offsets,&offset);
-  for( int i = 0, n = VectorAny_size(counts); i < n; ++i ) {
+  int matchlen =0, matchoff = 0;
+  VectorAny_push_back(&offsets,&offset); for( int i = 0, n = VectorAny_size(counts); i < n; ++i ) {
     for( int j = 0, m = VectorAny_ArrayOpConstT(counts,i,int); j < m; ++j ) {
       if( idx > 0 )
         fputs(",",out);
       int value = VectorAny_ArrayOpConstT(values,idx,int);
+      if(compress) {
+        LongestMatch(values,idx,m-j,&matchlen,&matchoff);
+        if( matchlen >= 3 ) {
+          idx += matchlen;
+          j += matchlen-1;
+	        lang->outInt(lang,out,0xff);
+	        offset += encodeuint(lang,out,matchoff);
+	        offset += encodeuint(lang,out,matchlen);
+          continue;
+        } 
+      }
       idx++;
-      if( encode )
+      if( encode ) {
         offset += encodeuint(lang,out,value);
-      else {
-	++offset;
-	lang->outInt(lang,out,value);
+      } else {
+        ++offset;
+	      lang->outInt(lang,out,value);
       }
     }
     VectorAny_push_back(&offsets,&offset);
