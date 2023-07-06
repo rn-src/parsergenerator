@@ -49,7 +49,8 @@ void parseArgs(int argc, char *argv[], int *pverbosity, int *ptimed, LanguageOut
     options->lexerName = arg + 8;
   if ((arg = getarg(argc, argv, "--minnt=")))
     options->min_nt_value = atoi(arg + 8);
-  if ((arg = getarg(argc, argv, "--no-pound-line")))
+  arg = getarg(argc, argv, "--no-pound-line");
+  if(arg)
     options->do_pound_line = false;
   if (getarg(argc, argv, "--timed"))
     timed = 1;
@@ -58,9 +59,11 @@ void parseArgs(int argc, char *argv[], int *pverbosity, int *ptimed, LanguageOut
     options->encode = false;
     options->compress = false;
   }
-  if(arg = getarg(argc, argv, "--encode="))
+  arg = getarg(argc, argv, "--encode=");
+  if(arg)
     options->encode = boolvalue(arg+9); 
-  if(arg = getarg(argc, argv, "--compress="))
+  arg = getarg(argc, argv, "--compress=");
+  if(arg)
     options->compress = boolvalue(arg+11); 
   for (int i = 1; i < argc; ++i) {
     if (strncmp(argv[i], "--import=",9) == 0)
@@ -205,7 +208,8 @@ int tok_main(int argc, char *argv[])
   options.compress = true;
 		
   const char *arg = 0;
-  if( arg = getarg(argc, argv, "--prefix="))
+  arg = getarg(argc, argv, "--prefix=");
+  if(arg)
     options.prefix = arg+9;
   if(getarg(argc,argv,"--minimal="))
     options.minimal = boolvalue(arg+10);
@@ -214,9 +218,11 @@ int tok_main(int argc, char *argv[])
     options.encode = false;
     options.compress = false;
   }
-  if(arg = getarg(argc,argv,"--encode="))
+  arg = getarg(argc,argv,"--encode=");
+  if(arg)
     options.encode = boolvalue(arg+9);
-  if(arg = getarg(argc,argv,"--compress="))
+  arg = getarg(argc,argv,"--compress=");
+  if(arg)
     options.compress = boolvalue(arg+11);
   const char *fname = 0;
   for( int i = 1; i < argc; ++i ) {
