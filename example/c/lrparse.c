@@ -1,4 +1,5 @@
 #include "lrparse.h"
+#include "common.h"
 #include <stdlib.h>
 #include <string.h>
 #include <stdio.h>
@@ -7,8 +8,6 @@
 #define INITIAL_VEC_CAPACITY (8)
 #define TOKEN_SIZE (16)
 #define TOKENS_PER_BLOCK (64)
-
-extern unsigned int decodeuint(const unsigned char *c, const unsigned char **pnextc);
 
 static char *tokdup(const char *s) {
   if( ! s )
@@ -78,48 +77,49 @@ Token *vectok_back(vectok *v) {
   return (Token*)((char*)v->values+v->itemsize*(v->size-1));
 }
 
-bool findsymbol(int tok, const unsigned char *symbols, int nsymbols) {
+bool findsymbol(int tok, intiter *ii, int nsymbols) {
   while( nsymbols-- ) {
-    int s = (int)decodeuint(symbols,&symbols);
+    int s = intiter_next(ii);
     if( s == tok )
       return true;
   }
   return false;
 }
 
-const unsigned char *nextaction(const unsigned char *firstaction) {
-  int action = decodeuint(firstaction,&firstaction);
+void nextaction(intiter *ii) {
+  int action = intiter_next(ii);
   if( action == ACTION_SHIFT )
-    decodeuint(firstaction,&firstaction); // shift-to
+    intiter_next(ii); // shift-to
   else if( action == ACTION_REDUCE || action == ACTION_STOP ) {
-    decodeuint(firstaction,&firstaction); // reduce-by
-    decodeuint(firstaction,&firstaction); // reduce-count
+    intiter_next(ii); // reduce-by
+    intiter_next(ii); // reduce-count
   }
-  int nsymbols = decodeuint(firstaction,&firstaction);
+  int nsymbols = intiter_next(ii);
   while( nsymbols-- )
-    decodeuint(firstaction,&firstaction);
-  return firstaction;
+    intiter_next(ii);
 }
 
-const unsigned char *findmatchingaction(const unsigned char *firstaction, const unsigned char *lastaction, int tok, int *paction) {
-  while( firstaction != lastaction ) {
-    const unsigned char *actionpos = firstaction;
-    int action = decodeuint(actionpos,&actionpos);
-    *paction = action;
+bool findmatchingaction(intiter *ii, int tok, int *paction) {
+  while( ! intiter_end(ii) ) {
+    int actionindex = ii->startindex;
+    int actionpos = ii->offset;
+    int action = intiter_next(ii);
     if( action == ACTION_SHIFT ) {
-      decodeuint(actionpos,&actionpos); // shift-to
+      intiter_next(ii); // shift-to
     } else if( action == ACTION_REDUCE || action == ACTION_STOP ) {
-      decodeuint(actionpos,&actionpos); // reduce-by
-      decodeuint(actionpos,&actionpos); // reduce-count
+      intiter_next(ii); // reduce-by
+      intiter_next(ii); // reduce-count
     }
-    int nsymbols = decodeuint(actionpos,&actionpos);
-    if( findsymbol(tok,actionpos,nsymbols) )
-      break;
+    int nsymbols = intiter_next(ii);
+    if( findsymbol(tok,ii,nsymbols) ) {
+      *paction = action;
+      intiter_seek(ii,actionindex,actionpos);
+      return true;
+    }
     while( nsymbols-- )
-      decodeuint(actionpos,&actionpos);
-    firstaction = actionpos;
+      intiter_next(ii);
   }
-  return firstaction;
+  return false;
 }
 
 struct parsecontext {
@@ -172,11 +172,13 @@ static void printreduceaction(tokenizer *toks,
               writer *writer) {
   int reducebyp = reduceby-parseinfo->prod0;
   writer->printf(writer,"reduce %d states by rule %d [", reducecount, reducebyp+1);
-  const unsigned char *startproduction = parseinfo->productions+parseinfo->productionstart[reducebyp];
-  const unsigned char *endproduction = parseinfo->productions+parseinfo->productionstart[reducebyp+1];
+  intiter ii;
+  // no decodedelta on these
+  intiter_init(&ii,ENCODED_8BIT,parseinfo->productions,parseinfo->productionstart,0);
+  intiter_seek(&ii,reducebyp,0);
   bool first = true;
-  while( startproduction < endproduction ) {
-    int s = decodeuint(startproduction,&startproduction);
+  while( ! intiter_end(&ii) ) {
+    int s = intiter_next(&ii);
     writer->printf(writer, " %s", s >= parseinfo->start ? parseinfo->nonterminals[s-parseinfo->start] : tokenizer_tokid2str(toks,s));
     if( first ) {
       first = false;
@@ -184,6 +186,7 @@ static void printreduceaction(tokenizer *toks,
     }
   }
   writer->puts(writer," ] ? ... ");
+  intiter_destroy(&ii);
 }
 
 static void printtoken(tokenizer *toks, int inputnum, int tok, const Token *t, writer *writer) {
@@ -192,11 +195,11 @@ static void printtoken(tokenizer *toks, int inputnum, int tok, const Token *t, w
 }
 
 bool doaction(parsecontext *ctx,
-              const unsigned char *firstaction,
+              intiter *ii,
               const char **err) {
-  int action = decodeuint(firstaction,&firstaction);
+  int action = intiter_next(ii);
   if( action == ACTION_SHIFT ) {
-    int shiftto = decodeuint(firstaction,&firstaction);
+    int shiftto = intiter_next(ii);
     if( ctx->verbosity ) ctx->writer->printf(ctx->writer,"shift to %d\n", shiftto);
     vecint_push(&ctx->states,shiftto);
     vectok_push(&ctx->values,vectok_back(&ctx->values_inputqueue),ctx->parseinfo->itemsize);
@@ -204,8 +207,8 @@ bool doaction(parsecontext *ctx,
     ctx->values_inputqueue.size -= 1;
     return true;
   } else if( action == ACTION_REDUCE || action == ACTION_STOP ) {
-    int reduceby = decodeuint(firstaction,&firstaction);
-    int reducecount = decodeuint(firstaction,&firstaction);
+    int reduceby = intiter_next(ii);
+    int reducecount = intiter_next(ii);
     if( ctx->verbosity ) printreduceaction(ctx->toks,ctx->parseinfo,reduceby,reducecount,ctx->writer);
     size_t inputpos = ctx->values.size-reducecount;
     vectok_push(&ctx->values,0,0);
@@ -265,10 +268,10 @@ static int curstate(parsecontext *ctx) {
   return vecint_back(&ctx->states);
 }
 
-static int nexttoken(parsecontext *ctx) {
+static int nexttoken(parsecontext *ctx, intiter *iistate, intiter *iisection) {
   if( ! ctx->states_inputqueue.size ) {
     ctx->inputnum++;
-    int nxt = tokenizer_peek(ctx->toks);
+    int nxt = tokenizer_peek(ctx->toks,iistate,iisection);
     Token t;
     memset(&t, 0, sizeof(t));
     t.tok = nxt;
@@ -287,20 +290,23 @@ Token *parse(tokenizer *toks, parseinfo *parseinfo, void *extra, int verbosity, 
   parsecontext ctx;
   const char *err = 0;
   Token *ret = 0;
+  intiter ii, iitokstate, iitoksection;
+  intiter_init(&ii,parseinfo->actions_format,parseinfo->actions,parseinfo->actionstart,DECODEDELTA);
+  intiter_init(&iitokstate,toks->info->stateinfo_format,toks->info->sectioninfo,toks->info->stateinfo_offset,DECODEDELTA);
+  intiter_init(&iitoksection,ENCODED_8BIT,toks->info->sectioninfo,toks->info->sectioninfo_offset,0);
   parsecontext_init(&ctx, toks, parseinfo, extra, verbosity, writer);
   int tok = -1;
   while( ctx.states.size > 0 ) {
     int stateno = curstate(&ctx);
-    tok = nexttoken(&ctx);
-    const unsigned char *firstaction = parseinfo->actions+parseinfo->actionstart[stateno];
-    const unsigned char *lastaction = parseinfo->actions+parseinfo->actionstart[stateno+1];
+    tok = nexttoken(&ctx,&iitokstate,&iitoksection);
+    intiter_seek(&ii,stateno,0);
     int action = -1;
-    while( (firstaction = findmatchingaction(firstaction,lastaction,tok,&action)) != lastaction ) {
-      if( doaction(&ctx, firstaction, &err) )
+    while( findmatchingaction(&ii,tok,&action) ) {
+      if( doaction(&ctx, &ii, &err) )
         break;
-      firstaction = nextaction(firstaction);
+      nextaction(&ii);
     }
-    if( firstaction != lastaction ) {
+    if( ! intiter_end(&ii) ) {
       if( action != ACTION_STOP )
         continue;
       ret = (Token*)mrealloc(0,0,parseinfo->itemsize);

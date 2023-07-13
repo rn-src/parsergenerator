@@ -416,10 +416,8 @@ static void OutputLRParser(FILE *out, const ParserDef *parser, const LRParserSol
 
   WriteIndexedArray(lang, out,
       outputOptions->encode,
-      2,
       outputOptions->compress,
       outputOptions->allow_full_compression,
-      0,
       &actions,
       "static const unsigned char",
       "actions",

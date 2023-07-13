@@ -1,107 +1,9 @@
 #include "tokenizer.h"
-#include <stdlib.h>
+#include "common.h"
 #include <string.h>
 #include <stdio.h>
-#define INITIAL_INTVEC_CAPACITY (8)
 #define INITIAL_TOKSTR_CAPACITY (8)
 #define BUF_BLOCK_SIZE (1<<12)
-#define REPLACEMENT_CHARACTER (0xfffd)
-
-void *mrealloc(void *prev, size_t prevsize, size_t newsize) {
-  if( ! newsize ) {
-    if( prev )
-      free(prev);
-    return 0;
-  }
-  if( prev ) {
-    void *vpnew = realloc(prev,newsize);
-    if( ! vpnew )
-      return prev;
-    if( newsize > prevsize )
-      memset((char*)vpnew+prevsize,0,newsize-prevsize);
-    return vpnew;
-  }
-  void *vpnew = malloc(newsize);
-  if( vpnew )
-    memset(vpnew,0,newsize);
-  return vpnew;
-}
-
-void vecint_init(vecint *v) {
-  v->values = 0;
-  v->size = 0;
-  v->capacity = 0;
-}
-
-void vecint_destroy(vecint *v) {
-  if( v->values )
-    free(v->values);
-}
-
-void vecint_push(vecint *v, int i) {
-  if( v->size == v->capacity ) {
-    size_t newcapacity = v->capacity?v->capacity*2:INITIAL_INTVEC_CAPACITY;
-    v->values = (int*)mrealloc(v->values,v->capacity*sizeof(int),newcapacity*sizeof(int));
-    v->capacity = newcapacity;
-  }
-  v->values[v->size++] = i;
-}
-
-int vecint_back(vecint *v) {
-  return v->values[v->size-1];
-}
-
-void charbuf_init(charbuf *buf, size_t initial_capacity) {
-  buf->buf = (char*)mrealloc(0,0,initial_capacity);
-  buf->size = 0;
-  buf->capacity = initial_capacity;
-}
-
-void charbuf_clear(charbuf *buf) {
-  buf->size = 0;
-}
-
-static void charbuf_ensure_additional_capacity(charbuf *buf, size_t additional) {
-  size_t mincapacity = buf->size+additional;
-  if (mincapacity <= buf->capacity)
-    return;
-  size_t newcapacity = buf->capacity?buf->capacity:1;
-  while( newcapacity < mincapacity ) newcapacity*=2;
-  buf->buf = (char*)mrealloc(buf->buf,buf->capacity,newcapacity);
-  buf->capacity = newcapacity;
-}
-
-size_t charbuf_putc_utf8(charbuf *buf, int c) {
-  charbuf_ensure_additional_capacity(buf, 4);
-  char *dst = buf->buf+buf->size;
-  if( c < 0 || c >= 0x0010ffff)
-    c = REPLACEMENT_CHARACTER;
-  if (c >= 0 && c <= 0x7f) {
-    *dst++ = c;
-  } else {
-    if (c >= 0x0080 && c <= 0x07ff) {
-      *dst++ = 0xc0 | ((c >> 6) & 0x1f);
-    } else {
-      if (c >= 0x0800 && c <= 0xffff) {
-        *dst++ = ((c >> 12) & 0x0f);
-      }
-      else {
-        *dst++ = 0xf8 | ((c >> 18) & 0x07);
-        *dst++ = 0x80 | ((c >> 12) & 0x3f);
-      }
-      *dst++ = 0x80 | ((c >> 6) & 0x3f);
-    }
-    *dst++ = 0x80 | (c & 0x3f);
-  }
-  size_t n = dst-buf->buf;
-  buf->size += n;
-  return n;
-}
-
-void charbuf_destroy(charbuf *buf) {
-  if( buf->buf )
-    free(buf->buf);
-}
 
 void tokenizer_init(tokenizer *tokenizer, tokinfo *info, reader *rdr) {
   memset(tokenizer,0,sizeof(struct tokenizer));
@@ -124,43 +26,25 @@ void tokenizer_destroy(tokenizer *tokenizer) {
   vecint_destroy(&tokenizer->secstack);
 }
 
-unsigned int decodeuint(const unsigned char *c, const unsigned char **pnextc) {
-  int leadbits = 0;
-  while( leadbits <= 8 && (0x80>>leadbits)&*c ) ++leadbits;
-  if( leadbits == 0 ) {
-    *pnextc = c+1;
-    return *c;
-  }
-  unsigned int i = (0xff<<(8-leadbits)) & *c++;
-  while( leadbits-- ) {
-    i <<= 8;
-    i |= *c++;
-  }
-  *pnextc = c;
-  return i;
-}
-
-static int tokstate(tokinfo *info, int state) {
-  const unsigned char *cur = info->stateinfo+info->stateinfo_offset[state];
-  const unsigned char *end = info->stateinfo+info->stateinfo_offset[state+1];
-  if( cur < end )
-    return decodeuint(cur,&cur)-1;
+static int tokstate(tokinfo *info, intiter *ii, int state) {
+  intiter_seek(ii,state,0);
+  if( ! intiter_end(ii) )
+    return intiter_next(ii);
   return -1;
 }
 
-static int nextstate(tokinfo *info, int state, int c) {
-  const unsigned char *cur = info->stateinfo+info->stateinfo_offset[state];
-  const unsigned char *end = info->stateinfo+info->stateinfo_offset[state+1];
-  if( cur < end )
-    decodeuint(cur,&cur); // tok
-  while( cur != end ) {
-    int to = decodeuint(cur,&cur);
-    int cnt = decodeuint(cur,&cur);
+static int nextstate(tokinfo *info, intiter *ii, int state, int c) {
+  intiter_seek(ii,state,0);
+  if( ! intiter_end(ii) )
+    intiter_next(ii); // tok
+  while( ! intiter_end(ii) ) {
+    int to = intiter_next(ii);
+    int cnt = intiter_next(ii);
     int last = 0;
     for( int i = 0; i < cnt; ++i ) {
-      int low = decodeuint(cur,&cur)+last;
+      int low = intiter_next(ii)+last;
       last = low;
-      int high = decodeuint(cur,&cur)+last;
+      int high = intiter_next(ii)+last;
       last = high;
       if( c >=low && c <= high )
         return to;
@@ -242,7 +126,7 @@ static void chomp(tokenizer* tokenizer, size_t n) {
   tokenizer->bufoffset = (tokenizer->bufoffset + n) % tokenizer->readbuf.size;
 }
 
-int tokenizer_peek(tokenizer *tokenizer) {
+int tokenizer_peek(tokenizer *tokenizer, intiter *ii, intiter *iisection) {
   if( tokenizer->tok != -1 )
     return tokenizer->tok;
   bool getanothertok = true;
@@ -251,12 +135,12 @@ int tokenizer_peek(tokenizer *tokenizer) {
     int cursection = vecint_back(&tokenizer->secstack);
     int tok = -1;
     int t = -1;
-    int state = nextstate(tokenizer->info,0,cursection);
+    int state = nextstate(tokenizer->info,ii,0,cursection);
     size_t offset = 0, used = 0;
     toksize cursize = {0,0,0,0};
     toksize toksize = {0,0,0,0};
     while( state != -1 ) {
-      t = tokstate(tokenizer->info,state);
+      t = tokstate(tokenizer->info,ii,state);
       if( t != -1 ) {
         tok = t;
         toksize = cursize;
@@ -271,7 +155,7 @@ int tokenizer_peek(tokenizer *tokenizer) {
         cursize.cols = 0;
       } else
         ++cursize.cols;
-      state = nextstate(tokenizer->info, state, c);
+      state = nextstate(tokenizer->info,ii,state,c);
     }
     if( tok == -1 ) {
       tokenizer->tok = -1;
@@ -287,12 +171,11 @@ int tokenizer_peek(tokenizer *tokenizer) {
     chomp(tokenizer,offset);
     charbuf_putc_utf8(&tokenizer->tokstrbuf, 0);
     if( tokenizer->info->sectioninfo ) {
-      const unsigned char *startsection = tokenizer->info->sectioninfo+tokenizer->info->sectioninfo_offset[cursection];
-      const unsigned char *endsection = tokenizer->info->sectioninfo+tokenizer->info->sectioninfo_offset[cursection+1];
-      while( startsection < endsection ) {
-        int actiontok = decodeuint(startsection,&startsection);
-        int action = decodeuint(startsection,&startsection);
-        int actionarg = decodeuint(startsection,&startsection);
+      intiter_seek(iisection,cursection,0);
+      while( ! intiter_end(ii) ) {
+        int actiontok = intiter_next(iisection);
+        int action = intiter_next(iisection);
+        int actionarg = intiter_next(iisection);
         if( actiontok == tok ) {
           if( action == 1 )
             vecint_push(&tokenizer->secstack,actionarg);

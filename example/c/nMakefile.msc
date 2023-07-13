@@ -1,7 +1,7 @@
 # To build
 # start visual studio command line prompt
 # nmake -f nMakefile.msc
-OBJS=main.obj lrparse.obj tokenizer.obj
+OBJS=main.obj lrparse.obj tokenizer.obj common.obj
 CFLAGS=/nologo /Zi /Od /EHsc /DWIN32 /MD /I.
 #CFLAGS=/nologo /O1 /EHsc /DWIN32 /MD /I.
 .SUFFIXES: .c .obj

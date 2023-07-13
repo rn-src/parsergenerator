@@ -158,10 +158,8 @@ static void OutputStateInfo(FILE *out, const Nfa *dfa, const LanguageOutputter *
 
   WriteIndexedArray(lang, out,
       lang->options->encode,
-      2,
       lang->options->compress,
       lang->options->allow_full_compression,
-      0,
       &stateinfo,
       "static const unsigned char",
       "stateinfo",
