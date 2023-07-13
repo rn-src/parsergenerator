@@ -9,12 +9,13 @@ struct tokinfo {
   int tokenCount;
   int sectionCount;
   const unsigned char *sectioninfo;
-  const int *sectioninfo_offset;
+  const unsigned short *sectioninfo_offset;
   const char **tokenstr;
   const unsigned char *isws;
   int stateCount;
+  const unsigned char stateinfo_format;
   const unsigned char *stateinfo;
-  const int *stateinfo_offset;
+  const unsigned short *stateinfo_offset;
 };
 typedef struct tokinfo tokinfo;
 

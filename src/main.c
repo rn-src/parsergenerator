@@ -65,6 +65,9 @@ void parseArgs(int argc, char *argv[], int *pverbosity, int *ptimed, LanguageOut
   arg = getarg(argc, argv, "--compress=");
   if(arg)
     options->compress = boolvalue(arg+11); 
+  arg = getarg(argc, argv, "--allow-full-compression=");
+  if(arg)
+    options->allow_full_compression = boolvalue(arg+25); 
   for (int i = 1; i < argc; ++i) {
     if (strncmp(argv[i], "--import=",9) == 0)
       LanguageOutputOptions_import(options,argv[i]+9,0);
@@ -127,6 +130,7 @@ int parse_main(int argc, char *argv[]) {
   options.outputLanguage = OutputLanguage_C;
   options.encode = true;
   options.compress = true;
+  options.allow_full_compression = false;
 
   parseArgs(argc, argv, &verbosity, &timed, &options, &fname);
 
@@ -140,7 +144,23 @@ int parse_main(int argc, char *argv[]) {
           "--lexer        : lexer name, if different from the parser (used in python)\n"
           "--import       : module to import (python) or include (C), can be repeated to import multple modules\n"
           "--as           : as clause on module to import (python), applies to most recent import\n"
-          "-no-pound-line : turn off #line directives in the output (applies to C)\n", stderr);
+          "-no-pound-line : turn off #line directives in the output (applies to C)\n"
+          "--encode       : set to true/false, emit values 8bit encoded instead of full integers\n"
+          "                 default true for C, false for Python.\n"
+          "                 presently only C parser implements.\n"
+          "--compress     : set to true/false, allow emitting compressed state data\n"
+          "                 will fall-back to 8-bit encoded output if space is not saved\n"
+          "                 default true for C, false for Python\n"
+          "                 presently only C parser implements.\n"
+          "--allow-full-compression\n"
+          "                : set to true/false, allows emitting compression for full runs of data, instead of\n"
+          "                  state-by-state if the full compression ends up being smaller output\n"
+          "                  default false\n"
+          "                  Due to size of additional scan-ahead data emitted, this was not implemented in\n"
+          "                  the C or Python parsers, since the additional scan-ahead data needed to make\n"
+          "                  this work is not only makes using it more complex, but overcomes the size savings\n"
+          "                  from using the full data window.\n"
+          , stderr);
     return -1;
   }
 
@@ -206,7 +226,8 @@ int tok_main(int argc, char *argv[])
   options.outputLanguage = OutputLanguage_C;
   options.encode = true;
   options.compress = true;
-		
+  options.allow_full_compression = false;
+
   const char *arg = 0;
   arg = getarg(argc, argv, "--prefix=");
   if(arg)
@@ -224,6 +245,9 @@ int tok_main(int argc, char *argv[])
   arg = getarg(argc,argv,"--compress=");
   if(arg)
     options.compress = boolvalue(arg+11);
+  arg = getarg(argc, argv, "--allow-full-compression=");
+  if(arg)
+    options.allow_full_compression = boolvalue(arg+25); 
   const char *fname = 0;
   for( int i = 1; i < argc; ++i ) {
     if( argv[i][0] == '-' )
@@ -236,7 +260,23 @@ int tok_main(int argc, char *argv[])
     fputs("usage : tokenizer [--prefix] [--minimal] [--py] filename\n"
           "--prefix       : prefix for output values\n"
           "--minimal      : skip the structure declaration at the bottom (C only)\n"
-          "--py           : output python (default C)\n", stderr);
+          "--py           : output python (default C)\n"
+          "--encode       : set to true/false, emit values 8bit encoded instead of full integers\n"
+          "                 default true for C, false for Python.\n"
+          "                 presently only C tokenizer implements.\n"
+          "--compress     : set to true/false, allow emitting compressed state data\n"
+          "                 will fall-back to 8-bit encoded output if space is not saved\n"
+          "                 default true for C, false for Python\n"
+          "                 presently only C tokenizer implements.\n"
+          "--allow-full-compression\n"
+          "                : set to true/false, allows emitting compression for full runs of data, instead of\n"
+          "                  state-by-state if the full compression ends up being smaller output\n"
+          "                  default false\n"
+          "                  Due to size of additional scan-ahead data emitted, this was not implemented in\n"
+          "                  the C or Python tokenizers, since the additional scan-ahead data needed to make\n"
+          "                  this work is not only makes using it more complex, but overcomes the size savings\n"
+          "                  from using the full data window.\n"
+          , stderr);
     return -1;
   }
 
@@ -263,7 +303,7 @@ int tok_main(int argc, char *argv[])
   else
    strcat(foutname,".h");
 
-  ParseError *pe;
+  ParseError *pe = 0;
   TokStream s;
   TokStream_init(&s,fin,fname,true);
   int ret = 0;

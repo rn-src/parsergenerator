@@ -10,13 +10,14 @@ typedef bool (*reducefnct)(void *extra, int productionidx, void *inputs, void *n
 
 struct parseinfo {
   const int nstates;
+  const unsigned char actions_format;
   const unsigned char *actions;
-  const int *actionstart;
+  const unsigned short *actionstart;
   const int prod0;
   const int parse_error;
   const int nproductions;
   const unsigned char *productions;
-  const int *productionstart;
+  const unsigned short *productionstart;
   const int start;
   const char **nonterminals;
   const size_t itemsize;

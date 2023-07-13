@@ -22,6 +22,7 @@ void outBottom(const LanguageOutputter* This, FILE* out, bool hassections) {
     fprintf(out, "  %stokenstr,\n", prefix);
     fprintf(out, "  %sisws,\n", prefix);
     fprintf(out, "  %sstateCount,\n", prefix);
+    fprintf(out, "  %sstateinfo_format,\n", prefix);
     fprintf(out, "  %sstateinfo,\n", prefix);
     fprintf(out, "  %sstateinfo_offset,\n", prefix);
     fputs("};\n", out);
@@ -80,7 +81,7 @@ static bool OutputSections(FILE *out, const Nfa *dfa, const LanguageOutputter *l
   fputc('\n',out);
 
   int secoffset = 0;
-  lang->outArrayDecl(lang,out,"static const int","sectioninfo_offset");
+  lang->outArrayDecl(lang,out,"static const unsigned short","sectioninfo_offset");
   fputs(" = ",out);
   lang->outStartArray(lang,out);
   first = true;
@@ -121,18 +122,16 @@ static void OutputStateInfo(FILE *out, const Nfa *dfa, const LanguageOutputter *
     if( lastfrom != transition->m_from ) {
       while( ++lastfrom < transition->m_from ) {
         int tokfrm = Nfa_getStateToken(dfa,lastfrom);
-	int cnttmp = 0;
+        int cnttmp = 0;
         if( tokfrm != -1 ) {
-          int tmp = tokfrm+1;
-          VectorAny_push_back(&stateinfo,&tmp);
+          VectorAny_push_back(&stateinfo,&tokfrm);
           ++cnttmp;
-	}
+        }
         VectorAny_push_back(&stateinfocounts,&cnttmp);
       }
       // -1 is quite common, add one to shrink encoding
       int tok = Nfa_getStateToken(dfa,transition->m_from);
-      int tmp = tok+1;
-      VectorAny_push_back(&stateinfo,&tmp);
+      VectorAny_push_back(&stateinfo,&tok);
       ++cnt;
     }
     VectorAny_push_back(&stateinfo,&transition->m_to);
@@ -158,14 +157,17 @@ static void OutputStateInfo(FILE *out, const Nfa *dfa, const LanguageOutputter *
   }
 
   WriteIndexedArray(lang, out,
-		  lang->options->encode,
-		  lang->options->compress,
-		  &stateinfo,
-		  "static const unsigned char",
-		  "stateinfo",
-		  &stateinfocounts,
-		  "static const int",
-		  "stateinfo_offset");
+      lang->options->encode,
+      2,
+      lang->options->compress,
+      lang->options->allow_full_compression,
+      0,
+      &stateinfo,
+      "static const unsigned char",
+      "stateinfo",
+      &stateinfocounts,
+      "static const unsigned short",
+      "stateinfo_offset");
   
   Scope_Pop();
 }

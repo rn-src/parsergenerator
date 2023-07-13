@@ -64,6 +64,7 @@ struct LanguageOutputOptions {
   bool minimal;
   bool encode;
   bool compress;
+  bool allow_full_compression;
 };
 
 void LanguageOutputOptions_import(LanguageOutputOptions *options, const char *name, const char *as);
@@ -103,14 +104,17 @@ void LanguageOutputter_init(LanguageOutputter *outputter, LanguageOutputOptions 
 int encodeuint(const LanguageOutputter *lang, FILE *out, unsigned int i);
 
 void WriteIndexedArray(const LanguageOutputter *lang,
-		FILE *out,
-		bool encode,
-		bool compress,
-		VectorAny /*<int>*/ *values,
-		const char *values_type,
-		const char *values_name,
-		VectorAny /*<int>*/ *counts,
-		const char *counts_type,
-		const char *counts_name);
+    FILE *out,
+    bool encode,
+    int encodedelta,
+    bool compress,
+    bool allow_full_compression,
+    int compressmarker,
+    VectorAny /*<int>*/ *values,
+    const char *values_type,
+    const char *values_name,
+    VectorAny /*<int>*/ *counts,
+    const char *counts_type,
+    const char *counts_name);
 
 #endif //__parsecommon_h

@@ -1,6 +1,11 @@
 #include "parsecommon.h"
 #include <ctype.h>
 
+#define UNENCODED (1)
+#define ENCODED_8BIT (2)
+#define SECTIONAL_COMPRESSION (3)
+#define FULL_COMPRESSION (4)
+
 static ParseError g_err;
 bool g_errInit = false;
 bool g_errSet = false;
@@ -162,6 +167,8 @@ static const char* pytype(const char* type) {
   if( strncmp(type,"char*",5) == 0 )
     return "str";
   if( strcmp(type,"unsigned char") == 0 )
+    return "int";
+  if( strcmp(type,"unsigned short") == 0 )
     return "int";
   if( strcmp(type,"double") == 0 )
     return "float";
@@ -378,6 +385,15 @@ static unsigned int rshift(unsigned int i, unsigned int b) {
   return i>>b;
 }
 
+static int encodeuintsize(unsigned int i) {
+  if( i == 0 )
+    return 1;
+  unsigned int nbits = 0;
+  while( (lshift(0xffffffff,nbits)&i) != 0 ) ++nbits;
+  unsigned int bytes = modup(nbits,7);
+  return bytes;
+}
+
 // A simple encoding scheme for unsigned 4 byte integers.
 // In practice, almost all integers where we use this end
 // up being 1 byte encodings, but we have to handle up to
@@ -445,13 +461,14 @@ void LanguageOutputOptions_importitem(LanguageOutputOptions *options, const char
 void LongestMatch(VectorAny /*<int>*/ *values,
                 int testoff,
                 int testlen,
-                int *pmatchlen,
-                int *pmatchoff) {
+                int *pmatchoff,
+                int *pmatchlen
+                ) {
   const int *p = &VectorAny_ArrayOpConstT(values,0,int);
   int bestoff = 0, bestlen = 0;
   for( int i = 0; i < testoff; ++i ) {
     for( int j = 0; j < testlen; ++j ) {
-      if( p[i] != p[testoff+i] )
+      if( p[i+j] != p[testoff+j] )
         break;
       if( j > bestlen ) {
         bestlen = j;
@@ -463,51 +480,243 @@ void LongestMatch(VectorAny /*<int>*/ *values,
   *pmatchoff = bestoff;
 }
 
-
-void WriteIndexedArray(const LanguageOutputter *lang,
-		FILE *out,
-		bool encode,
-		bool compress,
-		VectorAny /*<int>*/ *values,
-		const char *values_type,
-		const char *values_name,
-		VectorAny /*<int>*/ *counts,
-		const char *counts_type,
-		const char *counts_name) {
-  VectorAny /*<int>*/ offsets;
-  Scope_Push();
-  VectorAny_init(&offsets,getIntElement(),true);
-  lang->outArrayDecl(lang,out,values_name,values_type);
-  fputs(" = ",out);
-  lang->outStartArray(lang,out);
+int compressed_size_full(const LanguageOutputter *lang, FILE *out, int encodedelta, VectorAny *values, VectorAny *counts) {
   int offset = 0;
   int idx = 0;
+  int maxidx = VectorAny_size(values);
   int matchlen =0, matchoff = 0;
-  VectorAny_push_back(&offsets,&offset); for( int i = 0, n = VectorAny_size(counts); i < n; ++i ) {
+  int countidx = 0;
+  int nextoffset = 0;
+  while( idx < maxidx ) {
+    while( idx >= nextoffset )
+      nextoffset += VectorAny_ArrayOpConstT(counts,countidx++,int);
+    LongestMatch(values,idx,maxidx-idx,&matchoff,&matchlen);
+    if( matchlen >= 3 ) {
+      idx += matchlen;
+      offset += 1;
+      offset += encodeuintsize(matchoff);
+      offset += encodeuintsize(matchlen);
+    } else {
+      int value = VectorAny_ArrayOpConstT(values,idx,int);
+      offset += encodeuintsize(value+encodedelta);
+      ++idx;
+    }
+  }
+  int compressedsize = sizeof(short)*2*VectorAny_size(counts)+offset;
+  lang->outStartLineComment(lang,out);
+  fprintf(out," 4 - compressed size (full) = %d = sizeof(short)*2*%d + %d\n", compressedsize, VectorAny_size(counts), offset);
+  return compressedsize;
+}
+
+void compress_full(
+    const LanguageOutputter *lang,
+    FILE *out,
+    int encodedelta,
+    int compressmarker,
+    VectorAny *values,
+    VectorAny *counts,
+    VectorAny *offsets) {
+  int offset = 0;
+  int idx = 0;
+  int maxidx = VectorAny_size(values);
+  int matchlen =0, matchoff = 0;
+  int countidx = 0;
+  int nextoffset = 0;
+  int overshoot = 0;
+  while( idx < maxidx ) {
+    while( idx >= nextoffset ) {
+      overshoot = idx-nextoffset;
+      VectorAny_push_back(offsets,&offset);
+      VectorAny_push_back(offsets,&overshoot);
+      nextoffset += VectorAny_ArrayOpConstT(counts,countidx++,int);
+    }
+    if( idx > 0 )
+      fputs(",",out);
+    LongestMatch(values,idx,maxidx-idx,&matchoff,&matchlen);
+    if( matchlen >= 3 ) {
+      idx += matchlen;
+      lang->outInt(lang,out,compressmarker);
+      fputs(",",out);
+      offset += encodeuint(lang,out,matchoff);
+      fputs(",",out);
+      offset += encodeuint(lang,out,matchlen);
+      continue;
+    } else {
+      int value = VectorAny_ArrayOpConstT(values,idx,int);
+      offset += encodeuint(lang,out,value+encodedelta);
+      ++idx;
+    }
+  }
+  overshoot = idx-nextoffset;
+  VectorAny_push_back(offsets,&offset);
+  VectorAny_push_back(offsets,&overshoot);
+}
+
+int compressed_size_sectional(const LanguageOutputter *lang, FILE *out, int encodedelta, VectorAny *values, VectorAny *counts) {
+  int offset = 0;
+  int idx = 0, maxidx = 0;
+  int matchlen =0, matchoff = 0;
+  int countidx = 0;
+  int nextoffset = 0;
+  for( int i = 0, n = VectorAny_size(counts); i < n; ++i ) {
+    maxidx += VectorAny_ArrayOpConstT(counts,i,int);
+    while( idx < maxidx ) {
+      LongestMatch(values,idx,maxidx-idx,&matchoff,&matchlen);
+      if( matchlen >= 3 ) {
+        idx += matchlen;
+        offset += 1;
+        offset += encodeuintsize(matchoff);
+        offset += encodeuintsize(matchlen);
+      } else {
+        int value = VectorAny_ArrayOpConstT(values,idx,int);
+        offset += encodeuintsize(value+encodedelta);
+        ++idx;
+      }
+    }
+  }
+  int compressedsize = sizeof(short)*VectorAny_size(counts)+offset;
+  lang->outStartLineComment(lang,out);
+  fprintf(out," 3 - compressed size (sectional) = %d = sizeof(short)*%d + %d\n", compressedsize, VectorAny_size(counts), offset);
+  return compressedsize;
+}
+
+void compress_sectional(
+    const LanguageOutputter *lang,
+    FILE *out,
+    int encodedelta,
+    int compressmarker,
+    VectorAny *values,
+    VectorAny *counts,
+    VectorAny *offsets) {
+  int offset = 0;
+  int idx = 0, maxidx = 0;
+  int matchlen =0, matchoff = 0;
+  int countidx = 0;
+  int nextoffset = 0;
+  VectorAny_push_back(offsets,&offset);
+  for( int i = 0, n = VectorAny_size(counts); i < n; ++i ) {
+    maxidx += VectorAny_ArrayOpConstT(counts,i,int);
+    while( idx < maxidx ) {
+      if( idx > 0 )
+        fputs(",",out);
+      LongestMatch(values,idx,maxidx-idx,&matchoff,&matchlen);
+      if( matchlen >= 3 ) {
+        idx += matchlen;
+        lang->outInt(lang,out,compressmarker);
+        fputs(",",out);
+        offset += encodeuint(lang,out,matchoff);
+        fputs(",",out);
+        offset += encodeuint(lang,out,matchlen);
+        continue;
+      } else {
+        int value = VectorAny_ArrayOpConstT(values,idx,int);
+        offset += encodeuint(lang,out,value+encodedelta);
+        ++idx;
+      }
+    }
+    VectorAny_push_back(offsets,&offset);
+  }
+}
+
+int encoded_size(const LanguageOutputter *lang, FILE *out, int encodedelta, VectorAny *values, VectorAny *counts) {
+  int encodedoffset = 0;
+  int idx = 0, maxidx = VectorAny_size(values);
+  while( idx < maxidx ) {
+      int value = VectorAny_ArrayOpConstT(values,idx,int);
+      encodedoffset += encodeuintsize(value+encodedelta);
+      ++idx;
+  }
+  int encodedsize = sizeof(short)*VectorAny_size(counts)+encodedoffset;
+  lang->outStartLineComment(lang,out);
+  fprintf(out," 2 - encoded size (8-bit) = %d = sizeof(short)*%d + %d\n", encodedsize, VectorAny_size(counts), encodedoffset);
+  return encodedsize;
+}
+
+int full_size(const LanguageOutputter *lang, FILE *out, int encodedelta, VectorAny *values, VectorAny *counts) {
+  int fullsize = sizeof(short)*VectorAny_size(counts)+sizeof(int)*VectorAny_size(values);
+  lang->outStartLineComment(lang,out);
+  fprintf(out," 1 - full size = %d = sizeof(short)*%d + sizeof(int)*%d\n", fullsize, VectorAny_size(counts), VectorAny_size(values));
+  return fullsize;
+}
+
+void output_values(
+    const LanguageOutputter *lang,
+    FILE *out,
+    bool encode,
+    int encodedelta,
+    VectorAny *values,
+    VectorAny *counts,
+    VectorAny *offsets) {
+  int offset = 0;
+  int idx = 0;
+  VectorAny_push_back(offsets,&offset);
+  for( int i = 0, n = VectorAny_size(counts); i < n; ++i ) {
     for( int j = 0, m = VectorAny_ArrayOpConstT(counts,i,int); j < m; ++j ) {
       if( idx > 0 )
         fputs(",",out);
       int value = VectorAny_ArrayOpConstT(values,idx,int);
-      if(compress) {
-        LongestMatch(values,idx,m-j,&matchlen,&matchoff);
-        if( matchlen >= 3 ) {
-          idx += matchlen;
-          j += matchlen-1;
-	        lang->outInt(lang,out,0xff);
-	        offset += encodeuint(lang,out,matchoff);
-	        offset += encodeuint(lang,out,matchlen);
-          continue;
-        } 
-      }
       idx++;
       if( encode ) {
-        offset += encodeuint(lang,out,value);
+        offset += encodeuint(lang,out,value+encodedelta);
       } else {
         ++offset;
 	      lang->outInt(lang,out,value);
       }
     }
-    VectorAny_push_back(&offsets,&offset);
+    VectorAny_push_back(offsets,&offset);
+  }
+}
+
+void WriteIndexedArray(const LanguageOutputter *lang,
+    FILE *out,
+    bool encode,
+    int encodedelta,
+    bool compress,
+    bool allow_full_compression,
+    int compressmarker,
+    VectorAny /*<int>*/ *values,
+    const char *values_type,
+    const char *values_name,
+    VectorAny /*<int>*/ *counts,
+    const char *counts_type,
+    const char *counts_name) {
+  VectorAny /*<int>*/ offsets;
+  String encname;
+  Scope_Push();
+  VectorAny_init(&offsets,getIntElement(),true);
+  String_init(&encname,true);
+  String_ReFormatString(&encname,"%s_format",values_name);
+  full_size(lang,out,encodedelta,values,counts);
+  int encodedsize = encoded_size(lang,out,encodedelta,values,counts);
+  int compressedsizesectional = compressed_size_sectional(lang,out,encodedelta,values,counts);
+  int compressedsizefull = compressed_size_full(lang,out,encodedelta,values,counts);
+  int compressedsize = 0;
+  int compressiontype = 0;
+  if( compress ) {
+    if( allow_full_compression ) {
+      compressedsize = (compressedsizefull<compressedsizesectional) ? compressedsizefull : compressedsizesectional;
+      compressiontype = (compressedsizefull < compressedsizesectional) ? FULL_COMPRESSION : SECTIONAL_COMPRESSION;
+    } else {
+      compressedsize = compressedsizesectional;
+      compressiontype = SECTIONAL_COMPRESSION;
+    }
+    if( compressedsize >= encodedsize) {
+      compress = false;
+      encode = true;
+    }
+  }
+
+  lang->outIntDecl(lang, out, String_Chars(&encname), compress ? compressiontype : (encode ? ENCODED_8BIT : UNENCODED));
+  lang->outArrayDecl(lang,out,values_type,values_name);
+  fputs(" = ",out);
+  lang->outStartArray(lang,out);
+  if( compress ) {
+    if( compressiontype == FULL_COMPRESSION )
+      compress_full(lang,out,encodedelta,compressmarker,values,counts,&offsets);
+    else if( compressiontype == SECTIONAL_COMPRESSION )
+      compress_sectional(lang,out,encodedelta,compressmarker,values,counts,&offsets);
+  } else  {
+    output_values(lang,out,encode,encodedelta,values,counts,&offsets);
   }
   lang->outEndArray(lang,out);
   lang->outEndStmt(lang,out);

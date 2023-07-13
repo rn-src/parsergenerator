@@ -9,6 +9,7 @@ static void outBottom(const LanguageOutputter *This, FILE *out) {
   if( This->options->outputLanguage == OutputLanguage_C ) {
     fputs("parseinfo prsinfo = {\n", out);
     fputs("  nstates,\n", out);
+    fputs("  actions_format,\n", out);
     fputs("  actions,\n", out);
     fputs("  actionstart,\n", out);
     fputs("  PROD_0,\n", out);
@@ -315,7 +316,7 @@ static void OutputLRParser(FILE *out, const ParserDef *parser, const LRParserSol
   MapAny /*<int,int>*/ pid2idx;
   MapAny /*<int,int>*/ tok2idx;
   VectorAny /*<int>*/ pidxtopoffset;
-  VectorAny /*<int>*/ sidxtoacnt;
+  VectorAny /*<int>*/ statetoactioncnt;
   VectorAny /*<int>*/ actions;
   MapAny /*<String,String>*/ tfields;
   int maxterminal = 0;
@@ -325,7 +326,7 @@ static void OutputLRParser(FILE *out, const ParserDef *parser, const LRParserSol
   MapAny_init(&pid2idx,getIntElement(),getIntElement(),true);
   MapAny_init(&tok2idx,getIntElement(),getIntElement(),true);
   VectorAny_init(&pidxtopoffset,getIntElement(),true);
-  VectorAny_init(&sidxtoacnt,getIntElement(),true);
+  VectorAny_init(&statetoactioncnt,getIntElement(),true);
   VectorAny_init(&actions,getIntElement(),true);
   MapAny_init(&tfields, getStringElement(), getStringElement(), true);
 
@@ -336,6 +337,7 @@ static void OutputLRParser(FILE *out, const ParserDef *parser, const LRParserSol
   lang->outIntDecl(lang,out,"nstates",VectorAny_size(&solution->m_states));
 
   for( int i = 0; i < VectorAny_size(&solution->m_states); ++i ) {
+    int actioncount = 0;
     const shifttosymbols_t *shifttosymbols = &MapAny_findConstT(&solution->m_shifts,&i,shifttosymbols_t);
     if( shifttosymbols ) {
       for( int curshift = 0, endshift = MapAny_size(shifttosymbols); curshift != endshift; ++curshift ) {
@@ -359,8 +361,7 @@ static void OutputLRParser(FILE *out, const ParserDef *parser, const LRParserSol
           else
             VectorAny_push_back(&actions,&MapAny_findT(&pid2idx,&s,int)); // PROD_%d
         }
-        int actioncnt = 3+symcnt;
-        VectorAny_push_back(&sidxtoacnt,&actioncnt);
+        actioncount += 3+symcnt;
       }
     }
     const reducebysymbols_t *reducebysymbols = &MapAny_findConstT(&solution->m_reductions,&i,reducebysymbols_t);
@@ -399,30 +400,32 @@ static void OutputLRParser(FILE *out, const ParserDef *parser, const LRParserSol
         VectorAny_push_back(&actions,&symcnt);
         for( int curs = 0, ends = symcnt; curs != ends; ++curs ) {
           int s = SetAny_getByIndexConstT(syms,curs,int);
-          if( s == -1 ) {
-            int end = -1;
-            VectorAny_push_back(&actions,&end);
-          } else if( ParserDef_getSymbolType(parser,s) == SymbolTypeTerminal )
+          if( s == -1 )
+            VectorAny_push_back(&actions,&s);
+          else if( ParserDef_getSymbolType(parser,s) == SymbolTypeTerminal )
             VectorAny_push_back(&actions,&MapAny_findConstT(&tok2idx,&s,int));
           else
             VectorAny_push_back(&actions,&MapAny_findT(&pid2idx,&s,int)); // PROD_%d
         }
-        int actioncnt = 4+symcnt;
-        VectorAny_push_back(&sidxtoacnt,&actioncnt);
+        actioncount += 4+symcnt;
       }
       Scope_Pop();
     }
+    VectorAny_push_back(&statetoactioncnt,&actioncount);
   }
 
   WriteIndexedArray(lang, out,
-		  outputOptions->encode,
-		  outputOptions->compress,
-		  &actions,
-		  "static const unsigned char",
-		  "actions",
-		  &sidxtoacnt,
-		  "static const int",
-		  "actionstart");
+      outputOptions->encode,
+      2,
+      outputOptions->compress,
+      outputOptions->allow_full_compression,
+      0,
+      &actions,
+      "static const unsigned char",
+      "actions",
+      &statetoactioncnt,
+      "static const unsigned short",
+      "actionstart");
   
   lang->outIntDecl(lang,out,"nproductions",VectorAny_size(&parser->m_productions));
 
@@ -446,7 +449,7 @@ static void OutputLRParser(FILE *out, const ParserDef *parser, const LRParserSol
   lang->outEndArray(lang,out);
   lang->outEndStmt(lang,out);
   fputc('\n',out);
-  lang->outArrayDecl(lang,out,"static const int", "productionstart");
+  lang->outArrayDecl(lang,out,"static const unsigned short", "productionstart");
   fputs(" = ",out);
   lang->outStartArray(lang,out);
   first = true;
