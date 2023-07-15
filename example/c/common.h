@@ -49,7 +49,7 @@ struct intiter {
   int decodedelta;
 };
 
-bool intiter_init(intiter *ii, int format, const unsigned char *values, const unsigned short *offsets,int decodedelta);
+bool intiter_init(intiter *ii, int format, const unsigned char *values, const unsigned short *offsets, int offsets_count, const unsigned short *indexes, int decodedelta);
 void intiter_seek(intiter *ii, size_t startindex, size_t offset);
 void intiter_destroy(intiter *ii);
 int intiter_next(intiter *ii);

@@ -634,7 +634,7 @@ void WriteIndexedArray(const LanguageOutputter *lang,
     }
   }
   lang->outIntDecl(lang, out, String_Chars(&label), lang->options->compress ? ARRAY_COMPRESSED_ENCODED_8BIT : (lang->options->encode ? ARRAY_ENCODED_8BIT : ARRAY_32BIT));
-  if( lang->options->compress ) {
+  if( lang->options->compress && lang->options->show_uncompressed_data ) {
     lang->outStartLineComment(lang,out);
     output_values(lang,out,false,values,counts,0);
     fputc('\n',out);

@@ -150,9 +150,9 @@ void parsecontext_init(parsecontext *ctx, tokenizer *toks, parseinfo *parseinfo,
   vectok_init(&ctx->values_inputqueue, parseinfo->itemsize);
   vecint_push(&ctx->states,0);
   vectok_push(&ctx->values,0,0);
-  intiter_init(&ctx->iiactions,parseinfo->actions_format,parseinfo->actions,parseinfo->actionstart,DECODEDELTA);
-  intiter_init(&ctx->iitokstate,toks->info->stateinfo_format,toks->info->stateinfo,toks->info->stateinfo_offset,DECODEDELTA);
-  intiter_init(&ctx->iitoksection,ENC_8BIT,toks->info->sectioninfo,toks->info->sectioninfo_offset,0);  
+  intiter_init(&ctx->iiactions,parseinfo->actions_format,parseinfo->actions,parseinfo->actionstart,parseinfo->actionstateindex_count,parseinfo->actionstartindex,DECODEDELTA);
+  intiter_init(&ctx->iitokstate,toks->info->stateinfo_format,toks->info->stateinfo,toks->info->stateinfo_offset,toks->info->stateinfoindex_count,toks->info->stateinfoindex,DECODEDELTA);
+  intiter_init(&ctx->iitoksection,ENC_8BIT,toks->info->sectioninfo,toks->info->sectioninfo_offset,0,0,0);  
 }
 
 void parsecontext_destroy(parsecontext *ctx) {
@@ -181,7 +181,7 @@ static void printreduceaction(tokenizer *toks,
   writer->printf(writer,"reduce %d states by rule %d [", reducecount, reducebyp+1);
   intiter ii;
   // no decodedelta on these
-  intiter_init(&ii,ENC_8BIT,parseinfo->productions,parseinfo->productionstart,0);
+  intiter_init(&ii,ENC_8BIT,parseinfo->productions,parseinfo->productionstart,0,0,0);
   intiter_seek(&ii,reducebyp,0);
   bool first = true;
   while( ! intiter_end(&ii) ) {

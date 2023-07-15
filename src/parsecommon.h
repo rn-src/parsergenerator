@@ -62,6 +62,7 @@ struct LanguageOutputOptions {
   const char *name;
   bool encode;
   bool compress;
+  bool show_uncompressed_data;
 };
 
 void LanguageOutputOptions_import(LanguageOutputOptions *options, const char *name, const char *as);

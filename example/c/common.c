@@ -123,7 +123,7 @@ static unsigned int decodeuint(const unsigned char *c, const unsigned char **pne
   return i;
 }
 
-bool intiter_init(intiter *ii, int format, const unsigned char *values, const unsigned short *offsets, int decodedelta) {
+bool intiter_init(intiter *ii, int format, const unsigned char *values, const unsigned short *offsets, int offsets_count, const unsigned short *indexes, int decodedelta) {
   vecint_init(&ii->stack);
   if( format != ENC_8BIT && format != CMP_ENC_8BIT ) {
     fprintf(stderr, "Encoding format %d is not supported\n", format);
@@ -132,6 +132,8 @@ bool intiter_init(intiter *ii, int format, const unsigned char *values, const un
   ii->format = format;
   ii->values = values;
   ii->offsets = offsets;
+  ii->offsets_count = offsets_count;
+  ii->indexes = indexes;
   ii->pos = ii->endpos = ii->values;
   ii->n = 0;
   ii->startindex = 0;
@@ -246,7 +248,7 @@ void intiter_seek(intiter *ii, size_t startindex, size_t offset) {
     ii->endpos = ii->values+ii->indexes[endblk]; // upper bound
     ii->n = ii->offsets[startindex+1]-ii->offsets[startblk]; // exact
     if( startblk < startindex )
-      offset += ii->offsets[startindex]-ii->offsets[startblk];
+      offset = offset + ii->offsets[startindex] - ii->offsets[startblk];
   }
   if( offset > 0 )
     intiter_skip(ii,offset);

@@ -3,15 +3,31 @@
 #include <stdio.h>
 #include <string.h>
 
-void *memalloc(size_t size) {
+static void *memalloc(size_t size) {
   return malloc(size);
 }
 
-const char *getarg(int argc, char *argv[], const char *arg) {
+static const char *getarg(int argc, char *argv[], const char *arg) {
   for( int i = 1; i < argc; ++i )
     if( strncmp(argv[i],arg,strlen(arg)) == 0 )
       return argv[i];
   return 0;
+}
+
+static bool getboolarg(int argc, char *argv[], const char *arg, bool def) {
+  size_t len = strlen(arg);
+  const char *v = getarg(argc,argv,arg);
+  if( ! v )
+    return def;
+  if( v[len] == '=' ) {
+    v += len+1;
+    if( *v == 't' || *v == 'T' || *v == 'y' || *v == 'Y' || *v == '1' )
+      return true;
+    return false;
+  }
+  if( v[len] == 0 )
+    return true;
+  return def;
 }
 
 char *makeFOutName(const char *fname, LanguageOutputOptions *options) {
@@ -27,12 +43,6 @@ char *makeFOutName(const char *fname, LanguageOutputOptions *options) {
   else
     strcat(foutname, ".h");
   return foutname;
-}
-
-static bool boolvalue(const char *v) {
-  if( *v == 't' || *v == 'T' || *v == 'y' || *v == 'Y' || *v == '1' )
-    return true;
-  return false;
 }
 
 void parseArgs(int argc, char *argv[], int *pverbosity, int *ptimed, LanguageOutputOptions *options, const char **pfname) {
@@ -63,12 +73,9 @@ void parseArgs(int argc, char *argv[], int *pverbosity, int *ptimed, LanguageOut
     options->encode = false;
     options->compress = false;
   }
-  arg = getarg(argc, argv, "--encode=");
-  if(arg)
-    options->encode = boolvalue(arg+9); 
-  arg = getarg(argc, argv, "--compress=");
-  if(arg)
-    options->compress = boolvalue(arg+11); 
+  options->encode = getboolarg(argc,argv,"--encode", options->encode);
+  options->compress = getboolarg(argc,argv,"--compress", options->compress);
+  options->show_uncompressed_data = getboolarg(argc,argv,"--show-uncompressed", options->show_uncompressed_data);
   for (int i = 1; i < argc; ++i) {
     if (strncmp(argv[i], "--import=",9) == 0)
       LanguageOutputOptions_import(options,argv[i]+9,0);
@@ -152,11 +159,8 @@ int parse_main(int argc, char *argv[]) {
           "                 will fall-back to 8-bit encoded output if space is not saved\n"
           "                 default true for C, false for Python\n"
           "                 only C parser implements.\n"
-          "--allow-full-compression\n"
-          "               : set to true/false, allows emitting compression for full runs of data, instead of\n"
-          "                 state-by-state if the full compression ends up being smaller output\n"
-          "                 default true, but only used when compres is enabled\n"
-          "                 only C parser implements\n"
+          "--show-uncompressed\n"
+          "               : output uncompressed data as a line comment\n"
           , stderr);
     return -1;
   }
@@ -230,12 +234,9 @@ int tok_main(int argc, char *argv[])
     options.encode = false;
     options.compress = false;
   }
-  arg = getarg(argc,argv,"--encode=");
-  if(arg)
-    options.encode = boolvalue(arg+9);
-  arg = getarg(argc,argv,"--compress=");
-  if(arg)
-    options.compress = boolvalue(arg+11);
+  options.encode = getboolarg(argc,argv,"--encode", options.encode);
+  options.compress = getboolarg(argc,argv,"--compress", options.compress);
+  options.show_uncompressed_data = getboolarg(argc,argv,"--show-uncompressed", options.show_uncompressed_data);
   const char *fname = 0;
   for( int i = 1; i < argc; ++i ) {
     if( argv[i][0] == '-' )
