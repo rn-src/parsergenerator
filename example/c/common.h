@@ -2,12 +2,12 @@
 #define __common_h
 #include <stdbool.h>
 
-#define UNENCODED (1)
-#define ENCODED_8BIT (2)
-#define SECTIONAL_COMPRESSION (3)
-#define FULL_COMPRESSION (4)
+#define ENC_8BIT (2)
+#define CMP_ENC_8BIT (3)
 #define REPLACEMENT_CHARACTER (0xfffd)
 #define DECODEDELTA (2)
+#define CMP_MARKER (0)
+#define CMP_OFF_UNDEF (0xffff)
 
 struct vecint {
   int *values;
@@ -42,13 +42,15 @@ struct intiter {
   int format;
   const unsigned char *values;
   const unsigned short *offsets;
-  const unsigned char *pos;
+  int offsets_count;
+  const unsigned short *indexes;
+  const unsigned char *pos, *endpos;
   int n, startindex, offset;
   int decodedelta;
 };
 
 bool intiter_init(intiter *ii, int format, const unsigned char *values, const unsigned short *offsets,int decodedelta);
-void intiter_seek(intiter *ii, int startindex, int offset);
+void intiter_seek(intiter *ii, size_t startindex, size_t offset);
 void intiter_destroy(intiter *ii);
 int intiter_next(intiter *ii);
 bool intiter_end(intiter *ii);

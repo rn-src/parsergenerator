@@ -3,6 +3,10 @@
 #include <stdio.h>
 #include <string.h>
 
+void *memalloc(size_t size) {
+  return malloc(size);
+}
+
 const char *getarg(int argc, char *argv[], const char *arg) {
   for( int i = 1; i < argc; ++i )
     if( strncmp(argv[i],arg,strlen(arg)) == 0 )
@@ -11,7 +15,7 @@ const char *getarg(int argc, char *argv[], const char *arg) {
 }
 
 char *makeFOutName(const char *fname, LanguageOutputOptions *options) {
-  char *foutname = (char*)malloc(strlen(fname) + 3);
+  char *foutname = (char*)memalloc(strlen(fname) + 3);
   strcpy(foutname, fname);
   char *lastdot = strrchr(foutname, '.');
   while (*lastdot) {
@@ -65,9 +69,6 @@ void parseArgs(int argc, char *argv[], int *pverbosity, int *ptimed, LanguageOut
   arg = getarg(argc, argv, "--compress=");
   if(arg)
     options->compress = boolvalue(arg+11); 
-  arg = getarg(argc, argv, "--allow-full-compression=");
-  if(arg)
-    options->allow_full_compression = boolvalue(arg+25); 
   for (int i = 1; i < argc; ++i) {
     if (strncmp(argv[i], "--import=",9) == 0)
       LanguageOutputOptions_import(options,argv[i]+9,0);
@@ -82,7 +83,7 @@ void parseArgs(int argc, char *argv[], int *pverbosity, int *ptimed, LanguageOut
   }
   options->name = "";
   if( *pfname ) {
-    char *name = (char*)malloc(strlen(*pfname)+1);
+    char *name = (char*)memalloc(strlen(*pfname)+1);
     strcpy(name,*pfname);
     char *lastdot = strrchr(name,'.');
     while( *lastdot ) {
@@ -95,7 +96,7 @@ void parseArgs(int argc, char *argv[], int *pverbosity, int *ptimed, LanguageOut
   // get the lexer name, if not provided
   if (!options->lexerName && *pfname) {
     const char *fname = *pfname;
-    char* foutname = (char*)malloc(strlen(fname) + 3);
+    char* foutname = (char*)memalloc(strlen(fname) + 3);
     strcpy(foutname, fname);
     const char* startfname = strrchr(foutname, '/');
     if ( startfname )
@@ -106,7 +107,7 @@ void parseArgs(int argc, char *argv[], int *pverbosity, int *ptimed, LanguageOut
       startfname++;
     if( ! startfname )
       startfname = fname;
-    char *lexerName = (char*)malloc(strlen(startfname)+4);
+    char *lexerName = (char*)memalloc(strlen(startfname)+4);
     strcpy(lexerName,startfname);
     char* lastdot = strrchr(lexerName, '.');
     if( *lastdot )
@@ -130,7 +131,6 @@ int parse_main(int argc, char *argv[]) {
   options.outputLanguage = OutputLanguage_C;
   options.encode = true;
   options.compress = true;
-  options.allow_full_compression = false;
 
   parseArgs(argc, argv, &verbosity, &timed, &options, &fname);
 
@@ -151,15 +151,12 @@ int parse_main(int argc, char *argv[]) {
           "--compress     : set to true/false, allow emitting compressed state data\n"
           "                 will fall-back to 8-bit encoded output if space is not saved\n"
           "                 default true for C, false for Python\n"
-          "                 presently only C parser implements.\n"
+          "                 only C parser implements.\n"
           "--allow-full-compression\n"
-          "                : set to true/false, allows emitting compression for full runs of data, instead of\n"
-          "                  state-by-state if the full compression ends up being smaller output\n"
-          "                  default false\n"
-          "                  Due to size of additional scan-ahead data emitted, this was not implemented in\n"
-          "                  the C or Python parsers, since the additional scan-ahead data needed to make\n"
-          "                  this work is not only makes using it more complex, but overcomes the size savings\n"
-          "                  from using the full data window.\n"
+          "               : set to true/false, allows emitting compression for full runs of data, instead of\n"
+          "                 state-by-state if the full compression ends up being smaller output\n"
+          "                 default true, but only used when compres is enabled\n"
+          "                 only C parser implements\n"
           , stderr);
     return -1;
   }
@@ -226,14 +223,8 @@ int tok_main(int argc, char *argv[])
   options.outputLanguage = OutputLanguage_C;
   options.encode = true;
   options.compress = true;
-  options.allow_full_compression = false;
 
   const char *arg = 0;
-  arg = getarg(argc, argv, "--prefix=");
-  if(arg)
-    options.prefix = arg+9;
-  if(getarg(argc,argv,"--minimal="))
-    options.minimal = boolvalue(arg+10);
   if(getarg(argc,argv,"--py")) {
     options.outputLanguage = OutputLanguage_Python;
     options.encode = false;
@@ -245,9 +236,6 @@ int tok_main(int argc, char *argv[])
   arg = getarg(argc,argv,"--compress=");
   if(arg)
     options.compress = boolvalue(arg+11);
-  arg = getarg(argc, argv, "--allow-full-compression=");
-  if(arg)
-    options.allow_full_compression = boolvalue(arg+25); 
   const char *fname = 0;
   for( int i = 1; i < argc; ++i ) {
     if( argv[i][0] == '-' )
@@ -257,9 +245,7 @@ int tok_main(int argc, char *argv[])
   }
 
   if (!fname) {
-    fputs("usage : tokenizer [--prefix] [--minimal] [--py] filename\n"
-          "--prefix       : prefix for output values\n"
-          "--minimal      : skip the structure declaration at the bottom (C only)\n"
+    fputs("usage : tokenizer [--py] filename\n"
           "--py           : output python (default C)\n"
           "--encode       : set to true/false, emit values 8bit encoded instead of full integers\n"
           "                 default true for C, false for Python.\n"
@@ -267,15 +253,7 @@ int tok_main(int argc, char *argv[])
           "--compress     : set to true/false, allow emitting compressed state data\n"
           "                 will fall-back to 8-bit encoded output if space is not saved\n"
           "                 default true for C, false for Python\n"
-          "                 presently only C tokenizer implements.\n"
-          "--allow-full-compression\n"
-          "                : set to true/false, allows emitting compression for full runs of data, instead of\n"
-          "                  state-by-state if the full compression ends up being smaller output\n"
-          "                  default false\n"
-          "                  Due to size of additional scan-ahead data emitted, this was not implemented in\n"
-          "                  the C or Python tokenizers, since the additional scan-ahead data needed to make\n"
-          "                  this work is not only makes using it more complex, but overcomes the size savings\n"
-          "                  from using the full data window.\n"
+          "                 only C tokenizer implements.\n"
           , stderr);
     return -1;
   }
@@ -288,8 +266,8 @@ int tok_main(int argc, char *argv[])
   Scope_Push();
   Push_Destroy(fin, (vpstack_destroyer)fclose);
   FILE *fout = 0;
-  char *foutname = (char*)malloc(strlen(fname)+3);
-  char *name = (char*)malloc(strlen(fname)+3);
+  char *foutname = (char*)memalloc(strlen(fname)+3);
+  char *name = (char*)memalloc(strlen(fname)+3);
   strcpy(name,fname);
   char *lastdot = strrchr(name,'.');
   while( *lastdot ) {

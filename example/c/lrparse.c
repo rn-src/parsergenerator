@@ -77,47 +77,47 @@ Token *vectok_back(vectok *v) {
   return (Token*)((char*)v->values+v->itemsize*(v->size-1));
 }
 
-bool findsymbol(int tok, intiter *ii, int nsymbols) {
+bool findsymbol(int tok, intiter *iiactions, int nsymbols) {
   while( nsymbols-- ) {
-    int s = intiter_next(ii);
+    int s = intiter_next(iiactions);
     if( s == tok )
       return true;
   }
   return false;
 }
 
-void nextaction(intiter *ii) {
-  int action = intiter_next(ii);
+void nextaction(intiter *iiactions) {
+  int action = intiter_next(iiactions);
   if( action == ACTION_SHIFT )
-    intiter_next(ii); // shift-to
+    intiter_next(iiactions); // shift-to
   else if( action == ACTION_REDUCE || action == ACTION_STOP ) {
-    intiter_next(ii); // reduce-by
-    intiter_next(ii); // reduce-count
+    intiter_next(iiactions); // reduce-by
+    intiter_next(iiactions); // reduce-count
   }
-  int nsymbols = intiter_next(ii);
+  int nsymbols = intiter_next(iiactions);
   while( nsymbols-- )
-    intiter_next(ii);
+    intiter_next(iiactions);
 }
 
-bool findmatchingaction(intiter *ii, int tok, int *paction) {
-  while( ! intiter_end(ii) ) {
-    int actionindex = ii->startindex;
-    int actionpos = ii->offset;
-    int action = intiter_next(ii);
+bool findmatchingaction(intiter *iiactions, int tok, int *paction) {
+  while( ! intiter_end(iiactions) ) {
+    int actionindex = iiactions->startindex;
+    int actionpos = iiactions->offset;
+    int action = intiter_next(iiactions);
     if( action == ACTION_SHIFT ) {
-      intiter_next(ii); // shift-to
+      intiter_next(iiactions); // shift-to
     } else if( action == ACTION_REDUCE || action == ACTION_STOP ) {
-      intiter_next(ii); // reduce-by
-      intiter_next(ii); // reduce-count
+      intiter_next(iiactions); // reduce-by
+      intiter_next(iiactions); // reduce-count
     }
-    int nsymbols = intiter_next(ii);
-    if( findsymbol(tok,ii,nsymbols) ) {
+    int nsymbols = intiter_next(iiactions);
+    if( findsymbol(tok,iiactions,nsymbols) ) {
       *paction = action;
-      intiter_seek(ii,actionindex,actionpos);
+      intiter_seek(iiactions,actionindex,actionpos);
       return true;
     }
     while( nsymbols-- )
-      intiter_next(ii);
+      intiter_next(iiactions);
   }
   return false;
 }
@@ -133,6 +133,7 @@ struct parsecontext {
   vectok values;
   vecint states_inputqueue;
   vectok values_inputqueue;
+  intiter iiactions, iitokstate, iitoksection;
 };
 typedef struct parsecontext parsecontext;
 
@@ -149,6 +150,9 @@ void parsecontext_init(parsecontext *ctx, tokenizer *toks, parseinfo *parseinfo,
   vectok_init(&ctx->values_inputqueue, parseinfo->itemsize);
   vecint_push(&ctx->states,0);
   vectok_push(&ctx->values,0,0);
+  intiter_init(&ctx->iiactions,parseinfo->actions_format,parseinfo->actions,parseinfo->actionstart,DECODEDELTA);
+  intiter_init(&ctx->iitokstate,toks->info->stateinfo_format,toks->info->stateinfo,toks->info->stateinfo_offset,DECODEDELTA);
+  intiter_init(&ctx->iitoksection,ENC_8BIT,toks->info->sectioninfo,toks->info->sectioninfo_offset,0);  
 }
 
 void parsecontext_destroy(parsecontext *ctx) {
@@ -156,6 +160,9 @@ void parsecontext_destroy(parsecontext *ctx) {
   vectok_destroy(&ctx->values);
   vecint_destroy(&ctx->states_inputqueue);
   vectok_destroy(&ctx->values_inputqueue);
+  intiter_destroy(&ctx->iiactions);
+  intiter_destroy(&ctx->iitokstate);
+  intiter_destroy(&ctx->iitoksection);
 }
 
 static void printstatestack(vecint *states, writer *writer) {
@@ -174,7 +181,7 @@ static void printreduceaction(tokenizer *toks,
   writer->printf(writer,"reduce %d states by rule %d [", reducecount, reducebyp+1);
   intiter ii;
   // no decodedelta on these
-  intiter_init(&ii,ENCODED_8BIT,parseinfo->productions,parseinfo->productionstart,0);
+  intiter_init(&ii,ENC_8BIT,parseinfo->productions,parseinfo->productionstart,0);
   intiter_seek(&ii,reducebyp,0);
   bool first = true;
   while( ! intiter_end(&ii) ) {
@@ -195,11 +202,10 @@ static void printtoken(tokenizer *toks, int inputnum, int tok, const Token *t, w
 }
 
 bool doaction(parsecontext *ctx,
-              intiter *ii,
               const char **err) {
-  int action = intiter_next(ii);
+  int action = intiter_next(&ctx->iiactions);
   if( action == ACTION_SHIFT ) {
-    int shiftto = intiter_next(ii);
+    int shiftto = intiter_next(&ctx->iiactions);
     if( ctx->verbosity ) ctx->writer->printf(ctx->writer,"shift to %d\n", shiftto);
     vecint_push(&ctx->states,shiftto);
     vectok_push(&ctx->values,vectok_back(&ctx->values_inputqueue),ctx->parseinfo->itemsize);
@@ -207,8 +213,8 @@ bool doaction(parsecontext *ctx,
     ctx->values_inputqueue.size -= 1;
     return true;
   } else if( action == ACTION_REDUCE || action == ACTION_STOP ) {
-    int reduceby = intiter_next(ii);
-    int reducecount = intiter_next(ii);
+    int reduceby = intiter_next(&ctx->iiactions);
+    int reducecount = intiter_next(&ctx->iiactions);
     if( ctx->verbosity ) printreduceaction(ctx->toks,ctx->parseinfo,reduceby,reducecount,ctx->writer);
     size_t inputpos = ctx->values.size-reducecount;
     vectok_push(&ctx->values,0,0);
@@ -268,10 +274,10 @@ static int curstate(parsecontext *ctx) {
   return vecint_back(&ctx->states);
 }
 
-static int nexttoken(parsecontext *ctx, intiter *iistate, intiter *iisection) {
+static int nexttoken(parsecontext *ctx) {
   if( ! ctx->states_inputqueue.size ) {
     ctx->inputnum++;
-    int nxt = tokenizer_peek(ctx->toks,iistate,iisection);
+    int nxt = tokenizer_peek(ctx->toks,&ctx->iitokstate,&ctx->iitoksection);
     Token t;
     memset(&t, 0, sizeof(t));
     t.tok = nxt;
@@ -290,23 +296,19 @@ Token *parse(tokenizer *toks, parseinfo *parseinfo, void *extra, int verbosity, 
   parsecontext ctx;
   const char *err = 0;
   Token *ret = 0;
-  intiter ii, iitokstate, iitoksection;
-  intiter_init(&ii,parseinfo->actions_format,parseinfo->actions,parseinfo->actionstart,DECODEDELTA);
-  intiter_init(&iitokstate,toks->info->stateinfo_format,toks->info->sectioninfo,toks->info->stateinfo_offset,DECODEDELTA);
-  intiter_init(&iitoksection,ENCODED_8BIT,toks->info->sectioninfo,toks->info->sectioninfo_offset,0);
   parsecontext_init(&ctx, toks, parseinfo, extra, verbosity, writer);
   int tok = -1;
   while( ctx.states.size > 0 ) {
     int stateno = curstate(&ctx);
-    tok = nexttoken(&ctx,&iitokstate,&iitoksection);
-    intiter_seek(&ii,stateno,0);
+    tok = nexttoken(&ctx);
+    intiter_seek(&ctx.iiactions,stateno,0);
     int action = -1;
-    while( findmatchingaction(&ii,tok,&action) ) {
-      if( doaction(&ctx, &ii, &err) )
+    while( findmatchingaction(&ctx.iiactions,tok,&action) ) {
+      if( doaction(&ctx, &err) )
         break;
-      nextaction(&ii);
+      nextaction(&ctx.iiactions);
     }
-    if( ! intiter_end(&ii) ) {
+    if( ! intiter_end(&ctx.iiactions) ) {
       if( action != ACTION_STOP )
         continue;
       ret = (Token*)mrealloc(0,0,parseinfo->itemsize);

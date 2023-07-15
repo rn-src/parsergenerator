@@ -15,6 +15,8 @@ struct tokinfo {
   const unsigned char stateinfo_format;
   const unsigned char *stateinfo;
   const unsigned short *stateinfo_offset;
+  const unsigned short *stateinfoindex;
+  const int stateinfoindex_count;
 };
 typedef struct tokinfo tokinfo;
 

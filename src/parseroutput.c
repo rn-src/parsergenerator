@@ -12,6 +12,13 @@ static void outBottom(const LanguageOutputter *This, FILE *out) {
     fputs("  actions_format,\n", out);
     fputs("  actions,\n", out);
     fputs("  actionstart,\n", out);
+    if( This->options->compress ) {
+      fputs("  actionindex,\n", out);
+      fputs("  actionindex_count,\n", out);
+    } else {
+      fputs("  0,\n", out);
+      fputs("  0,\n", out);
+    }
     fputs("  PROD_0,\n", out);
     fputs("  PARSE_ERROR,\n", out);
     fputs("  nproductions,\n", out);
@@ -415,15 +422,14 @@ static void OutputLRParser(FILE *out, const ParserDef *parser, const LRParserSol
   }
 
   WriteIndexedArray(lang, out,
-      outputOptions->encode,
-      outputOptions->compress,
-      outputOptions->allow_full_compression,
       &actions,
       "static const unsigned char",
       "actions",
       &statetoactioncnt,
       "static const unsigned short",
-      "actionstart");
+      "actionstart",
+      "static const unsigned short",
+      "actionindex");
   
   lang->outIntDecl(lang,out,"nproductions",VectorAny_size(&parser->m_productions));
 

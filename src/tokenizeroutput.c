@@ -6,25 +6,37 @@
 #include "tokenizer.h"
 
 void outBottom(const LanguageOutputter* This, FILE* out, bool hassections) {
-  if( This->options->minimal )
-    return;
   if( This->options->outputLanguage == OutputLanguage_C ) {
-    const char *prefix = This->options->prefix ? This->options->prefix : "";
-    fprintf(out, "struct tokinfo %stkinfo = {\n", prefix);
-    fprintf(out, "  %stokenCount,\n", prefix);
-    fprintf(out, "  %ssectionCount,\n", prefix);
+    fputs(
+      "struct tokinfo tkinfo = {\n"
+      "  tokenCount,\n"
+      "  sectionCount,\n", out);
     if( hassections ) {
-      fprintf(out, "  %ssectioninfo,\n", prefix);
-      fprintf(out, "  %ssectioninfo_offset,\n", prefix);
+      fputs(
+        "  sectioninfo,\n"
+        "  sectioninfo_offset,\n", out);
     } else {
-      fputs("  0,\n  0,\n", out);
+      fputs(
+        "  0,\n"
+        "  0,\n",
+        out);
     }
-    fprintf(out, "  %stokenstr,\n", prefix);
-    fprintf(out, "  %sisws,\n", prefix);
-    fprintf(out, "  %sstateCount,\n", prefix);
-    fprintf(out, "  %sstateinfo_format,\n", prefix);
-    fprintf(out, "  %sstateinfo,\n", prefix);
-    fprintf(out, "  %sstateinfo_offset,\n", prefix);
+    fputs(
+      "  tokenstr,\n"
+      "  isws,\n"
+      "  stateCount,\n"
+      "  stateinfo_format,\n"
+      "  stateinfo,\n"
+      "  stateinfo_offset,\n", out);
+    if( This->options->compress ) {
+      fputs(
+        "  stateinfoindex\n"
+        "  stateinfoindex_count,\n", out);
+    } else {
+      fputs(
+        "  0,\n"
+        "  0,\n", out);
+    }
     fputs("};\n", out);
   }
   This->outBottom(This,out);
@@ -111,8 +123,6 @@ static void OutputStateInfo(FILE *out, const Nfa *dfa, const LanguageOutputter *
   VectorAny_init(&stateinfocounts,getIntElement(),true);
   VectorAny_init(&stateinfo,getIntElement(),true);
 
-  // there typically aren't long runs of repeats, and values are usually
-  // small, so we use a simple encoding scheme to save space.
   int lastfrom = -1;
   for( int cur = 0, end = MapAny_size(&dfa->m_transitions); cur < end; ++cur ) {
     const Transition *transition = 0;
@@ -129,7 +139,6 @@ static void OutputStateInfo(FILE *out, const Nfa *dfa, const LanguageOutputter *
         }
         VectorAny_push_back(&stateinfocounts,&cnttmp);
       }
-      // -1 is quite common, add one to shrink encoding
       int tok = Nfa_getStateToken(dfa,transition->m_from);
       VectorAny_push_back(&stateinfo,&tok);
       ++cnt;
@@ -157,15 +166,14 @@ static void OutputStateInfo(FILE *out, const Nfa *dfa, const LanguageOutputter *
   }
 
   WriteIndexedArray(lang, out,
-      lang->options->encode,
-      lang->options->compress,
-      lang->options->allow_full_compression,
       &stateinfo,
       "static const unsigned char",
       "stateinfo",
       &stateinfocounts,
       "static const unsigned short",
-      "stateinfo_offset");
+      "stateinfo_offset",
+      "static const unsigned short",
+      "stateinfoindex");
   
   Scope_Pop();
 }

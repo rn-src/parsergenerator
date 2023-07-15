@@ -13,6 +13,8 @@ struct parseinfo {
   const unsigned char actions_format;
   const unsigned char *actions;
   const unsigned short *actionstart;
+  const unsigned short *actionstartindex;
+  const int actionstateindex_count;
   const int prod0;
   const int parse_error;
   const int nproductions;
