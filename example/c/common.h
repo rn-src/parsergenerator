@@ -1,6 +1,7 @@
 #ifndef __common_h
 #define __common_h
 #include <stdbool.h>
+#include <stddef.h>
 
 #define ENC_8BIT (2)
 #define CMP_ENC_8BIT (3)
