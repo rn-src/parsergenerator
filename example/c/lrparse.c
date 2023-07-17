@@ -77,48 +77,30 @@ Token *vectok_back(vectok *v) {
   return (Token*)((char*)v->values+v->itemsize*(v->size-1));
 }
 
-bool findsymbol(int tok, intiter *iiactions, int nsymbols) {
-  while( nsymbols-- ) {
-    int s = intiter_next(iiactions);
-    if( s == tok )
-      return true;
-  }
-  return false;
-}
-
-void nextaction(intiter *iiactions) {
-  int action = intiter_next(iiactions);
-  if( action == ACTION_SHIFT )
-    intiter_next(iiactions); // shift-to
-  else if( action == ACTION_REDUCE || action == ACTION_STOP ) {
-    intiter_next(iiactions); // reduce-by
-    intiter_next(iiactions); // reduce-count
-  }
-  int nsymbols = intiter_next(iiactions);
-  while( nsymbols-- )
-    intiter_next(iiactions);
-}
-
-bool findmatchingaction(intiter *iiactions, int tok, int *paction) {
+bool findmatchingaction(intiter *iiactions, int tok, int actionvalues[3]) {
+  int action, a1 = 0, a2 = 0;
   while( ! intiter_end(iiactions) ) {
-    int actionindex = iiactions->startindex;
-    int actionpos = iiactions->offset;
-    int action = intiter_next(iiactions);
+    action = actionvalues[0] = intiter_next(iiactions);
     if( action == ACTION_SHIFT ) {
-      intiter_next(iiactions); // shift-to
+      a1 = intiter_next(iiactions); // shift-to
     } else if( action == ACTION_REDUCE || action == ACTION_STOP ) {
-      intiter_next(iiactions); // reduce-by
-      intiter_next(iiactions); // reduce-count
+      a1 = intiter_next(iiactions); // reduce-by
+      a2 = intiter_next(iiactions); // reduce-count
     }
     int nsymbols = intiter_next(iiactions);
-    if( findsymbol(tok,iiactions,nsymbols) ) {
-      *paction = action;
-      intiter_seek(iiactions,actionindex,actionpos);
-      return true;
+    while( nsymbols-- ) {
+      int s = intiter_next(iiactions);
+      if( s == tok ) {
+        if( nsymbols )
+          intiter_skip(iiactions,nsymbols);
+        actionvalues[0] = action;
+        actionvalues[1] = a1;
+        actionvalues[2] = a2;
+        return true;
+      }
     }
-    while( nsymbols-- )
-      intiter_next(iiactions);
   }
+  actionvalues[0] = -1;
   return false;
 }
 
@@ -202,10 +184,10 @@ static void printtoken(tokenizer *toks, int inputnum, int tok, const Token *t, w
 }
 
 bool doaction(parsecontext *ctx,
-              const char **err) {
-  int action = intiter_next(&ctx->iiactions);
+              const char **err, int actionvalues[3]) {
+  int action = actionvalues[0];
   if( action == ACTION_SHIFT ) {
-    int shiftto = intiter_next(&ctx->iiactions);
+    int shiftto = actionvalues[1];
     if( ctx->verbosity ) ctx->writer->printf(ctx->writer,"shift to %d\n", shiftto);
     vecint_push(&ctx->states,shiftto);
     vectok_push(&ctx->values,vectok_back(&ctx->values_inputqueue),ctx->parseinfo->itemsize);
@@ -213,8 +195,8 @@ bool doaction(parsecontext *ctx,
     ctx->values_inputqueue.size -= 1;
     return true;
   } else if( action == ACTION_REDUCE || action == ACTION_STOP ) {
-    int reduceby = intiter_next(&ctx->iiactions);
-    int reducecount = intiter_next(&ctx->iiactions);
+    int reduceby = actionvalues[1];
+    int reducecount = actionvalues[2];
     if( ctx->verbosity ) printreduceaction(ctx->toks,ctx->parseinfo,reduceby,reducecount,ctx->writer);
     size_t inputpos = ctx->values.size-reducecount;
     vectok_push(&ctx->values,0,0);
@@ -302,14 +284,13 @@ Token *parse(tokenizer *toks, parseinfo *parseinfo, void *extra, int verbosity, 
     int stateno = curstate(&ctx);
     tok = nexttoken(&ctx);
     intiter_seek(&ctx.iiactions,stateno,0);
-    int action = -1;
-    while( findmatchingaction(&ctx.iiactions,tok,&action) ) {
-      if( doaction(&ctx, &err) )
+    int actionvalues[3];
+    while( findmatchingaction(&ctx.iiactions,tok,actionvalues) ) {
+      if( doaction(&ctx, &err, actionvalues) )
         break;
-      nextaction(&ctx.iiactions);
     }
-    if( ! intiter_end(&ctx.iiactions) ) {
-      if( action != ACTION_STOP )
+    if( actionvalues[0] != -1 ) {
+      if( actionvalues[0] != ACTION_STOP )
         continue;
       ret = (Token*)mrealloc(0,0,parseinfo->itemsize);
       memcpy(ret,vectok_back(&ctx.values_inputqueue),parseinfo->itemsize);

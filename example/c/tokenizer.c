@@ -26,17 +26,8 @@ void tokenizer_destroy(tokenizer *tokenizer) {
   vecint_destroy(&tokenizer->secstack);
 }
 
-static int tokstate(tokinfo *info, intiter *iistate, int state) {
-  intiter_seek(iistate,state,0);
-  if( ! intiter_end(iistate) )
-    return intiter_next(iistate);
-  return -1;
-}
-
-static int nextstate(tokinfo *info, intiter *iistate, int state, int c) {
-  intiter_seek(iistate,state,0);
-  if( ! intiter_end(iistate) )
-    intiter_next(iistate); // tok
+static int nextstate(tokinfo *info, intiter *iistate, int c) {
+  // caller must do intiter_seek(ii,state); intiter_skip(ii,1) or equivalent
   while( ! intiter_end(iistate) ) {
     int to = intiter_next(iistate);
     int cnt = intiter_next(iistate);
@@ -135,12 +126,15 @@ int tokenizer_peek(tokenizer *tokenizer, intiter *iistate, intiter *iisection) {
     int cursection = vecint_back(&tokenizer->secstack);
     int tok = -1;
     int t = -1;
-    int state = nextstate(tokenizer->info,iistate,0,cursection);
+    intiter_seek(iistate,0,0);
+    intiter_skip(iistate,1);
+    int state = nextstate(tokenizer->info,iistate,cursection);
     size_t offset = 0, used = 0;
     toksize cursize = {0,0,0,0};
     toksize toksize = {0,0,0,0};
     while( state != -1 ) {
-      t = tokstate(tokenizer->info,iistate,state);
+      intiter_seek(iistate,state,0);
+      t = intiter_next(iistate);
       if( t != -1 ) {
         tok = t;
         toksize = cursize;
@@ -155,7 +149,7 @@ int tokenizer_peek(tokenizer *tokenizer, intiter *iistate, intiter *iisection) {
         cursize.cols = 0;
       } else
         ++cursize.cols;
-      state = nextstate(tokenizer->info,iistate,state,c);
+      state = nextstate(tokenizer->info,iistate,c);
     }
     if( tok == -1 ) {
       tokenizer->tok = -1;

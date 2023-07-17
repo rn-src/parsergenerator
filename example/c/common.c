@@ -103,18 +103,18 @@ void charbuf_destroy(charbuf *buf) {
 
 static int decodeuintsize(const unsigned char *c) {
   int leadbits = 0;
-  while( leadbits <= 8 && (0x80>>leadbits)&*c ) ++leadbits;
+  while( leadbits < 8 && (0x80>>leadbits)&*c ) ++leadbits;
   return leadbits+1;
 }
 
 static unsigned int decodeuint(const unsigned char *c, const unsigned char **pnextc) {
   int leadbits = 0;
-  while( leadbits <= 8 && (0x80>>leadbits)&*c ) ++leadbits;
+  while( leadbits < 8 && (0x80>>leadbits)&*c ) ++leadbits;
   if( leadbits == 0 ) {
     *pnextc = c+1;
     return *c;
   }
-  unsigned int i = (0xff<<(8-leadbits)) & *c++;
+  unsigned int i = ~(0xff<<(8-leadbits)) & *c++;
   while( leadbits-- ) {
     i <<= 8;
     i |= *c++;
@@ -136,8 +136,6 @@ bool intiter_init(intiter *ii, int format, const unsigned char *values, const un
   ii->indexes = indexes;
   ii->pos = ii->endpos = ii->values;
   ii->n = 0;
-  ii->startindex = 0;
-  ii->offset = 0;
   ii->decodedelta = decodedelta;
   return true;
 }
@@ -145,7 +143,7 @@ bool intiter_init(intiter *ii, int format, const unsigned char *values, const un
 static int intiter_findblk(intiter *ii, size_t pos) {
   int low = 0, high = ii->offsets_count-1;
   while( low < high ) {
-    int mid = low+high/2;
+    int mid = (low+high)/2;
     if( pos < ii->offsets[mid] ) {
       high = mid;
     } else if( pos >= ii->offsets[mid+1] ) {
@@ -166,7 +164,6 @@ void intiter_skip(intiter *ii, size_t count) {
       pos += decodeuintsize(pos);
     }
     ii->pos = pos;
-    ii->offset += i;
     ii->n -= i;
     ii->pos = pos;
   } else {
@@ -181,7 +178,6 @@ void intiter_skip(intiter *ii, size_t count) {
           // so skip without reading, pushing, popping
           count -= n;
           ii->n -= n;
-          ii->offset += n;
         } else {
           // the place we want to seek to is within this block
           // we'll have to push as if we read it.
@@ -211,7 +207,6 @@ void intiter_skip(intiter *ii, size_t count) {
         pos += decodeuintsize(pos);
       }
       ii->pos = pos;
-      ii->offset += i;
       ii->n -= i;
       count -= i;
 
@@ -244,7 +239,6 @@ void intiter_seek(intiter *ii, size_t startindex, size_t offset) {
     while( ii->indexes[endblk] == CMP_OFF_UNDEF )
       ++endblk;
     ii->pos = ii->values+ii->indexes[startblk];
-    ii->offset = ii->offsets[startblk];
     ii->endpos = ii->values+ii->indexes[endblk]; // upper bound
     ii->n = ii->offsets[startindex+1]-ii->offsets[startblk]; // exact
     if( startblk < startindex )
@@ -263,7 +257,6 @@ int intiter_next(intiter *ii) {
     return -1;
   if( ii->format == ENC_8BIT ) {
     --ii->n;
-    ++ii->offset;
     return decodeuint(ii->pos,&ii->pos)-ii->decodedelta;
   }
   if( ii->format == CMP_ENC_8BIT ) {
@@ -288,7 +281,6 @@ int intiter_next(intiter *ii) {
     }
     // arrived, get the character
     int i = decodeuint(ii->pos,&ii->pos);
-    ++ii->offset;
     --ii->n;
     // if we exhausted the data, pop
     while( ii->stack.size > 0 && ii->n == 0 ) {

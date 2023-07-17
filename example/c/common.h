@@ -46,12 +46,13 @@ struct intiter {
   int offsets_count;
   const unsigned short *indexes;
   const unsigned char *pos, *endpos;
-  int n, startindex, offset;
+  int n;//, startindex, offset;
   int decodedelta;
 };
 
 bool intiter_init(intiter *ii, int format, const unsigned char *values, const unsigned short *offsets, int offsets_count, const unsigned short *indexes, int decodedelta);
 void intiter_seek(intiter *ii, size_t startindex, size_t offset);
+void intiter_skip(intiter *ii, size_t count);
 void intiter_destroy(intiter *ii);
 int intiter_next(intiter *ii);
 bool intiter_end(intiter *ii);

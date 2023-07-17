@@ -420,6 +420,7 @@ int encodeuint(const LanguageOutputter *lang, FILE *out, unsigned int i) {
       c = 0xff & lshift(0xff,first+1);
     } else {
       mask = 0xff;
+      c = 0;
       fputc(',',out);
     }
     c |= mask & rshift(i,(b-1)*8);
