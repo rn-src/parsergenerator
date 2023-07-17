@@ -59,11 +59,10 @@ struct LanguageOutputOptions {
   const char *lexerName;
   ImportAs *importHead;
   ImportAs *importTail;
-  const char *prefix;
   const char *name;
-  bool minimal;
   bool encode;
   bool compress;
+  bool show_uncompressed_data;
 };
 
 void LanguageOutputOptions_import(LanguageOutputOptions *options, const char *name, const char *as);
@@ -102,15 +101,22 @@ void LanguageOutputter_init(LanguageOutputter *outputter, LanguageOutputOptions 
 // Language agnostic functions
 int encodeuint(const LanguageOutputter *lang, FILE *out, unsigned int i);
 
+void LongestMatch(const int *p,
+                int testoff,
+                int testlen,
+                int *pmatchoff,
+                int *pmatchlen
+                );
+
 void WriteIndexedArray(const LanguageOutputter *lang,
-		FILE *out,
-		bool encode,
-		bool compress,
-		VectorAny /*<int>*/ *values,
-		const char *values_type,
-		const char *values_name,
-		VectorAny /*<int>*/ *counts,
-		const char *counts_type,
-		const char *counts_name);
+    FILE *out,
+    VectorAny /*<int>*/ *values,
+    const char *values_type,
+    const char *values_name,
+    VectorAny /*<int>*/ *counts,
+    const char *counts_type,
+    const char *counts_name,
+    const char *index_type,
+    const char *index_name);
 
 #endif //__parsecommon_h
