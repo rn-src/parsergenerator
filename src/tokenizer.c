@@ -1139,6 +1139,15 @@ static Rx *ParseCharSet(TokStream *s) {
 static Rx *ParseRxSimple(TokStream *s, MapAny /*<String,Rx*>*/ *subs) {
   int c = TokStream_peekc(s,0);
 
+  // you can have a newline mid-rx
+  // ignore until the first non-whitespace on the next line
+  if( c == '\r' || c == '\n' ) {
+    while( c == ' ' || c == '\t' || c == '\r' || c == '\n' ) {
+      TokStream_discard(s,1);
+      c = TokStream_peekc(s,0);
+    }
+  }
+
   if( c == -1 || strchr("/+*?",c) )
     return 0;
 
@@ -1215,7 +1224,7 @@ static Rx *ParseRxSimple(TokStream *s, MapAny /*<String,Rx*>*/ *subs) {
    return r;
   } else if( c == ')' ) {
    return 0;
-  } else  {
+  } else {
     TokStream_discard(s,1);
     return rxchar(c);
   }
