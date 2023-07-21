@@ -1141,10 +1141,20 @@ static Rx *ParseRxSimple(TokStream *s, MapAny /*<String,Rx*>*/ *subs) {
 
   // you can have a newline mid-rx
   // ignore until the first non-whitespace on the next line
-  if( c == '\r' || c == '\n' ) {
+  // additionally, ignore comments introduced within these breaks
+  while( c == '\r' || c == '\n' ) {
     while( c == ' ' || c == '\t' || c == '\r' || c == '\n' ) {
       TokStream_discard(s,1);
       c = TokStream_peekc(s,0);
+    }
+    // toss out the line comment
+    if( c == '#' ) {
+      TokStream_discard(s,1);
+      c = TokStream_peekc(s,0);
+      while( c != -1 && c != '\r' && c != '\n' ) {
+        TokStream_discard(s,1);
+        c = TokStream_peekc(s,0);
+      }
     }
   }
 
