@@ -151,9 +151,15 @@ static void OutputStateInfo(FILE *out, const Nfa *dfa, const LanguageOutputter *
     for( int cur = 0, end = CharSet_size(ranges); cur != end; ++cur ) {
       const CharRange *curRange = CharSet_getRange(ranges,cur);
       int tmp = curRange->m_low-last;
+      if( tmp < 0 ) {
+        fprintf(stderr, "decreasing range %d -> %d\n", last, curRange->m_low);
+      }
       VectorAny_push_back(&stateinfo,&tmp);
       last = curRange->m_low;
       tmp = curRange->m_high-last;
+      if( tmp < 0 ) {
+        fprintf(stderr, "decreasing range %d -> %d\n", last, curRange->m_high);
+      }
       VectorAny_push_back(&stateinfo,&tmp);
       last = curRange->m_high;
     }

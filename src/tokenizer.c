@@ -691,7 +691,38 @@ int Nfa_lowToken(const Nfa *This, const SetAny /*<int>*/ *states) {
   return finaltok;
 }
 
-void Nfa_toDfa(const Nfa *This, Nfa *dfa) {
+void Nfa_print(const Nfa *nfa) {
+  fputs("--- start nfa ---\n", stdout);
+  for( int cur = 0, end = SetAny_size(&nfa->m_startStates); cur != end; ++cur ) {
+    int s = SetAny_getByIndexConstT(&nfa->m_startStates,cur,int);
+    fprintf(stdout, "%d is a start state\n", s);
+  }
+  for( int cur = 0, end = MapAny_size(&nfa->m_transitions); cur < end; ++cur ) {
+    const Transition *transition = 0;
+    const CharSet *ranges = 0;
+    MapAny_getByIndexConst(&nfa->m_transitions,cur,(const void**)&transition,(const void**)&ranges);
+    fprintf(stdout, "%d -> %d on ", transition->m_from, transition->m_to);
+    for( int cur = 0, end = CharSet_size(ranges); cur != end; ++cur ) {
+      const CharRange *curRange = CharSet_getRange(ranges,cur);
+      if( curRange->m_low == curRange->m_high )
+        fprintf(stdout,",%d", curRange->m_low);
+      else
+        fprintf(stdout,",%d-%d", curRange->m_low,curRange->m_high);
+    }
+    fputc('\n',stdout);
+  }
+  for( int cur = 0, end = SetAny_size(&nfa->m_emptytransitions); cur != end; ++cur ) {
+    const Transition *transition = &SetAny_getByIndexConstT(&nfa->m_emptytransitions,cur,Transition);
+    fprintf(stdout, "%d -> %d on <EPSILON>\n", transition->m_from, transition->m_to);
+  }
+  for( int cur = 0, end = SetAny_size(&nfa->m_endStates); cur != end; ++cur ) {
+    int s = SetAny_getByIndexConstT(&nfa->m_endStates,cur,int);
+    fprintf(stdout, "%d is an end state\n", s);
+  }
+  fputs("--- end nfa ---\n", stderr);
+}
+
+void Nfa_toDfa(const Nfa *This, Nfa *dfa, bool verbose) {
   VectorAny /*< <Set<int>,int> >*/ newstates;
   MapAny /*< <Set<int>,int> >*/ state2num;
   SetAny /*<int>*/ nextstate;
@@ -699,6 +730,11 @@ void Nfa_toDfa(const Nfa *This, Nfa *dfa) {
   CharSet transitions;
   SetAny /*<int>*/ state;
   SetAny setEmpty;
+
+  if( verbose  ) {
+    fputs("nfa\n", stdout);
+    Nfa_print(This);
+  }
 
   Scope_Push();
   VectorAny_init(&newstates, getSetAnyElement(), true);
@@ -729,6 +765,8 @@ void Nfa_toDfa(const Nfa *This, Nfa *dfa) {
   MapAny_insert(&state2num, &nextstate, &initStateNo);
   Nfa_addStartState(dfa, Nfa_addState(dfa));
   for( int stateno = 0; stateno < VectorAny_size(&newstates); ++stateno ) {
+    if( verbose )
+      fprintf(stdout, "doing substate closure on state %d of %d\n", stateno, VectorAny_size(&newstates));
     SetAny_clear(&state);
     const SetAny *pstate = &VectorAny_ArrayOpConstT(&newstates, stateno, SetAny);
     SetAny_Assign(&state,pstate);
@@ -763,6 +801,11 @@ void Nfa_toDfa(const Nfa *This, Nfa *dfa) {
     }
   }
   Scope_Pop();
+  if( verbose ) {
+    fputs("dfa\n", stdout);
+    Nfa_print(dfa);
+    fputs("\nsubstate construction completed\n", stdout);
+  }
 }
 
 void Rx_destroy(Rx *This);
@@ -1008,6 +1051,27 @@ static bool ParseRepeat(TokStream *s, int *low, int *high) {
   return false;
 }
 
+static int readHex(TokStream *s, int *pi) {
+  int c = TokStream_peekc(s,0);
+  int i = 0;
+  int n = 0;
+  while( isxdigit(c) ) {
+    ++n;
+    i *= 16;
+    i += xvalue(c);
+    c = TokStream_peekc(s,n);
+  }
+  if( i < 0 ) {
+    char hex[10];
+    for( int n0 = 0; n0 < n; ++n0 )
+      hex[n0] = (char)TokStream_peekc(s,n0);
+    hex[n] = 0;
+    fprintf(stderr, "uh oh, negative hex %s -> %d\n", hex, i);
+  }
+  *pi = i;
+  return n;
+}
+
 static int ParseChar(TokStream *s) {
   int c = TokStream_peekc(s,0);
   if( c == '[' || c == ']' )
@@ -1031,20 +1095,12 @@ static int ParseChar(TokStream *s) {
       TokStream_discard(s,1);
       return '\v';
     } else if( c == 'x' || c == 'u' ) {
-      int ltr = c;
       TokStream_discard(s,1);
-      c = TokStream_peekc(s,0);
-      if( isxdigit(c) ) {
-        ltr = 0;
-        while( isxdigit(c) ) {
-          ltr *= 16;
-          ltr += xvalue(c);
-          TokStream_discard(s,1);
-          c = TokStream_peekc(s,0);
-        }
+      int ltr = 0;
+      if( readHex(s,&ltr) ) {
         return ltr;
       } else {
-        return ltr;
+        return c;
       }
     } else {
       TokStream_discard(s,1);
@@ -1158,7 +1214,7 @@ static Rx *ParseRxSimple(TokStream *s, MapAny /*<String,Rx*>*/ *subs) {
     }
   }
 
-  if( c == -1 || strchr("/+*?",c) )
+  if( c == -1 || strchr("/+*?|",c) )
     return 0;
 
   if( c == '{' ) {
@@ -1202,20 +1258,12 @@ static Rx *ParseRxSimple(TokStream *s, MapAny /*<String,Rx*>*/ *subs) {
       TokStream_discard(s,1);
       return rxchar('\v');
     } else if( c == 'x' || c == 'u' ) {
-      int ltr = c;
+      int ltr = 0;
       TokStream_discard(s,1);
-      c = TokStream_peekc(s,0);
-      if( isxdigit(c) ) {
-        ltr = 0;
-        while( isxdigit(c) ) {
-          ltr *= 16;
-          ltr += xvalue(c);
-          TokStream_discard(s,1);
-          c = TokStream_peekc(s,0);
-        }
+      if( readHex(s,&ltr) ) {
         return rxchar(ltr);
       } else {
-        return rxchar(ltr);
+        return rxchar(c);
       }
     } else {
       TokStream_discard(s,1);
@@ -1289,6 +1337,20 @@ static Rx *ParseRxConcat(TokStream *s, MapAny /*<String,Rx*>*/ *subs) {
   return lhs;
 }
 
+static bool addRxCharSet(Rx *lhs, Rx *rhs) {
+  if( rhs->m_t != RxType_CharSet )
+    return false;
+  if( lhs->m_t == RxType_CharSet ) {
+    CharSet_addCharSet(&lhs->m_charset,&rhs->m_charset);
+    return true;
+  }
+  if( lhs->m_t == RxType_BinaryOp && lhs->m_op == BinaryOp_Or ) {
+    if( addRxCharSet(lhs->m_lhs,rhs) || addRxCharSet(lhs->m_rhs,rhs) )
+      return true;
+  }
+  return false;
+}
+
 static Rx *ParseRxOr(TokStream *s, MapAny /*<String,Rx*>*/ *subs) {
   Rx *lhs = ParseRxConcat(s,subs);
   if( ! lhs )
@@ -1297,7 +1359,9 @@ static Rx *ParseRxOr(TokStream *s, MapAny /*<String,Rx*>*/ *subs) {
   while( c == '|' ) {
     TokStream_discard(s,1);
     Rx *rhs = ParseRxConcat(s,subs);
-    lhs = rxbinary(BinaryOp_Or,lhs,rhs);
+    // special case.  combining two single character regexes
+    if( ! addRxCharSet(lhs,rhs) )
+      lhs = rxbinary(BinaryOp_Or,lhs,rhs);
     c = TokStream_peekc(s,0);
   }
   return lhs;
@@ -1374,7 +1438,7 @@ static void AddDefaultSection(SetAny /*<String>*/ *sections, MapAny /*<String,in
   Scope_Pop();
 }
 
-Nfa *ParseTokenizerFile(TokStream *s) {
+Nfa *ParseTokenizerFile(TokStream *s, bool verbose) {
   SetAny /*<String>*/ sections;
   MapAny /*<String,int>*/ sectionNumbers;
   MapAny /*<String,int>*/ tokens;
@@ -1518,7 +1582,7 @@ Nfa *ParseTokenizerFile(TokStream *s) {
   Nfa_setSections(&nfa,SetAny_size(&sections));
   Nfa *dfa = (Nfa*)malloc(sizeof(Nfa));
   Nfa_init(dfa,false);
-  Nfa_toDfa(&nfa,dfa);
+  Nfa_toDfa(&nfa,dfa,verbose);
 
   Scope_Pop();
   return dfa;

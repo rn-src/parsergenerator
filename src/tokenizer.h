@@ -172,7 +172,7 @@ struct Rx {
   int m_low, m_high;
 };
 
-Nfa *ParseTokenizerFile(TokStream *s);
+Nfa *ParseTokenizerFile(TokStream *s, bool verbose);
 void OutputTokenizerSource(FILE *out, const Nfa *dfa, LanguageOutputOptions *options);
 ElementOps *getTokenElement();
 void Nfa_getTokenDefs(const Nfa *This, VectorAny /*<Token>*/ *tokendefs);
