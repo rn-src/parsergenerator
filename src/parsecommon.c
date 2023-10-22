@@ -309,6 +309,115 @@ void PyLanguageOutputter_outStartLineComment(const LanguageOutputter* This, FILE
   fputs("#", out);
 }
 
+void GoLanguageOutputter_outTop(const LanguageOutputter* This, FILE* out) {
+  fprintf(out, "#ifndef __%s_h\n", This->options->name);
+  fprintf(out, "#define __%s_h\n", This->options->name);
+  ImportAs *extraImports = This->options->importHead;
+  while( extraImports ) {
+    if( extraImports->import[0] == '<' || extraImports->import[0] == '"' )
+      fprintf(out, "#include %s\n", extraImports->import);
+    else
+      fprintf(out, "#include \"%s.h\"\n", extraImports->import);
+    extraImports = extraImports->next;
+  }
+}
+
+void GoLanguageOutputter_outBottom(const LanguageOutputter* This, FILE *out) {
+  fprintf(out, "#endif // __%s_h\n", This->options->name);
+}
+
+void GoLanguageOutputter_outTypeDecl(const LanguageOutputter* This, FILE* out, const char* type, const char* name) {
+  fputs("typedef ", out); fputs(type, out); fputc(' ', out); fputs(name, out);
+}
+
+void GoLanguageOutputter_outDecl(const LanguageOutputter *This, FILE *out, const char *type, const char *name) {
+  fprintf(out, "%s %s", type, name);
+}
+
+void GoLanguageOutputter_outIntDecl(const LanguageOutputter *This, FILE *out, const char *name, int i) {
+  fprintf(out, "#define %s (%d)\n", name, i);
+}
+void GoLanguageOutputter_outOptionalDecl(const LanguageOutputter* This, FILE* out, const char* type, const char* name) {
+  fputs(type, out);
+  fputc(' ', out);
+  fputs(name, out);
+}
+
+void GoLanguageOutputter_outArrayDecl(const LanguageOutputter *This, FILE *out, const char *type, const char *name) {
+  fprintf(out, "%s %s[]", type, name);
+}
+
+void GoLanguageOutputter_outStartArray(const LanguageOutputter *This, FILE *out) {
+  fputc('{',out);
+}
+
+void GoLanguageOutputter_outEndArray(const LanguageOutputter *This, FILE *out) {
+  fputc('}',out);
+}
+
+void GoLanguageOutputter_outEndStmt(const LanguageOutputter *This, FILE *out) {
+  fputc(';',out);
+}
+
+void GoLanguageOutputter_outNull(const LanguageOutputter *This, FILE *out) {
+  fputc('0',out);
+}
+
+void GoLanguageOutputter_outBool(const LanguageOutputter *This, FILE *out, bool b) {
+  fputs((b ? "true" : "false"),out);
+}
+
+void GoLanguageOutputter_outStr(const LanguageOutputter *This, FILE *out, const char *str)  {
+  fputc('"',out); fputs(str,out); fputc('"',out);
+}
+
+void GoLanguageOutputter_outChar(const LanguageOutputter *This, FILE *out, int c)  {
+  if(c == '\r' ) {
+    fputs("'\\r'",out);
+  } else if(c == '\n' ) {
+    fputs("'\\n'",out);
+  } else if(c == '\v' ) {
+    fputs("'\\v'",out);
+  } else if(c == ' ' ) {
+    fputs("' '",out);
+  } else if(c == '\t' ) {
+    fputs("'\\t'",out);
+  } else if(c == '\\' || c == '\'' ) {
+    fprintf(out,"'\\%c'",c);
+  } else if( c <= 126 && isgraph(c) ) {
+    fprintf(out,"'%c'",c);
+  } else
+    fprintf(out,"%d",c);
+}
+
+void GoLanguageOutputter_outInt(const LanguageOutputter *This, FILE *out, int i)  {
+  fprintf(out,"%d",i);
+}
+
+void GoLanguageOutputter_outFunctionStart(const LanguageOutputter *This, FILE *out, const char *rettype, const char *name) {
+    fprintf(out, "%s %s", rettype, name);
+}
+
+void GoLanguageOutputter_outStartParameters(const LanguageOutputter *This, FILE *out) {
+  fputs("(", out);
+}
+
+void GoLanguageOutputter_outEndParameters(const LanguageOutputter *This, FILE *out) {
+  fputs(")", out);
+}
+
+void GoLanguageOutputter_outStartFunctionCode(const LanguageOutputter *This, FILE *out) {
+  fputs("{", out);
+}
+
+void GoLanguageOutputter_outEndFunctionCode(const LanguageOutputter *This, FILE *out) {
+  fputs("}", out);
+}
+
+void GoLanguageOutputter_outStartLineComment(const LanguageOutputter* This, FILE* out) {
+  fputs("//", out);
+}
+
 void LanguageOutputter_init(LanguageOutputter *outputter, LanguageOutputOptions *options) {
   outputter->options = options;
   if( options->outputLanguage == OutputLanguage_C ) {
@@ -356,6 +465,29 @@ void LanguageOutputter_init(LanguageOutputter *outputter, LanguageOutputOptions 
     outputter->outStartFunctionCode = PyLanguageOutputter_outStartFunctionCode;
     outputter->outEndFunctionCode = PyLanguageOutputter_outEndFunctionCode;
     outputter->outStartLineComment = PyLanguageOutputter_outStartLineComment;
+  }
+  else if( options->outputLanguage == OutputLanguage_Go ) {
+    outputter->outTop = GoLanguageOutputter_outTop;
+    outputter->outBottom = GoLanguageOutputter_outBottom;
+    outputter->outTypeDecl = GoLanguageOutputter_outTypeDecl;
+    outputter->outDecl = GoLanguageOutputter_outDecl;
+    outputter->outIntDecl = GoLanguageOutputter_outIntDecl;
+    outputter->outTypeDecl = GoLanguageOutputter_outTypeDecl;
+    outputter->outArrayDecl = GoLanguageOutputter_outArrayDecl;
+    outputter->outStartArray = GoLanguageOutputter_outStartArray;
+    outputter->outEndArray = GoLanguageOutputter_outEndArray;
+    outputter->outEndStmt = GoLanguageOutputter_outEndStmt;
+    outputter->outNull = GoLanguageOutputter_outNull;
+    outputter->outBool = GoLanguageOutputter_outBool;
+    outputter->outStr = GoLanguageOutputter_outStr;
+    outputter->outChar = GoLanguageOutputter_outChar;
+    outputter->outInt = GoLanguageOutputter_outInt;
+    outputter->outFunctionStart = GoLanguageOutputter_outFunctionStart;
+    outputter->outStartParameters = GoLanguageOutputter_outStartParameters;
+    outputter->outEndParameters = GoLanguageOutputter_outEndParameters;
+    outputter->outStartFunctionCode = GoLanguageOutputter_outStartFunctionCode;
+    outputter->outEndFunctionCode = GoLanguageOutputter_outEndFunctionCode;
+    outputter->outStartLineComment = GoLanguageOutputter_outStartLineComment;
   }
 }
 

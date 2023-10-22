@@ -50,7 +50,8 @@ typedef struct LanguageOutputOptions LanguageOutputOptions;
 
 enum OutputLanguage {
   OutputLanguage_C,
-  OutputLanguage_Python
+  OutputLanguage_Python,
+  OutputLanguage_Go
 };
 typedef enum OutputLanguage OutputLanguage;
 

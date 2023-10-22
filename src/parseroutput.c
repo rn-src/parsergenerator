@@ -29,6 +29,29 @@ static void outBottom(const LanguageOutputter *This, FILE *out) {
     fputs("  sizeof(stack_t),\n", out);
     fputs("  (reducefnct)reduce,\n", out);
     fputs("};\n", out);
+  } else if( This->options->outputLanguage == OutputLanguage_Go ) {
+    fputs("parseinfo prsinfo = {\n", out);
+    fputs("  nstates,\n", out);
+    fputs("  actions_format,\n", out);
+    fputs("  actions,\n", out);
+    fputs("  actionstart,\n", out);
+    if( This->options->compress ) {
+      fputs("  actionindex,\n", out);
+      fputs("  actionindex_count,\n", out);
+    } else {
+      fputs("  0,\n", out);
+      fputs("  0,\n", out);
+    }
+    fputs("  PROD_0,\n", out);
+    fputs("  PARSE_ERROR,\n", out);
+    fputs("  nproductions,\n", out);
+    fputs("  productions,\n", out);
+    fputs("  productionstart,\n", out);
+    fputs("  START,\n", out);
+    fputs("  nonterminals,\n", out);
+    fputs("  sizeof(stack_t),\n", out);
+    fputs("  (reducefnct)reduce,\n", out);
+    fputs("};\n", out);
   }
   This->outBottom(This,out);
 }
@@ -82,7 +105,7 @@ static void PrintSymbolType(FILE *out, const ParserDef *parser, const LanguageOu
     }
     fputs(")\n", out);
     fputs("  def __init__(self) -> None:\n", out);
-  } else {
+  } else if (outputOptions->outputLanguage == OutputLanguage_C || outputOptions->outputLanguage == OutputLanguage_Go) {
     fputs("struct stack_t;\ntypedef struct stack_t stack_t;\n", out);
     fputs("struct stack_t {\n", out);
   }
@@ -116,7 +139,7 @@ static void PrintSymbolType(FILE *out, const ParserDef *parser, const LanguageOu
       Scope_Pop();
     }
   }
-  if (outputOptions->outputLanguage != OutputLanguage_Python)
+  if (outputOptions->outputLanguage == OutputLanguage_C || outputOptions->outputLanguage == OutputLanguage_Go)
     fputc('}',out);
   lang->outEndStmt(lang,out);
   fputs("\n", out);
@@ -143,6 +166,10 @@ static bool readtok(const char *line, String *idout, int *pterminal, OutputLangu
     if( strncmp(front,"#define ",8) != 0 )
       return false;
     front += 8;
+  } else if( language == OutputLanguage_Go ) {
+    if( strncmp(front,"#define ",8) != 0 )
+      return false;
+    front += 8;
   }
   if( ! isalnum(*front) && *front != '_' )
     return false;
@@ -157,7 +184,7 @@ static bool readtok(const char *line, String *idout, int *pterminal, OutputLangu
     ++front;
   }
   while( *front == ' ' ) ++front;
-  if( language == OutputLanguage_C && *front == '(' )
+  if( (language == OutputLanguage_C || language == OutputLanguage_Go) && *front == '(' )
     ++front;
   if( ! isdigit(*front) )
     return 0;
@@ -187,6 +214,8 @@ static void AssignTokenValues(const ParserDef *parser, LanguageOutputOptions *ou
     String_AddCharsInPlace(&fname,".h");
   else if( outputOptions->outputLanguage == OutputLanguage_Python )
     String_AddCharsInPlace(&fname,".py");
+  else if( outputOptions->outputLanguage == OutputLanguage_Go )
+    String_AddCharsInPlace(&fname,".go");
   FILE *f = fopen(String_Chars(&fname),"r");
   if( ! f ) {
     fprintf(stderr, "Unable to open the token file \"%s\" to import token values, stopping.\n", String_Chars(&fname));
@@ -285,7 +314,7 @@ static void WriteSemanticAction(const Production *p, FILE *out, const ParserDef 
       fputs(String_Chars(&item->m_str), out);
     }
     else if (item->m_actiontype == ActionTypeDollarExtra) {
-      if( outputOptions->outputLanguage == OutputLanguage_Python )
+      if( outputOptions->outputLanguage == OutputLanguage_Python || outputOptions->outputLanguage == OutputLanguage_Go )
         fputs("extra", out);
       else
         fputs("(*extra)", out);
@@ -293,9 +322,9 @@ static void WriteSemanticAction(const Production *p, FILE *out, const ParserDef 
     else if (item->m_actiontype == ActionTypeDollarDollar) {
       const String *semtype = &MapAny_findConstT(&parser->m_tokdefs, &p->m_nt, SymbolDef).m_semantictype;
       const String *fld = &MapAny_findConstT(tfields, semtype, String);
-      if( outputOptions->outputLanguage == OutputLanguage_Python )
+      if( outputOptions->outputLanguage == OutputLanguage_Python || outputOptions->outputLanguage == OutputLanguage_Go )
         fprintf(out, "output.%s", String_Chars(fld));
-      else
+      else if( outputOptions->outputLanguage == OutputLanguage_C )
         fprintf(out, "output->%s", String_Chars(fld));
     }
     else if (item->m_actiontype == ActionTypeDollarNumber) {
@@ -519,7 +548,7 @@ static void OutputLRParser(FILE *out, const ParserDef *parser, const LRParserSol
   fputc('\n',out);
   if (outputOptions->outputLanguage == OutputLanguage_Python) {
     fputs("  match productionidx:\n", out);
-  } else {
+  } else if (outputOptions->outputLanguage == OutputLanguage_C || outputOptions->outputLanguage == OutputLanguage_Go) {
     fputs("  switch(productionidx) {\n", out);
   }
   for( int curp = 0, endp = VectorAny_size(&parser->m_productions); curp != endp; ++curp ) {
@@ -531,7 +560,7 @@ static void OutputLRParser(FILE *out, const ParserDef *parser, const LRParserSol
     lang->outStartLineComment(lang,out);
     fprintf(out," PROD_%d\n      ", prodIdx);
     WriteSemanticAction(p, out, parser, lang, outputOptions, &tfields);
-    if( outputOptions->outputLanguage == OutputLanguage_C) {
+    if( outputOptions->outputLanguage == OutputLanguage_C || outputOptions->outputLanguage == OutputLanguage_Go ) {
       fputs("\n      break;\n", out);
     }
     fputc('\n',out);
@@ -575,6 +604,10 @@ void OutputLRParserSolution(FILE *out, const ParserDef *parser, const LRParserSo
     LanguageOutputOptions_importitem(options,"ACTION_STOP",0);
     LanguageOutputOptions_import(options,"tok",0);
     LanguageOutputOptions_importitem(options,"Token",0);
+  }
+  if( options->outputLanguage == OutputLanguage_Go ) {
+    LanguageOutputOptions_import(options,"lrparse",0);
+    LanguageOutputOptions_import(options,options->lexerName,0);
   }
   OutputLRParser(out,parser,solution,&outputter,options);
 }
