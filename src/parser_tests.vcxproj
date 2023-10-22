@@ -20,7 +20,7 @@
   </ItemGroup>
   <PropertyGroup Label="Globals">
     <VCProjectVersion>17.0</VCProjectVersion>
-    <ProjectGuid>{0A537923-E9FE-4B0F-8185-AED61143699F}</ProjectGuid>
+    <ProjectGuid>{4481B5A0-C066-4899-88F0-28A252E3DDB8}</ProjectGuid>
     <Keyword>Win32Proj</Keyword>
   </PropertyGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.Default.props" />
@@ -63,10 +63,10 @@
   </ImportGroup>
   <PropertyGroup Label="UserMacros" />
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
-    <NMakeBuildCommandLine>nmake /f nMakefile.msc</NMakeBuildCommandLine>
+    <NMakeBuildCommandLine>nmake /f nMakefile.msc parser_tests.exe</NMakeBuildCommandLine>
     <NMakeOutput>parser.exe</NMakeOutput>
     <NMakeCleanCommandLine>nmake /f nMakefile.msc clean</NMakeCleanCommandLine>
-    <NMakeReBuildCommandLine>nmake /f nMakefile.msc clean all</NMakeReBuildCommandLine>
+    <NMakeReBuildCommandLine>nmake /f nMakefile.msc clean all parser_tests.exe</NMakeReBuildCommandLine>
     <NMakePreprocessorDefinitions>_DEBUG;$(NMakePreprocessorDefinitions)</NMakePreprocessorDefinitions>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">

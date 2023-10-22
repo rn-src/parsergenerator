@@ -30,7 +30,7 @@ static bool getboolarg(int argc, char *argv[], const char *arg, bool def) {
   return def;
 }
 
-char *makeFOutName(const char *fname, LanguageOutputOptions *options) {
+static char *makeFOutName(const char *fname, LanguageOutputOptions *options) {
   char *foutname = (char*)memalloc(strlen(fname) + 3);
   strcpy(foutname, fname);
   char *lastdot = strrchr(foutname, '.');
@@ -45,7 +45,7 @@ char *makeFOutName(const char *fname, LanguageOutputOptions *options) {
   return foutname;
 }
 
-void parseArgs(int argc, char *argv[], int *pverbosity, int *ptimed, LanguageOutputOptions *options, const char **pfname) {
+static void parseArgs(int argc, char *argv[], int *pverbosity, int *ptimed, LanguageOutputOptions *options, const char **pfname) {
   int verbosity = 0;
   int timed = 0;
   const char *arg;
@@ -128,7 +128,7 @@ void parseArgs(int argc, char *argv[], int *pverbosity, int *ptimed, LanguageOut
   *ptimed = timed;
 }
 
-int parse_main(int argc, char *argv[]) {
+static int parse_main(int argc, char *argv[]) {
   int verbosity = 0;
   int timed = 0;
   const char *fname = 0;
@@ -220,15 +220,18 @@ end:
   return ret;
 }
 
-int tok_main(int argc, char *argv[])
+static int tok_main(int argc, char *argv[])
 {
   LanguageOutputOptions options;
+  bool verbose = false;
   memset(&options,0,sizeof(options));
   options.outputLanguage = OutputLanguage_C;
   options.encode = true;
   options.compress = true;
 
   const char *arg = 0;
+  if(getarg(argc,argv,"-v"))
+    verbose = true;
   if(getarg(argc,argv,"--py")) {
     options.outputLanguage = OutputLanguage_Python;
     options.encode = false;
@@ -247,6 +250,7 @@ int tok_main(int argc, char *argv[])
 
   if (!fname) {
     fputs("usage : tokenizer [--py] filename\n"
+          "-v             : verbose\n"
           "--py           : output python (default C)\n"
           "--encode       : set to true/false, emit values 8bit encoded instead of full integers\n"
           "                 default true for C, false for Python.\n"
@@ -288,7 +292,7 @@ int tok_main(int argc, char *argv[])
   int ret = 0;
   Scope_SetJmp(ret);
   if( ! ret ) {
-    Nfa *dfa = ParseTokenizerFile(&s);
+    Nfa *dfa = ParseTokenizerFile(&s,verbose);
     fout = fopen(foutname,"w");
     if( ! fout ) {
       fprintf(stderr, "Unable to open %s for writing\n", foutname);

@@ -2,6 +2,8 @@
 #define __parsecommon_h
 #include "tinytemplates.h"
 
+#define UNICODE_MAX 0x0010ffff
+
 struct ParseError;
 typedef struct ParseError ParseError;
 

@@ -1,17 +1,28 @@
 # To build
 # start visual studio command line prompt
 # nmake -f nMakefile.msc
-OBJS=parsecommon.obj parser.obj parsersolve.obj parseroutput.obj main.obj parserrestrictfa.obj timer.obj  tok.obj tinytemplates.obj tokenizer.obj tokenizeroutput.obj
+DLL_OBJS=parsecommon.obj parser.obj parsersolve.obj parseroutput.obj parserrestrictfa.obj timer.obj tok.obj tinytemplates.obj tokenizer.obj tokenizeroutput.obj
+TEST_OBJS=tests.obj test_charsets.obj test_charrange.obj test_nfa.obj
+HEADERS=parsertokL.h parsecommon.h parser.h tinytemplates.h tok.h tokenizer.h 
 CFLAGS=/nologo /Zi /Od /EHsc /DWIN32 /MD /I.
 #CFLAGS=/nologo /O1 /EHsc /DWIN32 /MD /I.
 .SUFFIXES: .c .obj
 
 all: parser.exe
 
-parser.exe: parsertokL.h $(OBJS)
+parser.exe: test parsertokL.h main.obj libparser.dll
 	@echo linking...
-	@link /nologo /DEBUG /SUBSYSTEM:CONSOLE /OUT:parser.exe $(OBJS)
-#	@link /nologo /SUBSYSTEM:CONSOLE /OUT:parser.exe $(OBJS)
+	@link /nologo /DEBUG /SUBSYSTEM:CONSOLE /OUT:parser.exe main.obj libparser.lib
+#	@link /nologo /SUBSYSTEM:CONSOLE /OUT:parser.exe main.obj parser.lib
+
+test: parser_tests.exe
+  @parser_tests.exe
+
+parser_tests.exe: $(TEST_OBJS) libparser.dll
+	@link /nologo /DEBUG /SUBSYSTEM:CONSOLE /OUT:parser_tests.exe $(TEST_OBJS) libparser.lib
+
+libparser.dll: libparser.def $(DLL_OBJS)
+	@link /nologo /DEBUG /DLL /DEF:libparser.def /OUT:libparser.dll $(DLL_OBJS)
 
 #parsertokL.h: parsertok.L
 #	@..\tok\tokenizer.exe parsertok.L --prefix=PARSERTOK
@@ -19,8 +30,12 @@ parser.exe: parsertokL.h $(OBJS)
 .c.obj:
 	@cl /nologo /c $(CFLAGS) $< /Fo$@
 
+.cpp.obj:
+	@cl /nologo /c $(CFLAGS) $< /Fo$@
+
 clean:
 	@-del parser.exe > NUL 2>&1
+	@-del parser.dll > NUL 2>&1
 	@-del *.obj > NUL 2>&1
 	@-del *.pdb > NUL 2>&1
 #	@-del parsertokL.h > NUL 2>&1

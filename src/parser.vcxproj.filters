@@ -1,0 +1,45 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<Project ToolsVersion="4.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <ItemGroup>
+    <ClCompile Include="main.c" />
+    <ClCompile Include="parsecommon.c" />
+    <ClCompile Include="parser.c" />
+    <ClCompile Include="parseroutput.c" />
+    <ClCompile Include="parserrestrictfa.c" />
+    <ClCompile Include="parsersolve.c" />
+    <ClCompile Include="timer.c" />
+    <ClCompile Include="tinytemplates.c" />
+    <ClCompile Include="tok.c" />
+    <ClCompile Include="tokenizer.c" />
+    <ClCompile Include="tokenizeroutput.c" />
+    <ClCompile Include="test_charsets.cpp">
+      <Filter>tests</Filter>
+    </ClCompile>
+    <ClCompile Include="tests.c">
+      <Filter>tests</Filter>
+    </ClCompile>
+    <ClCompile Include="test_charrange.cpp">
+      <Filter>tests</Filter>
+    </ClCompile>
+    <ClCompile Include="test_nfa.cpp">
+      <Filter>tests</Filter>
+    </ClCompile>
+  </ItemGroup>
+  <ItemGroup>
+    <ClInclude Include="parsecommon.h" />
+    <ClInclude Include="parser.h" />
+    <ClInclude Include="parsertokL.h" />
+    <ClInclude Include="tinytemplates.h" />
+    <ClInclude Include="tok.h" />
+    <ClInclude Include="tokenizer.h" />
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="nMakefile.msc" />
+    <None Include="libparser.def" />
+  </ItemGroup>
+  <ItemGroup>
+    <Filter Include="tests">
+      <UniqueIdentifier>{fa22e184-8482-45f0-b987-c93307f0c29c}</UniqueIdentifier>
+    </Filter>
+  </ItemGroup>
+</Project>
