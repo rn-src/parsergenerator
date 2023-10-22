@@ -5,6 +5,22 @@
 #include <string.h>
 #include "tokenizer.h"
 
+#define CHARSET_CHECKING_ON 1
+#ifdef CHARSET_CHECKING_ON
+#define CHARSET_CHECK(cs) CharSet_check(cs);
+static void CharSet_check(const CharSet *cs) {
+  const CharRange *r = (const CharRange*)cs->m_ranges.m_p;
+  for( int i = 0, n = cs->m_ranges.m_size; i < n; ++i ) {
+    if( r[i].m_low > r[i].m_high )
+      fputs("uh-oh bad range\n", stdout);
+    if( i < n-1 &&  r[i].m_high+1 >= r[i+1].m_low )
+      fputs("uh-oh bad range\n", stdout);
+  }
+}
+#else
+#define CHARSET_CHECK(cs)
+#endif
+
 ElementOps ActionElement = {sizeof(Action), false, false, 0, 0, 0, 0, 0, 0};
 ElementOps TransitionElement = {sizeof(Transition), false, false, (elementInit)Transition_init, 0, (elementLessThan)Transition_LessThan, (elementEqual)Transition_Equal, 0, 0};
 ElementOps CharSetElement = {sizeof(CharSet), false, false, (elementInit)CharSet_init, (elementDestroy)CharSet_destroy, (elementLessThan)CharSet_LessThan, (elementEqual)CharSet_Equal, (elementAssign)CharSet_Assign, 0};
@@ -13,6 +29,10 @@ ElementOps TokenElement = {sizeof(Token), false, false, (elementInit)Token_init,
 
 ElementOps *getTokenElement() {
   return &TokenElement;
+}
+
+ElementOps *getCharSetElement() {
+  return &CharSetElement;
 }
 
 // rx : simplerx | rx rx | rx '+' | rx '*' | rx '?' | rx '|' rx | '(' rx ')' | rx '{' number '}' | rx '{' number ',' '}' | rx '{' number ',' number '}' | rx '{' ',' number '}'
@@ -64,9 +84,9 @@ void Token_Assign(Token *lhs, const Token *rhs) {
 }
 
 static int compareTokens(const void *lhs, const void *rhs) {
-  if( Token_LessThan(lhs,rhs) )
+  if( Token_LessThan((const Token*)lhs,(const Token*)rhs) )
     return -1;
-  if( Token_LessThan(rhs,lhs) )
+  if( Token_LessThan((const Token*)rhs,(const Token*)lhs) )
     return 1;
   return 0;
 }
@@ -76,7 +96,7 @@ bool TokStream_fill(TokStream *This) {
     return false;
   if( This->m_buffill == This->m_buflen ) {
     if( This->m_buflen == 0 ) {
-      int newlen = 256;
+      size_t newlen = 256;
       char *newbuf = (char*)malloc(newlen+1);
       memset(newbuf,0,newlen+1);
       This->m_buf = newbuf;
@@ -86,7 +106,7 @@ bool TokStream_fill(TokStream *This) {
       size_t newlen = This->m_buflen*2;
       char *newbuf = (char*)malloc(newlen+1);
       memset(newbuf,0,newlen+1);
-      for( int i = 0; i < This->m_buffill; ++i ) {
+      for( size_t i = 0; i < This->m_buffill; ++i ) {
         int oldpos = (This->m_bufpos+i)%This->m_buflen;
         newbuf[i] = This->m_buf[oldpos];
       }
@@ -99,8 +119,8 @@ bool TokStream_fill(TokStream *This) {
   }
   size_t totalread = 0;
   while( This->m_buffill < This->m_buflen ) {
-    int fillpos = (This->m_bufpos+This->m_buffill)%This->m_buflen;
-    int len = (This->m_bufpos > fillpos) ? (This->m_bufpos-fillpos) : This->m_buflen-fillpos;
+    size_t fillpos = (This->m_bufpos+This->m_buffill)%This->m_buflen;
+    size_t len = (This->m_bufpos > fillpos) ? (This->m_bufpos-fillpos) : This->m_buflen-fillpos;
     size_t nread = fread(This->m_buf+fillpos,1,len,This->m_in);
     totalread += nread;
     This->m_buffill += nread;
@@ -207,13 +227,13 @@ bool CharRange_LessThan(const CharRange *lhs, const CharRange *rhs) {
   return false;
 }
 
-CharRange *CharRange_SetRange(CharRange *This, int low, int high) {
+CharRange *CharRange_SetRange(CharRange *This, uint32_t low, uint32_t high) {
   This->m_low = low;
   This->m_high = high;
   return This;
 }
 
-bool CharRange_ContainsChar(const CharRange *This, int i) {
+bool CharRange_ContainsChar(const CharRange *This, uint32_t i) {
   if( i >= This->m_low && i <= This->m_high )
     return true;
   return false;
@@ -225,7 +245,7 @@ bool CharRange_ContainsCharRange(const CharRange *This, const CharRange *rhs) {
   return false;
 }
 
-bool CharRange_OverlapsRange(const CharRange *This, int low, int high) {
+bool CharRange_OverlapsRange(const CharRange *This, uint32_t low, uint32_t high) {
   if( low > This->m_high || high < This->m_low )
     return false;
   return true;
@@ -250,10 +270,12 @@ bool CharSet_Equal(const CharSet *lhs, const CharSet *rhs) {
 }
 
 void CharSet_Assign(CharSet *lhs, const CharSet *rhs) {
+  CHARSET_CHECK(rhs)
   VectorAny_Assign(&lhs->m_ranges,&rhs->m_ranges);
+  CHARSET_CHECK(lhs)
 }
 
-int CharSet_find(const CharSet *This, int c, bool *found) {
+int CharSet_find(const CharSet *This, size_t c, bool *found) {
   int low = 0, high = VectorAny_size(&This->m_ranges)-1;
   while( low <= high ) {
     int mid = (low+high)/2;
@@ -283,6 +305,12 @@ bool CharSet_ContainsCharRange(const CharSet *This, const CharRange *range) {
   return CharRange_ContainsCharRange((const CharRange*)VectorAny_ArrayOpConst(&This->m_ranges,i),range);
 }
 
+bool CharSet_has(const CharSet *This, uint32_t c) {
+  bool found = false;
+  CharSet_find(This,c,&found);
+  return found;
+}
+
 void CharSet_clear(CharSet *This) {
   VectorAny_clear(&This->m_ranges);
 }
@@ -291,100 +319,47 @@ bool CharSet_empty(const CharSet *This) {
   return VectorAny_empty(&This->m_ranges);
 }
 
-void CharSet_addChar(CharSet *This, int i) {
+void CharSet_addChar(CharSet *This, uint32_t i) {
   CharSet_addCharRange(This,i,i);
+  CHARSET_CHECK(This)
 }
 
-void CharSet_addCharRange(CharSet *This, int low, int high) {
+void CharSet_addCharRange(CharSet *This, uint32_t low, uint32_t high) {
   bool found;
   CharRange range;
+  CharRange *ranges = &VectorAny_ArrayOpT(&This->m_ranges,0,CharRange);
   int i = CharSet_find(This,low,&found);
+  if( ! found && i > 0 && ranges[i-1].m_high+1 == low ) {
+    found = true;
+    --i;
+  }
   if( found ) {
-    if( low < VectorAny_ArrayOpT(&This->m_ranges,i,CharRange).m_low )
-      VectorAny_ArrayOpT(&This->m_ranges,i,CharRange).m_low = low;
-    if( high > VectorAny_ArrayOpT(&This->m_ranges,i,CharRange).m_high )
-      VectorAny_ArrayOpT(&This->m_ranges,i,CharRange).m_high = high;
+    if( low < ranges[i].m_low )
+      ranges[i].m_low = low;
+    if( high > ranges[i].m_high )
+      ranges[i].m_high = high;
   } else {
     VectorAny_insert(&This->m_ranges,i,CharRange_SetRange(&range,low,high));
+    ranges = &VectorAny_ArrayOpT(&This->m_ranges,0,CharRange);
   }
-  while( i < VectorAny_size(&This->m_ranges)-1 && (VectorAny_ArrayOpT(&This->m_ranges,i+1,CharRange).m_low-VectorAny_ArrayOpT(&This->m_ranges,i,CharRange).m_high <= 1) ) {
-    VectorAny_ArrayOpT(&This->m_ranges,i,CharRange).m_high = VectorAny_ArrayOpT(&This->m_ranges,i+1,CharRange).m_high;
-    VectorAny_erase(&This->m_ranges,i+1);
+  int ntoerase = 0;
+  while( i+1+ntoerase < This->m_ranges.m_size && ranges[i].m_high+1 >= ranges[i+1+ntoerase].m_low ) {
+    if( ranges[i+ntoerase+1].m_high > ranges[i].m_high )
+      ranges[i].m_high = ranges[i+ntoerase+1].m_high; 
+    ++ntoerase;
   }
-  if( i > 0 ) {
-    while( i < VectorAny_size(&This->m_ranges) && (VectorAny_ArrayOpT(&This->m_ranges,i,CharRange).m_low-VectorAny_ArrayOpT(&This->m_ranges,i-1,CharRange).m_high <= 1) ) {
-      VectorAny_ArrayOpT(&This->m_ranges,i-1,CharRange).m_high = VectorAny_ArrayOpT(&This->m_ranges,i,CharRange).m_high;
-      VectorAny_erase(&This->m_ranges,i);
-    }
-  }
+  if( ntoerase > 0 )
+    VectorAny_eraseRange(&This->m_ranges,i+1,i+1+ntoerase);
+  CHARSET_CHECK(This)
 }
+
 void CharSet_addCharSet(CharSet *This, const CharSet *rhs) {
+  CHARSET_CHECK(rhs)
   for( int cur = 0, end = VectorAny_size(&rhs->m_ranges); cur != end; ++cur ) {
     const CharRange *curRange = &VectorAny_ArrayOpConstT(&rhs->m_ranges,cur,CharRange);
     CharSet_addCharRange(This, curRange->m_low, curRange->m_high);
   }
-}
-//#define splitTEST
-void CharSet_splitRange(CharSet *This, int low, int high) {
-#ifdef splitTEST
-  Vector<CharRange> rangesBefore = m_ranges;
-  splitReal(low,high,-1);
-  bool overlap = false;
-  CharRange last(-1,-1);
-  for( int i = 0, n = m_ranges.size(); i < n; ++i ) {
-    if( m_ranges[i].m_low <= last.m_high ) {
-      overlap = true;
-      m_ranges = rangesBefore;
-      splitReal(low,high,-1);
-      break;
-    }
-    last = m_ranges[i];
-  }
-#else
-  CharSet_splitRangeRecursive(This,low,high,-1);
-#endif
-}
-
-int CharSet_splitRangeRecursive(CharSet *This, int low, int high, int i) {
-  CharRange range;
-  if( i == -1 ) {
-    bool found = false;
-    i = CharSet_find(This,low,&found);
-  }
-  if( i == VectorAny_size(&This->m_ranges) || ! CharRange_OverlapsRange(&VectorAny_ArrayOpT(&This->m_ranges,i,CharRange),low,high) ) {
-    VectorAny_insert(&This->m_ranges,i,CharRange_SetRange(&range,low,high));
-    return 1;
-  }
-
-  int adjust = 0;
-  range = VectorAny_ArrayOpT(&This->m_ranges,i,CharRange);
-
-  if( low < range.m_low ) {
-    int tmp = CharSet_splitRangeRecursive(This,low,range.m_low-1,i);
-    i += tmp;
-    adjust += tmp;
-  } else if( low > range.m_low ) {
-    VectorAny_ArrayOpT(&This->m_ranges,i,CharRange).m_low = low;
-    int tmp = CharSet_splitRangeRecursive(This,range.m_low,low-1,i);
-    i += tmp;
-    adjust += tmp;
-  }
-
-  if( high < range.m_high ) {
-    VectorAny_ArrayOpT(&This->m_ranges,i,CharRange).m_high = high;
-    CharSet_splitRangeRecursive(This,high+1,range.m_high,i+1);
-  } else if( high > range.m_high ) {
-    CharSet_splitRangeRecursive(This,range.m_high+1,high,i+1);
-  }
-
-  return adjust;
-}
-
-void CharSet_splitCharSet(CharSet *This, const CharSet *rhs) {
-  for( int cur = 0, end = VectorAny_size(&rhs->m_ranges); cur != end; ++cur ) {
-    const CharRange *curRange = &VectorAny_ArrayOpConstT(&rhs->m_ranges,cur,CharRange);
-    CharSet_splitRange(This, curRange->m_low, curRange->m_high);
-  }
+  CHARSET_CHECK(This)
 }
 
 void CharSet_negate(CharSet *This) {
@@ -399,10 +374,11 @@ void CharSet_negate(CharSet *This) {
       VectorAny_push_back(&ranges,CharRange_SetRange(&range,prev,curRange->m_low-1));
     prev = curRange->m_high+1;
   }
-  if( prev < INT_MAX )
-    VectorAny_push_back(&ranges,CharRange_SetRange(&range,prev,INT_MAX));
+  if( prev < UNICODE_MAX )
+    VectorAny_push_back(&ranges,CharRange_SetRange(&range,prev,UNICODE_MAX));
   VectorAny_Assign(&This->m_ranges,&ranges);
   Scope_Pop();
+  CHARSET_CHECK(This)
 }
 
 int CharSet_size(const CharSet *This) {
@@ -516,21 +492,6 @@ void Nfa_addTransition(Nfa *This, int from, int to, int symbol) {
     CharSet_addChar(value,symbol);
 }
 
-void Nfa_addTransitionCharRange(Nfa *This, int from, int to, const CharRange *range) {
-  Scope_Push();
-  CharSet charset;
-  Transition t;
-  CharSet *value = &MapAny_findT(&This->m_transitions,Transition_SetFromTo(&t,from,to),CharSet);
-  CharSet_init(&charset,true);
-  if( ! value ) {
-    CharSet_clear(&charset);
-    CharSet_addCharRange(&charset,range->m_low,range->m_high);
-    MapAny_insert(&This->m_transitions,&t,&charset);
-  } else
-    CharSet_addCharRange(value,range->m_low,range->m_high);
-  Scope_Pop();
-}
-
 void Nfa_addTransitionCharSet(Nfa *This, int from, int to, const CharSet *charset) {
   Transition t;
   CharSet *value = &MapAny_findT(&This->m_transitions,Transition_SetFromTo(&t,from,to),CharSet);
@@ -559,7 +520,7 @@ bool Nfa_setTokenAction(Nfa *This, int token, int section, TokenAction action, i
     return false;
   if( action == ActionNone )
     return true;
-  Action tokaction;
+  Action tokaction = {ActionNone};
   tokaction.m_action = action;
   tokaction.m_actionarg = actionarg;
   MapAny_insert(&tok->m_actions,&section,&tokaction);
@@ -618,7 +579,7 @@ void Nfa_clear(Nfa *This) {
   This->m_sections = 1;
 }
 
-void Nfa_closure(const Nfa *This, const MapAny /*<int,Set<int>>*/ *emptytransitions, SetAny /*<int>*/ *states) {
+void Nfa_closure(const MapAny /*<int,Set<int>>*/ *emptytransitions, SetAny /*<int>*/ *states) {
   Scope_Push();
   SetAny /*<int>*/ nextstates;
   VectorAny /*<int>*/ vecstates;
@@ -644,20 +605,9 @@ void Nfa_closure(const Nfa *This, const MapAny /*<int,Set<int>>*/ *emptytransiti
   Scope_Pop();
 }
 
-void Nfa_follow(const Nfa *This, const CharRange *range, const SetAny /*<int>*/ *states, SetAny /*<int>*/ *nextstates ) {
-  const Transition *key = 0;
-  const CharSet *value = 0;
-  SetAny_clear(nextstates);
-  for( int cur = 0, end = MapAny_size(&This->m_transitions); cur != end; ++cur ) {
-    MapAny_getByIndexConst(&This->m_transitions,cur,(const void**)&key,(const void**)&value);
-    if( ! SetAny_findConst(states,&key->m_from) || ! CharSet_ContainsCharRange(value,range) )
-      continue;
-    SetAny_insert(nextstates,&key->m_to,0);
-  }
-}
-
-void Nfa_stateTransitions(const Nfa *This, const SetAny /*<int>*/ *states, CharSet *transitions) {
-  CharSet_clear(transitions);
+void Nfa_stateTransitions(const Nfa *This, const SetAny /*<int>*/ *states, VectorAny /*<int>*/ *transitions_to, VectorAny /*<CharSet>*/ *transition_symbols) {
+  VectorAny_clear(transitions_to);
+  VectorAny_clear(transition_symbols);
   const Transition *key = 0;
   const CharSet *value = 0;
   for( int cur = 0, end = MapAny_size(&This->m_transitions); cur != end; ++cur ) {
@@ -665,7 +615,8 @@ void Nfa_stateTransitions(const Nfa *This, const SetAny /*<int>*/ *states, CharS
     const int *pstate = &SetAny_findConstT(states,&key->m_from,int);
     if( ! pstate )
       continue;
-    CharSet_splitCharSet(transitions,value);
+    VectorAny_push_back(transitions_to,&key->m_to);
+    VectorAny_push_back(transition_symbols, value);
   }
 }
 
@@ -705,9 +656,9 @@ void Nfa_print(const Nfa *nfa) {
     for( int cur = 0, end = CharSet_size(ranges); cur != end; ++cur ) {
       const CharRange *curRange = CharSet_getRange(ranges,cur);
       if( curRange->m_low == curRange->m_high )
-        fprintf(stdout,",%d", curRange->m_low);
+        fprintf(stdout,",%u", curRange->m_low);
       else
-        fprintf(stdout,",%d-%d", curRange->m_low,curRange->m_high);
+        fprintf(stdout,",%u-%u", curRange->m_low,curRange->m_high);
     }
     fputc('\n',stdout);
   }
@@ -722,28 +673,86 @@ void Nfa_print(const Nfa *nfa) {
   fputs("--- end nfa ---\n", stderr);
 }
 
-void Nfa_toDfa(const Nfa *This, Nfa *dfa, bool verbose) {
+struct comboctx {
+  const Nfa *nfa;
+  Nfa *dfa;
+  SetAny /*<int>*/ *nfastate;
+  int dfastate;
+  VectorAny /*< <Set<int>,int> >*/ *newstates;
+  MapAny /*< <Set<int>,int> >*/ *state2num;
+  SetAny /*<int>*/ *nextstate;
+  MapAny /*<int,Set<int> >*/ *emptytransitions;
+  VectorAny /*<int>*/ *transitions_to;
+};
+typedef struct comboctx comboctx;
+
+static int addstate(comboctx *ctx) {
+  int nextstateno = Nfa_addState(ctx->dfa);
+  VectorAny_push_back(ctx->newstates, ctx->nextstate);
+  MapAny_insert(ctx->state2num,ctx->nextstate,&nextstateno);
+  if( Nfa_hasEndState(ctx->nfa,ctx->nextstate) )
+    Nfa_addEndState(ctx->dfa,nextstateno);
+  int token = Nfa_lowToken(ctx->nfa,ctx->nextstate);
+  if( token != -1 ) {
+    if( ! Nfa_hasTokenDef(ctx->dfa,token) ) {
+      const Token *tokendef = Nfa_getTokenDef(ctx->nfa,token);
+      if( tokendef )
+        Nfa_setTokenDef(ctx->dfa,tokendef);
+    }
+    Nfa_setStateToken(ctx->dfa,nextstateno,token);
+  }
+  return nextstateno;
+}
+
+static void cb_add_state(const CharSet* cs, VectorAny /*<int>*/* charset_indexes, comboctx *ctx) {
+  SetAny_clear(ctx->nextstate);
+  for( int i = 0, iend = VectorAny_size(charset_indexes); i < iend; ++i ) {
+    int idx = VectorAny_ArrayOpConstT(charset_indexes,i,int);
+    int to = VectorAny_ArrayOpConstT(ctx->transitions_to,idx,int);
+    SetAny_insert(ctx->nextstate,&to,0);
+  }
+  Nfa_closure(ctx->emptytransitions, ctx->nextstate);
+  const int *pFoundState = &MapAny_findConstT(ctx->state2num, ctx->nextstate, int);
+  int nextstateno = -1;
+  if( ! pFoundState ) {
+    nextstateno = addstate(ctx);
+  } else {
+    nextstateno = *pFoundState;
+  }
+  Nfa_addTransitionCharSet(ctx->dfa,ctx->dfastate,nextstateno,cs);
+}
+
+void Nfa_toDfa_NonMinimal(const Nfa *This, Nfa *dfa) {
   VectorAny /*< <Set<int>,int> >*/ newstates;
   MapAny /*< <Set<int>,int> >*/ state2num;
   SetAny /*<int>*/ nextstate;
   MapAny /*<int,Set<int> >*/ emptytransitions;
-  CharSet transitions;
+  VectorAny  /*<int>*/ transitions_to;
+  VectorAny  /*<CharSet>*/ transition_symbols;
   SetAny /*<int>*/ state;
   SetAny setEmpty;
-
-  if( verbose  ) {
-    fputs("nfa\n", stdout);
-    Nfa_print(This);
-  }
+  VectorAny /*<int>*/transition_combo;
 
   Scope_Push();
   VectorAny_init(&newstates, getSetAnyElement(), true);
   MapAny_init(&state2num, getSetAnyElement(), getIntElement(), true);
   SetAny_init(&nextstate, getIntElement(), true);
   MapAny_init(&emptytransitions, getIntElement(), getSetAnyElement(), true);
-  CharSet_init(&transitions, true);
+  VectorAny_init(&transitions_to, getIntElement(),true);
+  VectorAny_init(&transition_symbols, &CharSetElement,true);
   SetAny_init(&state,getIntElement(), true);
   SetAny_init(&setEmpty,getIntElement(),true);
+  VectorAny_init(&transition_combo,getIntElement(),true);
+  comboctx ctx = {0};
+  ctx.nfa = This;
+  ctx.dfa = dfa;
+  ctx.nfastate = &state;
+  ctx.dfastate = 0;
+  ctx.newstates = &newstates;
+  ctx.state2num = &state2num;
+  ctx.nextstate = &nextstate;
+  ctx.emptytransitions = &emptytransitions;
+  ctx.transitions_to = &transitions_to;
 
   Nfa_clear(dfa);
   Nfa_setSections(dfa, This->m_sections);
@@ -758,54 +767,85 @@ void Nfa_toDfa(const Nfa *This, Nfa *dfa, bool verbose) {
     }
     SetAny_insert(&MapAny_findT(&emptytransitions,&curTransition->m_from,SetAny), &curTransition->m_to,0);
   }
-  SetAny_Assign(&nextstate,&This->m_startStates);
-  Nfa_closure(This, &emptytransitions, &nextstate);
-  int initStateNo = 0;
-  VectorAny_push_back(&newstates, &nextstate);
-  MapAny_insert(&state2num, &nextstate, &initStateNo);
-  Nfa_addStartState(dfa, Nfa_addState(dfa));
+  SetAny_Assign(ctx.nextstate,&This->m_startStates);
+  Nfa_closure(&emptytransitions, ctx.nextstate);
+  int initStateNo = addstate(&ctx);
+  Nfa_addStartState(dfa, initStateNo);
   for( int stateno = 0; stateno < VectorAny_size(&newstates); ++stateno ) {
-    if( verbose )
-      fprintf(stdout, "doing substate closure on state %d of %d\n", stateno, VectorAny_size(&newstates));
-    SetAny_clear(&state);
     const SetAny *pstate = &VectorAny_ArrayOpConstT(&newstates, stateno, SetAny);
-    SetAny_Assign(&state,pstate);
-    CharSet_clear(&transitions);
-    Nfa_stateTransitions(This, &state, &transitions);
-    for( int cur = 0, end = CharSet_size(&transitions); cur != end; ++cur ) {
-      curRange = CharSet_getRange(&transitions,cur);
-      Nfa_follow(This, curRange, &state, &nextstate);
-      Nfa_closure(This, &emptytransitions, &nextstate);
-      if( SetAny_size(&nextstate) == 0 )
-        continue;
-      const int *pFoundState = &MapAny_findConstT(&state2num, &nextstate, int);
-      int nextstateno = -1;
-      if( ! pFoundState ) {
-        nextstateno = Nfa_addState(dfa);
-        VectorAny_push_back(&newstates, &nextstate);
-        MapAny_insert(&state2num,&nextstate,&nextstateno);
-        if( Nfa_hasEndState(This,&nextstate) )
-          Nfa_addEndState(dfa,nextstateno);
-        int token = Nfa_lowToken(This,&nextstate);
-        if( token != -1 ) {
-          if( ! Nfa_hasTokenDef(dfa,token) ) {
-            const Token *tokendef = Nfa_getTokenDef(This,token);
-            Nfa_setTokenDef(dfa,tokendef);
-          }
-          Nfa_setStateToken(dfa,nextstateno,token);
-        }
-      } else {
-        nextstateno = *pFoundState;
-      }   
-      Nfa_addTransitionCharRange(dfa,stateno,nextstateno,curRange);
-    }
+    SetAny_Assign(ctx.nfastate,pstate);
+    Nfa_stateTransitions(This, ctx.nfastate, ctx.transitions_to, &transition_symbols);
+    ctx.dfastate = stateno;
+    CharSet_combo_breaker(&transition_symbols, (ComboBreakerCB)cb_add_state, &ctx);
   }
   Scope_Pop();
-  if( verbose ) {
-    fputs("dfa\n", stdout);
-    Nfa_print(dfa);
-    fputs("\nsubstate construction completed\n", stdout);
+}
+
+static int state_num(int state, Nfa *This, bool reverse_numbers) {
+  if( reverse_numbers )
+    return This->m_nextState-1-state;
+  return state;
+}
+
+void Nfa_Reverse(Nfa *This, bool reverse_numbers) {
+  SetAny start_states, end_states;
+  MapAny transitions;
+  SetAny emptytransitions;
+  MapAny state2token;
+  Scope_Push();
+  SetAny_init(&start_states,This->m_startStates.m_values.m_ops,true);
+  SetAny_init(&end_states,This->m_endStates.m_values.m_ops,true);
+  MapAny_init(&transitions,This->m_transitions.m_keys.m_values.m_ops,This->m_transitions.m_values.m_ops,true);
+  SetAny_init(&emptytransitions,This->m_emptytransitions.m_values.m_ops,true);
+  MapAny_init(&state2token,This->m_state2token.m_keys.m_values.m_ops,This->m_state2token.m_values.m_ops,true);
+  for( int i = 0, n = SetAny_size(&This->m_startStates); i < n; ++i ) {
+    int state = SetAny_getByIndexConstT(&This->m_startStates,i,int);
+    state = state_num(state,This,reverse_numbers);
+    SetAny_insert(&end_states, &state,0);
   }
+  for( int i = 0, n = SetAny_size(&This->m_endStates); i < n; ++i ) {
+    int state = SetAny_getByIndexConstT(&This->m_endStates,i,int);
+    state = state_num(state,This,reverse_numbers);
+    SetAny_insert(&start_states, &state,0);
+  }
+  SetAny_Assign(&This->m_startStates,&start_states);
+  SetAny_Assign(&This->m_endStates,&end_states);
+  for( int i = 0, n = MapAny_size(&This->m_transitions); i < n; ++i ) {
+    Transition *t = 0;
+    CharSet *cs = 0;
+    MapAny_getByIndex(&This->m_transitions,i,(const void**)&t,(void**)&cs);
+    Transition t_rev = {state_num(t->m_to,This,reverse_numbers),state_num(t->m_from,This,reverse_numbers)};
+    MapAny_insert(&transitions,&t_rev,cs);
+  }
+  MapAny_Assign(&This->m_transitions,&transitions);
+  for( int i = 0, n = SetAny_size(&This->m_emptytransitions); i < n; ++i ) {
+    Transition *t = (Transition*)SetAny_getByIndexConst(&This->m_emptytransitions,i);
+    Transition t_rev = {state_num(t->m_to,This,reverse_numbers),state_num(t->m_from,This,reverse_numbers)};
+    SetAny_insert(&emptytransitions,&t_rev,0);
+  }
+  SetAny_Assign(&This->m_emptytransitions,&emptytransitions);
+  for( int i = 0, n = MapAny_size(&This->m_state2token); i < n; ++i ) {
+    const int *pstate = 0, *ptoken = 0;
+    MapAny_getByIndex(&This->m_state2token,i,(const void**)&pstate,(void**)&ptoken);
+    int state = state_num(*pstate,This,reverse_numbers);
+    int token = *ptoken;
+    MapAny_insert(&state2token,&state,&token);
+  }
+  MapAny_Assign(&This->m_state2token,&state2token);
+  Scope_Pop();
+}
+
+void Nfa_toDfa(const Nfa *This, Nfa *dfa) {
+  Nfa tmp;
+  Scope_Push();
+  Nfa_init(&tmp,true);
+  Nfa_toDfa_NonMinimal(This,&tmp);
+  // reverse it, do it again
+  Nfa_Reverse(&tmp,false);
+  Nfa_toDfa_NonMinimal(&tmp,dfa);
+  // reverse it, done
+  Nfa_Reverse(dfa,true);
+  Scope_Pop();
 }
 
 void Rx_destroy(Rx *This);
@@ -1006,15 +1046,16 @@ static bool ParseSub(TokStream *s, String *sub) {
     return false;
   if( ! isalpha(TokStream_peekc(s,1)) )
     return false;
-  int n = 1;
+  size_t n = 1;
   while( isalnum(TokStream_peekc(s,n+1)) )
     ++n;
   if( TokStream_peekc(s,n+1) != '}' )
     return false;
   TokStream_discard(s,1);
-  char *sout = (char*)calloc(n+1,1);
+  char *sout = (char*)malloc(n+1);
   for( int i = 0; i < n; ++i )
     sout[i] = TokStream_readc(s);
+  sout[n] = 0;
   String_AssignChars(sub,sout);
   TokStream_discard(s,1);
   return true;
@@ -1062,7 +1103,7 @@ static int readHex(TokStream *s, int *pi) {
     c = TokStream_peekc(s,n);
   }
   if( i < 0 ) {
-    char hex[10];
+    char hex[10] = {0};
     for( int n0 = 0; n0 < n; ++n0 )
       hex[n0] = (char)TokStream_peekc(s,n0);
     hex[n] = 0;
@@ -1372,7 +1413,7 @@ static Rx *ParseRx(TokStream *s, MapAny /*<String,Rx*>*/ *subs) {
 }
 
 static void ParseSymbol(TokStream *s, String *symbol) {
-  int n = 0;
+  size_t n = 0;
   int c = TokStream_peekc(s,n);
   if( ! isalpha(c) && c != '_' )
     return;
@@ -1582,9 +1623,113 @@ Nfa *ParseTokenizerFile(TokStream *s, bool verbose) {
   Nfa_setSections(&nfa,SetAny_size(&sections));
   Nfa *dfa = (Nfa*)malloc(sizeof(Nfa));
   Nfa_init(dfa,false);
-  Nfa_toDfa(&nfa,dfa,verbose);
+  Nfa_toDfa(&nfa,dfa);
 
   Scope_Pop();
   return dfa;
 }
 
+struct CharSetIter;
+typedef struct CharSetIter CharSetIter;
+struct CharSetIter {
+  CharRange *cur;
+  CharRange *end;
+};
+ElementOps CharSetIterElement = {sizeof(CharSetIter), false, false, 0, 0, 0, 0, 0, 0};
+
+void CharSet_combo_breaker(const VectorAny /*<CharSet>*/ *charsets_initial,
+                            ComboBreakerCB cb, void *vpcb) {
+  VectorAny /*<CharSetIter>*/ charsets;
+  VectorAny /*<CharSetIter>*/ charset_iters;
+  VectorAny /*<int>*/ charset_indexes;
+  CharSet charset;
+  Scope_Push();
+  VectorAny_init(&charsets,&CharSetElement,true);
+  VectorAny_init(&charset_iters,&CharSetIterElement,true);
+  VectorAny_init(&charset_indexes,getIntElement(),true);
+  CharSet_init(&charset, true);
+  VectorAny_Assign(&charsets,charsets_initial);
+  // initialize the iterators
+  for( int i = 0, n = VectorAny_size(&charsets); i < n; ++i ) {
+    CharSet *cs = &VectorAny_ArrayOpT(&charsets,i,CharSet);
+    CharSetIter iter = {0,0};
+    iter.cur = &VectorAny_ArrayOpT(&cs->m_ranges,0,CharRange);
+    iter.end = iter.cur+VectorAny_size(&cs->m_ranges);
+    VectorAny_push_back(&charset_iters,&iter);
+  }
+  size_t niterators = VectorAny_size(&charset_iters);
+  while( niterators ) {
+    // get the current shortest match, the entire length of the first iter
+    const CharRange *intersect_start = 0;
+    const CharRange *intersect_end = 0;
+    int chlow = 0;
+    // get the list of active iterators, and shorten the match, add the iterator to the list
+    VectorAny_clear(&charset_indexes);
+    for( int i = 0, n = VectorAny_size(&charset_iters); i < n; ++i ) {
+      CharSetIter *iter = &VectorAny_ArrayOpT(&charset_iters,i,CharSetIter);
+      if( iter->cur == iter->end )
+        continue;
+      if( ! intersect_start ) {
+        const CharSetIter *first = &VectorAny_ArrayOpConstT(&charset_iters,i,CharSetIter);
+        intersect_start = first->cur;
+        intersect_end = first->end;
+        chlow = intersect_start->m_low;
+      }
+      if( chlow != iter->cur->m_low )
+        continue;
+      VectorAny_push_back(&charset_indexes, &i);
+      const CharRange *intersect_cur = intersect_start;
+      const CharRange *match_cur = iter->cur;
+      const CharRange *match_end = iter->end;
+      while( intersect_cur != intersect_end && match_cur != match_end && match_cur->m_low == intersect_cur->m_low && match_cur->m_high == intersect_cur->m_high ) {
+        ++match_cur;
+        ++intersect_cur;
+      }
+      if( intersect_cur != intersect_end ) {
+        if( match_cur == match_end ) {
+          // match is shorter
+          intersect_start = iter->cur;
+          intersect_end = iter->end;
+        } else {
+          if( intersect_cur->m_low == match_cur->m_low ) {
+            // ended in overlap
+            if( intersect_cur->m_high < match_cur->m_high ) {
+              // intersect side is shorter
+              intersect_end = intersect_cur+1;
+            } else {
+              // match side is shorter
+              intersect_start = iter->cur;
+              intersect_end = match_cur+1;
+            }
+          } else {
+            // ended with non overlap
+            intersect_end = intersect_cur;
+          }
+        }
+      }
+    }
+    // Make the charset, do the callback
+    CharSet_clear(&charset);
+    int chhigh = intersect_end[-1].m_high;
+    size_t nparts = intersect_end-intersect_start;
+    VectorAny_insertMany(&charset.m_ranges,0,intersect_start,nparts);
+    cb(&charset, &charset_indexes, vpcb);
+    // update the iterators
+    for( int i = 0, n = VectorAny_size(&charset_iters); i < n; ++i ) {
+      CharSetIter *iter = &VectorAny_ArrayOpT(&charset_iters,i,CharSetIter);
+      if( iter->cur == iter->end || chlow != iter->cur->m_low )
+        continue;
+      if( iter->cur[nparts-1].m_high != chhigh ) {
+        // case where we nibble
+        iter->cur += nparts-1;
+        iter->cur->m_low = chhigh+1;
+      } else {
+        iter->cur += nparts;
+      }
+      // iterator exhausted, reduce the count
+      if( iter->cur == iter->end )
+        --niterators;
+    }
+  }
+  Scope_Pop();
+}

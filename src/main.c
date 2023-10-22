@@ -30,7 +30,7 @@ static bool getboolarg(int argc, char *argv[], const char *arg, bool def) {
   return def;
 }
 
-char *makeFOutName(const char *fname, LanguageOutputOptions *options) {
+static char *makeFOutName(const char *fname, LanguageOutputOptions *options) {
   char *foutname = (char*)memalloc(strlen(fname) + 3);
   strcpy(foutname, fname);
   char *lastdot = strrchr(foutname, '.');
@@ -45,7 +45,7 @@ char *makeFOutName(const char *fname, LanguageOutputOptions *options) {
   return foutname;
 }
 
-void parseArgs(int argc, char *argv[], int *pverbosity, int *ptimed, LanguageOutputOptions *options, const char **pfname) {
+static void parseArgs(int argc, char *argv[], int *pverbosity, int *ptimed, LanguageOutputOptions *options, const char **pfname) {
   int verbosity = 0;
   int timed = 0;
   const char *arg;
@@ -128,7 +128,7 @@ void parseArgs(int argc, char *argv[], int *pverbosity, int *ptimed, LanguageOut
   *ptimed = timed;
 }
 
-int parse_main(int argc, char *argv[]) {
+static int parse_main(int argc, char *argv[]) {
   int verbosity = 0;
   int timed = 0;
   const char *fname = 0;
@@ -220,7 +220,7 @@ end:
   return ret;
 }
 
-int tok_main(int argc, char *argv[])
+static int tok_main(int argc, char *argv[])
 {
   LanguageOutputOptions options;
   bool verbose = false;

@@ -147,19 +147,19 @@ static void OutputStateInfo(FILE *out, const Nfa *dfa, const LanguageOutputter *
     int sz = CharSet_size(ranges);
     VectorAny_push_back(&stateinfo,&sz);
     // range values increase, so subtracting the last value helps encoding
-    int last = 0;
+    uint32_t last = 0;
     for( int cur = 0, end = CharSet_size(ranges); cur != end; ++cur ) {
       const CharRange *curRange = CharSet_getRange(ranges,cur);
-      int tmp = curRange->m_low-last;
-      if( tmp < 0 ) {
-        fprintf(stderr, "decreasing range %d -> %d\n", last, curRange->m_low);
+      if( curRange->m_low < last ) {
+        fprintf(stderr, "decreasing range %u -> %u\n", last, curRange->m_low);
       }
+      uint32_t tmp = curRange->m_low-last;
       VectorAny_push_back(&stateinfo,&tmp);
       last = curRange->m_low;
-      tmp = curRange->m_high-last;
-      if( tmp < 0 ) {
-        fprintf(stderr, "decreasing range %d -> %d\n", last, curRange->m_high);
+      if( curRange->m_high < last ) {
+        fprintf(stderr, "decreasing range %u -> %u\n", last, curRange->m_high);
       }
+      tmp = curRange->m_high-last;
       VectorAny_push_back(&stateinfo,&tmp);
       last = curRange->m_high;
     }

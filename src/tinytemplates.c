@@ -644,8 +644,8 @@ void VectorAny_eraseRange(VectorAny *This, int first, int last) {
   if (last < 0)
     last += This->m_size;
   int cnt = last-first;
-  VectorAny_destroyElements(This,first,last-first+1);
-  int following = This->m_size-last-1;
+  VectorAny_destroyElements(This,first,last-first);
+  int following = This->m_size-last;
   if (following > 0)
     VectorAny_moveElements(This,first,last,following);
   This->m_size -= cnt;

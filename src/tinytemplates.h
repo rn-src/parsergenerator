@@ -2,9 +2,6 @@
 #define __tinytemplates_h
 // Some templates so the executable size can shrink
 
-#ifdef __cplusplus
-#include <new>
-#endif
 #include <string.h>
 #include <stdlib.h>
 #include <stdarg.h>
@@ -13,6 +10,10 @@
 
 #ifndef __cplusplus
 #include <stdbool.h>
+#endif
+
+#ifdef __cplusplus
+extern "C" {
 #endif
 
 // By using C instead of C++, we get to avoid linking the C++ binaries and a much reduced binary size,
@@ -208,5 +209,9 @@ struct MapAny {
   SetAny m_keys;
   VectorAny m_values;
 };
+
+#ifdef __cplusplus
+} // extern "C"
+#endif
 
 #endif

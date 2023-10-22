@@ -2,10 +2,15 @@
 #define __tokenizer_h
 
 #include <stdio.h>
+#include <stdint.h>
 #include "tinytemplates.h"
 #include "parsecommon.h"
 #ifndef __cplusplus
 #include <stdbool.h>
+#endif
+
+#ifdef __cplusplus
+extern "C" {
 #endif
 
 struct TokStream;
@@ -24,21 +29,22 @@ const char *TokStream_file(TokStream *This);
 
 struct TokStream {
   char *m_buf, *m_next;
-  int m_buflen, m_buffill, m_bufpos, m_pos, m_line, m_col;
+  size_t m_buflen;
+  size_t m_buffill, m_bufpos, m_pos, m_line, m_col;
   FILE *m_in;
   char *m_file;
 };
 
 struct CharRange;
 typedef struct CharRange CharRange;
-CharRange *CharRange_SetRange(CharRange *This, int low, int high);
-bool CharRange_ContainsChar(const CharRange *This, int i);
+CharRange *CharRange_SetRange(CharRange *This, uint32_t low, uint32_t high);
+bool CharRange_ContainsChar(const CharRange *This, uint32_t i);
 bool CharRange_ContainsCharRange(const CharRange *This, const CharRange *rhs);
-bool CharRange_OverlapsRange(const CharRange *This, int low, int high);
+bool CharRange_OverlapsRange(const CharRange *This, uint32_t low, uint32_t high);
 bool CharRange_LessThan(const CharRange *lhs, const CharRange *rhs);
 
 struct CharRange {
-  int m_low, m_high;
+  uint32_t m_low, m_high;
 };
 
 struct CharSet;
@@ -50,17 +56,17 @@ bool CharSet_LessThan(const CharSet *lhs, const CharSet *rhs);
 bool CharSet_Equal(const CharSet *lhs, const CharSet *rhs);
 void CharSet_Assign(CharSet *lhs, const CharSet *rhs);
 bool CharSet_ContainsCharRange(const CharSet *This, const CharRange *range);
+bool CharSet_has(const CharSet *This, uint32_t c);
 void CharSet_clear(CharSet *This);
 bool CharSet_empty(const CharSet *This);
-void CharSet_addChar(CharSet *This, int i);
-void CharSet_addCharRange(CharSet *This, int low, int high);
+void CharSet_addChar(CharSet *This, uint32_t i);
+void CharSet_addCharRange(CharSet *This, uint32_t low, uint32_t high);
 void CharSet_addCharSet(CharSet *This, const CharSet *rhs);
-void CharSet_splitRange(CharSet *This, int low, int high);
-int CharSet_splitRangeRecursive(CharSet *This, int low, int high, int i);
-void CharSet_splitCharSet(CharSet *This, const CharSet *rhs);
 void CharSet_negate(CharSet *This);
 int CharSet_size(const CharSet *This);
 const CharRange *CharSet_getRange(const CharSet *This, int i);
+typedef void (*ComboBreakerCB)(const CharSet *charset, VectorAny /*<int>*/ *charset_indexes, void *vpcb);
+void CharSet_combo_breaker(const VectorAny /*<CharSet>*/ *charsets, ComboBreakerCB cb, void *vpcb);
 
 struct CharSet {
   VectorAny /*CharRange*/ m_ranges;
@@ -120,7 +126,6 @@ int Nfa_addState(Nfa *This);
 void Nfa_addStartState(Nfa *This, int startstate);
 void Nfa_addEndState(Nfa *This, int endstate);
 void Nfa_addTransition(Nfa *This, int from, int to, int symbol);
-void Nfa_addTransitionCharRange(Nfa *This, int from, int to, const CharRange *range);
 void Nfa_addTransitionCharSet(Nfa *This, int from, int to, const CharSet *charset);
 void Nfa_addEmptyTransition(Nfa *This, int from, int to);
 bool Nfa_hasTokenDef(const Nfa *This, int token);
@@ -133,11 +138,13 @@ bool Nfa_stateHasToken(const Nfa *This, int state);
 int Nfa_getStateToken(const Nfa *This, int state);
 void Nfa_setStateToken(Nfa *This, int state, int token);
 void Nfa_clear(Nfa *This);
-void Nfa_closure(const Nfa *This, const MapAny /*<int,Set<int>>*/ *emptytransitions, SetAny /*<int>*/ *states);
-void Nfa_follow(const Nfa *This, const CharRange *range, const SetAny /*<int>*/ *states, SetAny /*<int>*/ *nextstates );
-void Nfa_stateTransitions(const Nfa *This, const SetAny /*<int>*/ *states, CharSet *transitions);
+void Nfa_closure(const MapAny /*<int,Set<int>>*/ *emptytransitions, SetAny /*<int>*/ *states);
+void Nfa_stateTransitions(const Nfa *This, const SetAny /*<int>*/ *states, VectorAny /*<int>*/ *transitions, VectorAny /*<CharSet>*/ *transition_symbols);
 bool Nfa_hasEndState(const Nfa *This, const SetAny /*<int>*/ *states);
 int Nfa_lowToken(const Nfa *This, const SetAny /*<int>*/ *states);
+void Nfa_toDfa_NonMinimal(const Nfa *This, Nfa *dfa);
+void Nfa_Reverse(Nfa *This, bool reverse_numbers);
+void Nfa_toDfa(const Nfa *This, Nfa *dfa);
 
 struct Nfa {
   int m_nextState;
@@ -175,6 +182,11 @@ struct Rx {
 Nfa *ParseTokenizerFile(TokStream *s, bool verbose);
 void OutputTokenizerSource(FILE *out, const Nfa *dfa, LanguageOutputOptions *options);
 ElementOps *getTokenElement();
+ElementOps *getCharSetElement();
 void Nfa_getTokenDefs(const Nfa *This, VectorAny /*<Token>*/ *tokendefs);
+
+#ifdef __cplusplus
+} // extern "C"
+#endif
 
 #endif /* __tokenizer_h */
